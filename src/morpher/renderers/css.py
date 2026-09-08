@@ -69,27 +69,24 @@ def _absolute_geometry(node: DesignNode, parent: DesignNode) -> tuple[float | No
     height = style.height
     rotation_degrees: float | None = None
 
-    # LINE absoluteBoundingBox already describes the final rendered orientation.
-    # Re-rotating a zero-width/zero-height divider swaps its usable axis and can
-    # collapse the CSS border, so render dividers directly from that final box.
-    if node.kind == "divider":
-        return left, top, width, height, None
-
-    quarter = _quarter_turn(style.rotation)
-    if quarter is not None:
-        normalized = quarter % 4
-        rotation_degrees = quarter * 90.0
-        if normalized in (1, 3) and width is not None and height is not None:
-            # Figma absoluteBoundingBox is post-rotation. Reconstruct the pre-rotation
-            # box around the same center so CSS rotation reproduces the same bounds.
-            original_width = height
-            original_height = width
-            if left is not None:
-                left += (width - original_width) / 2
-            if top is not None:
-                top += (height - original_height) / 2
-            width = original_width
-            height = original_height
+    # Figma LINE bounding boxes already encode their final orientation. Re-applying
+    # quarter-turn reconstruction turns vertical zero-width dividers invisible.
+    if node.kind != "divider":
+        quarter = _quarter_turn(style.rotation)
+        if quarter is not None:
+            normalized = quarter % 4
+            rotation_degrees = quarter * 90.0
+            if normalized in (1, 3) and width is not None and height is not None:
+                # Figma absoluteBoundingBox is post-rotation. Reconstruct the pre-rotation
+                # box around the same center so CSS rotation reproduces the same bounds.
+                original_width = height
+                original_height = width
+                if left is not None:
+                    left += (width - original_width) / 2
+                if top is not None:
+                    top += (height - original_height) / 2
+                width = original_width
+                height = original_height
 
     return left, top, width, height, rotation_degrees
 
@@ -188,7 +185,16 @@ def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
             declarations.append(f"line-height: {_px(style.line_height)}")
         if style.letter_spacing is not None:
             declarations.append(f"letter-spacing: {_px(style.letter_spacing)}")
-        if style.text_auto_resize == "WIDTH_AND_HEIGHT":
+
+        # JSON_REST_V1 preserves deliberate Figma line breaks in `characters`.
+        # Keep those breaks (and meaningful leading spaces) instead of collapsing
+        # them into one browser line. `pre-wrap` still permits wrapping if local
+        # font metrics differ slightly from Figma.
+        if "\n" in (node.text or ""):
+            declarations.append("white-space: pre-wrap")
+        elif style.text_auto_resize == "WIDTH_AND_HEIGHT":
+            # Single-line auto-sized labels such as CHECK AVIABILITY should not
+            # wrap merely because browser font metrics differ by a few pixels.
             declarations.append("white-space: nowrap")
 
     return declarations
