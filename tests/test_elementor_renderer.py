@@ -107,3 +107,13 @@ def test_renders_image_and_icon_from_elementor_asset_package():
     assert image["settings"]["image"]["url"] == "assets/Discovery/discovery-rectangle-1.jpg"
     assert icon["widgetType"] == "image"
     assert icon["settings"]["image"]["url"] == "assets/Discovery/discovery-play-icon.svg"
+
+
+def test_skips_large_decorative_vector_inside_content_wrapper():
+    backdrop = DesignNode(kind="icon", name="Vector", source_id="45:5270", style=DesignStyle(width=1233, height=1412))
+    body = DesignNode(kind="text", name="Body", source_id="45:5271", text="Hotel copy")
+    wrapper = DesignNode(kind="container", name="Frame", source_id="45:5269", style=DesignStyle(width=1327, height=1520), children=[backdrop, body])
+    root = DesignNode(kind="container", name="Discovery", source_id="45:5267", children=[wrapper])
+    result = render_elementor(root, asset_sources={"45-5270": "assets/Discovery/discovery-vector.svg"})
+    wrapper_result = result["content"][0]["elements"][0]
+    assert [element.get("widgetType") for element in wrapper_result["elements"]] == ["heading"]
