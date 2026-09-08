@@ -7,6 +7,6 @@
   "ui": "ui.html",
   "networkAccess": {
     "allowedDomains": ["none"],
-    "devAllowedDomains": ["http://127.0.0.1:8767"]
+    "devAllowedDomains": ["http://localhost:8767"]
   }
 }
