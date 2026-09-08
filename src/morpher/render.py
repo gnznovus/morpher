@@ -11,7 +11,7 @@ from morpher.renderers.html import render_html
 from morpher.storage.paths import StoragePaths
 
 
-def _copy_image_assets(source: Path, storage: StoragePaths) -> dict[str, str]:
+def _copy_assets(source: Path, storage: StoragePaths) -> dict[str, str]:
     source_dir = storage.figma_asset_dir(source)
     if not source_dir.exists():
         return {}
@@ -19,14 +19,14 @@ def _copy_image_assets(source: Path, storage: StoragePaths) -> dict[str, str]:
     target_dir = storage.html_asset_dir(source)
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    image_sources: dict[str, str] = {}
+    asset_sources: dict[str, str] = {}
     for asset in source_dir.iterdir():
         if not asset.is_file():
             continue
         target = target_dir / asset.name
         shutil.copy2(asset, target)
-        image_sources[asset.stem] = target.relative_to(storage.output_html).as_posix()
-    return image_sources
+        asset_sources[asset.stem] = target.relative_to(storage.output_html).as_posix()
+    return asset_sources
 
 
 def render_path(path: Path) -> tuple[Path, Path, int]:
@@ -38,9 +38,9 @@ def render_path(path: Path) -> tuple[Path, Path, int]:
     html_path = storage.html_output(path)
     css_path = storage.css_output(path)
 
-    image_sources = _copy_image_assets(path, storage)
+    asset_sources = _copy_assets(path, storage)
     css = render_css(document.root)
-    html = render_html(document.root, stylesheet=css_path.name, image_sources=image_sources)
+    html = render_html(document.root, stylesheet=css_path.name, asset_sources=asset_sources)
 
     html_path.write_text(html, encoding="utf-8")
     css_path.write_text(css, encoding="utf-8")
