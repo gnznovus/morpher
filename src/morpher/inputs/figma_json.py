@@ -74,7 +74,7 @@ class FigmaJsonAdapter:
         if source_type == "RECTANGLE":
             return "image" if self._image_ref(node) else "shape"
         if source_type == "VECTOR":
-            return "unsupported"
+            return "icon"
         return "unsupported"
 
     @staticmethod
