@@ -40,6 +40,12 @@ def _alignment(value: str | None) -> str | None:
     return mapping.get((value or "").lower())
 
 
+def _relative_offset(value: float | None, parent_value: float | None) -> float | None:
+    if value is None or parent_value is None:
+        return None
+    return value - parent_value
+
+
 def _apply_item_sizing(settings: dict, style: DesignStyle, *, container: bool) -> None:
     if style.width_mode == "fill":
         if container:
@@ -63,6 +69,51 @@ def _apply_item_sizing(settings: dict, style: DesignStyle, *, container: bool) -
             settings["_element_custom_width"] = _size("px", style.width)
 
     if style.height_mode == "fixed" and style.height is not None and container:
+        settings["min_height"] = _size("px", style.height)
+
+
+def _apply_free_layout_geometry(
+    settings: dict,
+    style: DesignStyle,
+    parent_style: DesignStyle | None,
+    *,
+    container: bool,
+) -> None:
+    """Mirror HTML free-layout geometry using Elementor absolute positioning."""
+    if parent_style is None:
+        if style.layout_direction is None:
+            if style.width is not None:
+                settings["width"] = _size("px", style.width)
+            if style.height is not None and container:
+                settings["min_height"] = _size("px", style.height)
+        return
+
+    if parent_style.layout_direction is not None:
+        return
+
+    left = _relative_offset(style.x, parent_style.x)
+    top = _relative_offset(style.y, parent_style.y)
+
+    if container:
+        settings["position"] = "absolute"
+    else:
+        settings["_position"] = "absolute"
+
+    settings["_offset_orientation_h"] = "start"
+    settings["_offset_orientation_v"] = "start"
+    if left is not None:
+        settings["_offset_x"] = _size("px", left)
+    if top is not None:
+        settings["_offset_y"] = _size("px", top)
+
+    if style.width is not None:
+        if container:
+            settings["width"] = _size("px", style.width)
+        else:
+            settings["_element_width"] = "initial"
+            settings["_element_custom_width"] = _size("px", style.width)
+
+    if style.height is not None and container:
         settings["min_height"] = _size("px", style.height)
 
 
@@ -130,6 +181,7 @@ def _container_settings(
         settings["padding"] = _dimensions(top, right, bottom, left)
 
     _apply_item_sizing(settings, style, container=True)
+    _apply_free_layout_geometry(settings, style, parent_style, container=True)
     _apply_child_alignment(settings, style, parent_style, container=True)
 
     if style.background:
@@ -187,6 +239,7 @@ def _heading_settings(
         settings["align"] = text_align
 
     _apply_item_sizing(settings, style, container=False)
+    _apply_free_layout_geometry(settings, style, parent_style, container=False)
     _apply_child_alignment(settings, style, parent_style, container=False)
     return settings
 
