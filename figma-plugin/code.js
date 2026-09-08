@@ -38,18 +38,28 @@ function collectImageRefs(node, refs = new Set()) {
   return refs;
 }
 
-function collectVectorNodes(node, vectors = []) {
-  if (node.type === "VECTOR") {
-    vectors.push(node);
+function isVectorComposite(node) {
+  return (
+    node.type !== "VECTOR" &&
+    "children" in node &&
+    node.children.length > 0 &&
+    node.children.every((child) => child.type === "VECTOR")
+  );
+}
+
+function collectVectorAssets(node, assets = []) {
+  if (node.type === "VECTOR" || isVectorComposite(node)) {
+    assets.push(node);
+    return assets;
   }
 
   if ("children" in node) {
     for (const child of node.children) {
-      collectVectorNodes(child, vectors);
+      collectVectorAssets(child, assets);
     }
   }
 
-  return vectors;
+  return assets;
 }
 
 async function exportImageAssets(node) {
@@ -65,7 +75,7 @@ async function exportImageAssets(node) {
 
 async function exportVectorAssets(node) {
   const assets = [];
-  for (const vector of collectVectorNodes(node)) {
+  for (const vector of collectVectorAssets(node)) {
     const bytes = await vector.exportAsync({ format: "SVG" });
     assets.push({ sourceId: vector.id, data: bytesToBase64(bytes) });
   }
