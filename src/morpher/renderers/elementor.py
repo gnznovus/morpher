@@ -1,6 +1,7 @@
 import hashlib
 
 from morpher.ir.nodes import DesignNode
+from morpher.ir.styles import DesignStyle
 
 
 def _element_id(node: DesignNode, path: str) -> str:
@@ -9,14 +10,165 @@ def _element_id(node: DesignNode, path: str) -> str:
     return hashlib.sha1(identity.encode("utf-8")).hexdigest()[:8]
 
 
+def _size(unit: str, value: float) -> dict:
+    return {"unit": unit, "size": value, "sizes": []}
+
+
+def _dimensions(
+    top: float,
+    right: float,
+    bottom: float,
+    left: float,
+) -> dict:
+    return {
+        "unit": "px",
+        "top": str(top),
+        "right": str(right),
+        "bottom": str(bottom),
+        "left": str(left),
+        "isLinked": top == right == bottom == left,
+    }
+
+
+def _alignment(value: str | None) -> str | None:
+    mapping = {
+        "MIN": "flex-start",
+        "CENTER": "center",
+        "MAX": "flex-end",
+        "SPACE_BETWEEN": "space-between",
+    }
+    return mapping.get(value or "")
+
+
+def _apply_item_sizing(settings: dict, style: DesignStyle, *, container: bool) -> None:
+    if style.width_mode == "fill":
+        if container:
+            settings["width"] = _size("%", 100)
+        else:
+            settings["_element_width"] = "initial"
+            settings["_element_custom_width"] = _size("%", 100)
+    elif style.width_mode == "hug" and not container:
+        settings["_element_width"] = "auto"
+    elif style.width_mode == "fixed" and style.width is not None:
+        if container:
+            settings["width"] = _size("px", style.width)
+        else:
+            settings["_element_width"] = "initial"
+            settings["_element_custom_width"] = _size("px", style.width)
+
+    if style.height_mode == "fixed" and style.height is not None and container:
+        settings["min_height"] = _size("px", style.height)
+
+
+def _container_settings(style: DesignStyle) -> dict:
+    settings: dict = {}
+
+    if style.layout_direction:
+        settings["flex_direction"] = "row" if style.layout_direction == "horizontal" else "column"
+
+    justify = _alignment(style.primary_axis_align)
+    if justify:
+        settings["flex_justify_content"] = justify
+
+    align = _alignment(style.counter_axis_align)
+    if align:
+        settings["flex_align_items"] = align
+
+    if style.gap is not None:
+        gap = str(style.gap)
+        settings["flex_gap"] = {
+            "column": gap,
+            "row": gap,
+            "isLinked": True,
+            "unit": "px",
+            "size": style.gap,
+        }
+
+    padding = (
+        style.padding_top,
+        style.padding_right,
+        style.padding_bottom,
+        style.padding_left,
+    )
+    if any(value is not None for value in padding):
+        top, right, bottom, left = (value or 0 for value in padding)
+        settings["padding"] = _dimensions(top, right, bottom, left)
+
+    _apply_item_sizing(settings, style, container=True)
+
+    if style.background:
+        settings["background_background"] = "classic"
+        settings["background_color"] = style.background
+
+    if style.clips_content:
+        settings["overflow"] = "hidden"
+
+    return settings
+
+
+def _heading_settings(node: DesignNode) -> dict:
+    style = node.style
+    settings: dict = {"title": node.text or ""}
+
+    has_typography = any(
+        value is not None
+        for value in (
+            style.font_family,
+            style.font_weight,
+            style.font_size,
+            style.line_height,
+            style.letter_spacing,
+        )
+    )
+    if has_typography:
+        settings["header_size"] = "div"
+        settings["typography_typography"] = "custom"
+        if style.font_family:
+            settings["typography_font_family"] = style.font_family
+        if style.font_weight is not None:
+            settings["typography_font_weight"] = str(style.font_weight)
+        if style.font_size is not None:
+            settings["typography_font_size"] = _size("px", style.font_size)
+        if style.line_height is not None:
+            settings["typography_line_height"] = _size("px", style.line_height)
+        if style.letter_spacing is not None:
+            settings["typography_letter_spacing"] = _size("px", style.letter_spacing)
+
+    if style.text_color:
+        settings["title_color"] = style.text_color
+
+    align_mapping = {
+        "LEFT": "left",
+        "CENTER": "center",
+        "RIGHT": "right",
+        "JUSTIFIED": "justify",
+    }
+    text_align = align_mapping.get(style.text_align_horizontal or "")
+    if text_align:
+        settings["align"] = text_align
+
+    _apply_item_sizing(settings, style, container=False)
+    return settings
+
+
 def _render_heading(node: DesignNode, path: str) -> dict:
     return {
         "id": _element_id(node, path),
-        "settings": {"title": node.text or ""},
+        "settings": _heading_settings(node),
         "elements": [],
         "isInner": False,
         "widgetType": "heading",
         "elType": "widget",
+    }
+
+
+def _render_shape(node: DesignNode, path: str) -> dict:
+    return {
+        "id": _element_id(node, path),
+        "settings": _container_settings(node.style),
+        "elements": [],
+        "isInner": False,
+        "elType": "container",
     }
 
 
@@ -28,10 +180,13 @@ def _render_container(node: DesignNode, path: str) -> dict:
             elements.append(_render_container(child, child_path))
         elif child.kind == "text":
             elements.append(_render_heading(child, child_path))
+        elif child.kind == "shape":
+            elements.append(_render_shape(child, child_path))
 
+    settings = _container_settings(node.style)
     return {
         "id": _element_id(node, path),
-        "settings": [],
+        "settings": settings if settings else [],
         "elements": elements,
         "isInner": False,
         "elType": "container",
@@ -39,7 +194,7 @@ def _render_container(node: DesignNode, path: str) -> dict:
 
 
 def render_elementor(root: DesignNode) -> dict:
-    """Render the first portable Elementor slice: container + heading."""
+    """Render portable Elementor JSON from Morpher's shared Design IR."""
     if root.kind != "container":
         raise ValueError("Elementor template root must be a container")
 
