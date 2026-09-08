@@ -126,6 +126,7 @@ class FigmaJsonAdapter:
             padding_left=self._geometry_number(node.get("paddingLeft")),
             opacity=self._number(node.get("opacity")),
             image_opacity=self._image_opacity(node),
+            clips_content=node.get("clipsContent") if isinstance(node.get("clipsContent"), bool) else None,
             background=None if source_type == "TEXT" else solid_color,
             text_color=solid_color if source_type == "TEXT" else None,
             stroke_color=self._solid_stroke_color(node),
@@ -147,6 +148,7 @@ class FigmaJsonAdapter:
             font_size=self._geometry_number(text_style.get("fontSize")),
             letter_spacing=self._geometry_number(text_style.get("letterSpacing")),
             line_height=self._geometry_number(text_style.get("lineHeightPx")),
+            text_auto_resize=text_style.get("textAutoResize"),
             text_align_horizontal=text_style.get("textAlignHorizontal"),
             text_align_vertical=text_style.get("textAlignVertical"),
         )
