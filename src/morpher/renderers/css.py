@@ -85,6 +85,9 @@ def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
     if node.kind == "container" and style.layout_direction is None and not is_absolute:
         declarations.append("position: relative")
 
+    if style.clips_content:
+        declarations.append("overflow: hidden")
+
     if style.layout_direction:
         declarations.extend(("display: flex", f"flex-direction: {'row' if style.layout_direction == 'horizontal' else 'column'}"))
         if style.gap is not None:
@@ -138,6 +141,8 @@ def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
             declarations.append(f"line-height: {_px(style.line_height)}")
         if style.letter_spacing is not None:
             declarations.append(f"letter-spacing: {_px(style.letter_spacing)}")
+        if style.text_auto_resize == "WIDTH_AND_HEIGHT":
+            declarations.append("white-space: nowrap")
 
     return declarations
 
