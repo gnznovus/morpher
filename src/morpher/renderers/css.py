@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import math
+
 from morpher.ir.nodes import DesignNode
 
 
 _RENDERABLE_KINDS = {"container", "text", "shape", "image", "icon", "divider"}
+_ROTATION_EPSILON = 1e-4
 
 
 def _class_name(node: DesignNode) -> str:
@@ -49,6 +52,42 @@ def _font_family(node: DesignNode) -> str | None:
     return ", ".join(families)
 
 
+def _quarter_turn(rotation: float | None) -> int | None:
+    if rotation is None:
+        return None
+    quarter = round(rotation / (math.pi / 2))
+    if quarter == 0 or abs(rotation - quarter * (math.pi / 2)) > _ROTATION_EPSILON:
+        return None
+    return quarter
+
+
+def _absolute_geometry(node: DesignNode, parent: DesignNode) -> tuple[float | None, float | None, float | None, float | None, float | None]:
+    style = node.style
+    left = _relative_offset(style.x, parent.style.x)
+    top = _relative_offset(style.y, parent.style.y)
+    width = style.width
+    height = style.height
+    rotation_degrees: float | None = None
+
+    quarter = _quarter_turn(style.rotation)
+    if quarter is not None:
+        normalized = quarter % 4
+        rotation_degrees = quarter * 90.0
+        if normalized in (1, 3) and width is not None and height is not None:
+            # Figma absoluteBoundingBox is post-rotation. Reconstruct the pre-rotation
+            # box around the same center so CSS rotation reproduces the same bounds.
+            original_width = height
+            original_height = width
+            if left is not None:
+                left += (width - original_width) / 2
+            if top is not None:
+                top += (height - original_height) / 2
+            width = original_width
+            height = original_height
+
+    return left, top, width, height, rotation_degrees
+
+
 def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
     style = node.style
     is_root = parent is None
@@ -63,16 +102,18 @@ def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
     elif is_absolute:
         declarations.append("position: absolute")
 
-        left = _relative_offset(style.x, parent.style.x)
-        top = _relative_offset(style.y, parent.style.y)
+        left, top, width, height, rotation_degrees = _absolute_geometry(node, parent)
         if left is not None:
             declarations.append(f"left: {_px(left)}")
         if top is not None:
             declarations.append(f"top: {_px(top)}")
-        if style.width is not None:
-            declarations.append(f"width: {_px(style.width)}")
-        if style.height is not None:
-            declarations.append(f"height: {_px(style.height)}")
+        if width is not None:
+            declarations.append(f"width: {_px(width)}")
+        if height is not None:
+            declarations.append(f"height: {_px(height)}")
+        if rotation_degrees is not None:
+            declarations.append(f"transform: rotate({rotation_degrees:g}deg)")
+            declarations.append("transform-origin: center center")
     else:
         if style.width_mode == "fixed" and style.width is not None:
             declarations.append(f"width: {_px(style.width)}")
