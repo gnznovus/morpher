@@ -47,6 +47,12 @@ class StoragePaths:
     def css_output(self, source: Path) -> Path:
         return self.output_html / f"{source.stem}.css"
 
+    def figma_asset_dir(self, source: Path) -> Path:
+        return self.figma_import / "assets" / source.stem
+
+    def html_asset_dir(self, source: Path) -> Path:
+        return self.output_html / "assets" / source.stem
+
     def elementor_output(self, source: Path) -> Path:
         return self.output_elementor / f"{source.stem}_template.json"
 
