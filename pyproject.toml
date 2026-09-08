@@ -8,6 +8,9 @@ version = "0.1.0"
 description = "Modular design compiler for HTML/CSS and Elementor outputs."
 requires-python = ">=3.11"
 
+[project.scripts]
+morpher-listen = "morpher.listener:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
