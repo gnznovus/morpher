@@ -29,12 +29,6 @@ def _union_bounds(boxes: list[tuple[float, float, float, float]]) -> tuple[float
 
 
 def _participates_in_flow(node: DesignNode) -> bool:
-    """Return whether this node contributes to the current responsive flow slice.
-
-    Text and structural containers are the first semantic-layout contract. Media
-    and icon layers are deliberately deferred until the asset/layout slice can
-    place them without forcing the whole section back to absolute positioning.
-    """
     if node.kind in {"text", "shape"}:
         return True
     if node.kind == "container":
@@ -43,12 +37,6 @@ def _participates_in_flow(node: DesignNode) -> bool:
 
 
 def _layout_bounds(node: DesignNode) -> tuple[float, float, float, float]:
-    """Use meaningful descendant content when a wrapper's raw box is decorative.
-
-    Figma frames can be much larger than their textual content because they also
-    contain vectors/masks. A transparent wrapper should not make unrelated text
-    look overlapped merely because its decorative bounds are large.
-    """
     if node.kind == "container" and not node.style.background:
         descendant_boxes = [
             _layout_bounds(child)
@@ -86,7 +74,7 @@ def _has_real_overlap(
             if other_area <= 0:
                 continue
             overlap = _overlap_area(box, other_box)
-            if overlap / min(area, other_area) > 0.2:
+            if overlap / min(area, other_area) > 0.8:
                 return True
     return False
 
@@ -137,19 +125,44 @@ def _positive_median(values: list[float]) -> float | None:
     return float(median(positive)) if positive else None
 
 
-def _flow_style(style: DesignStyle, *, width_percent: float | None = None) -> DesignStyle:
+def _percent(value: float, reference: float) -> float | None:
+    if reference <= 0:
+        return None
+    return value / reference * 100.0
+
+
+def _flow_style(
+    style: DesignStyle,
+    *,
+    width_percent: float | None = None,
+    margin_top_percent: float | None = None,
+    margin_left_percent: float | None = None,
+) -> DesignStyle:
     result = deepcopy(style)
     result.x = None
     result.y = None
     result.width_percent = width_percent
     result.width_mode = "fill" if width_percent is None else None
+    result.margin_top_percent = margin_top_percent
+    result.margin_left_percent = margin_left_percent
     if result.height_mode == "fixed":
         result.height_mode = "hug"
     return result
 
 
-def _make_child_flow(child: DesignNode, *, width_percent: float | None = None) -> None:
-    child.style = _flow_style(child.style, width_percent=width_percent)
+def _make_child_flow(
+    child: DesignNode,
+    *,
+    width_percent: float | None = None,
+    margin_top_percent: float | None = None,
+    margin_left_percent: float | None = None,
+) -> None:
+    child.style = _flow_style(
+        child.style,
+        width_percent=width_percent,
+        margin_top_percent=margin_top_percent,
+        margin_left_percent=margin_left_percent,
+    )
     if child.kind == "container" and child.style.layout_direction is None:
         child.style.layout_direction = "vertical"
         child.style.height_mode = "hug"
@@ -159,10 +172,8 @@ def _flow_container_style(
     node: DesignNode,
     child_bounds: list[tuple[float, float, float, float]],
 ) -> DesignStyle:
-    px, py, pr, pb = _bounds(node)
-    min_x = min(box[0] for box in child_bounds)
+    px, py, _, pb = _bounds(node)
     min_y = min(box[1] for box in child_bounds)
-    max_x = max(box[2] for box in child_bounds)
     max_y = max(box[3] for box in child_bounds)
 
     style = deepcopy(node.style)
@@ -173,10 +184,13 @@ def _flow_container_style(
     style.layout_direction = "vertical"
     style.width_mode = "fill"
     style.height_mode = "hug"
-    style.padding_left = max(0.0, min_x - px)
+    # Horizontal placement belongs to each child so desktop x/width geometry is
+    # retained without absolute positioning. The parent only owns vertical inset.
+    style.padding_left = 0
+    style.padding_right = 0
     style.padding_top = max(0.0, min_y - py)
-    style.padding_right = max(0.0, pr - max_x)
     style.padding_bottom = max(0.0, pb - max_y)
+    style.gap = None
     return style
 
 
@@ -193,20 +207,22 @@ def _compile_free_layout(node: DesignNode) -> DesignNode:
 
     boxes = {id(child): _layout_bounds(child) for child in flow_children}
     original_child_bounds = list(boxes.values())
+    px, _, pr, _ = _bounds(node)
+    parent_width = pr - px
 
     if len(flow_children) == 1:
         child = flow_children[0]
+        box = boxes[id(child)]
         node.style = _flow_container_style(node, original_child_bounds)
-        _make_child_flow(child)
-        # Keep deferred media/icon nodes in the IR for the later asset/layout
-        # compiler slice. Current Elementor rendering ignores those kinds.
+        _make_child_flow(
+            child,
+            width_percent=_percent(box[2] - box[0], parent_width),
+            margin_left_percent=_percent(box[0] - px, parent_width),
+        )
         node.children = [child, *[item for item in children if item is not child]]
         return node
 
     if _has_real_overlap(flow_children, boxes):
-        # Genuine overlap among semantic flow content still means this container
-        # needs a specialized layering rule. Decorative/media overlap alone no
-        # longer forces all text back to absolute positioning.
         return node
 
     bands = _bands(flow_children, boxes)
@@ -219,11 +235,22 @@ def _compile_free_layout(node: DesignNode) -> DesignNode:
     for band_index, band in enumerate(bands):
         band_source_boxes = [boxes[id(child)] for child in band]
         bx1, by1, bx2, by2 = _union_bounds(band_source_boxes)
-        band_boxes.append((bx1, by1, bx2, by2))
+        current_box = (bx1, by1, bx2, by2)
+        previous_box = band_boxes[-1] if band_boxes else None
+        band_boxes.append(current_box)
+        margin_top_percent = None
+        if previous_box is not None:
+            margin_top_percent = _percent(by1 - previous_box[3], parent_width)
 
         if len(band) == 1:
             child = band[0]
-            _make_child_flow(child)
+            child_box = boxes[id(child)]
+            _make_child_flow(
+                child,
+                width_percent=_percent(child_box[2] - child_box[0], parent_width),
+                margin_top_percent=margin_top_percent,
+                margin_left_percent=_percent(child_box[0] - px, parent_width),
+            )
             compiled_children.append(child)
             continue
 
@@ -251,18 +278,13 @@ def _compile_free_layout(node: DesignNode) -> DesignNode:
                 height_mode="hug",
                 gap=_positive_median(gaps),
                 counter_axis_align="min",
+                margin_top_percent=margin_top_percent,
             ),
             children=row_children,
         )
         compiled_children.append(row)
 
-    vertical_gaps = [
-        current[1] - previous[3]
-        for previous, current in zip(band_boxes, band_boxes[1:])
-    ]
-
     compiled_style = _flow_container_style(node, original_child_bounds)
-    compiled_style.gap = _positive_median(vertical_gaps)
 
     flow_ids = {id(child) for child in flow_children}
     deferred_children = [child for child in children if id(child) not in flow_ids]
@@ -273,8 +295,6 @@ def _compile_free_layout(node: DesignNode) -> DesignNode:
 
 
 def _compile_node(node: DesignNode) -> DesignNode:
-    # Compile the parent from untouched Figma geometry first. Child compilation
-    # can clear x/y once those coordinates are no longer needed by the parent.
     if node.kind == "container" and node.style.layout_direction is None:
         node = _compile_free_layout(node)
     node.children = [_compile_node(child) for child in node.children]
@@ -282,11 +302,11 @@ def _compile_node(node: DesignNode) -> DesignNode:
 
 
 def compile_responsive_layout(root: DesignNode) -> DesignNode:
-    """Compile free-layout semantic content into responsive flow.
+    """Compile desktop free-layout content into normal flow.
 
-    Auto Layout already carries layout semantics and passes through unchanged.
-    The current free-layout slice compiles text/structural content while media
-    and icon layers remain deferred in the copied IR. Genuine overlap among the
-    semantic flow nodes still falls back to raw geometry for a later rule.
+    Auto Layout passes through unchanged. Free-layout semantic content keeps its
+    source desktop x/width and vertical relationships through proportional widths
+    and margins, including negative margins for visual overlap. Absolute remains
+    reserved for strongly layered cases that cannot yet be represented safely.
     """
     return _compile_node(deepcopy(root))
