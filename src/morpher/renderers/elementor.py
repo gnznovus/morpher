@@ -47,8 +47,13 @@ def _apply_item_sizing(settings: dict, style: DesignStyle, *, container: bool) -
         else:
             settings["_element_width"] = "initial"
             settings["_element_custom_width"] = _size("%", 100)
-    elif style.width_mode == "hug" and not container:
-        settings["_element_width"] = "auto"
+    elif style.width_mode == "hug":
+        if container and style.width is not None:
+            # Elementor containers stretch by default. Figma HUG already gives us
+            # the resolved intrinsic width, so preserve it explicitly.
+            settings["width"] = _size("px", style.width)
+        elif not container:
+            settings["_element_width"] = "auto"
     elif style.width_mode == "fixed" and style.width is not None:
         if container:
             settings["width"] = _size("px", style.width)
