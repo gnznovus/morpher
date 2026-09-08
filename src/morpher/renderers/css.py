@@ -202,7 +202,17 @@ def _walk(node: DesignNode, parent: DesignNode | None = None):
 
 def render_css(root: DesignNode) -> str:
     """Render Design IR using flex for Auto Layout and absolute geometry for free layout."""
-    blocks = ["html, body {", "  margin: 0;", "  padding: 0;", "}", ""]
+    blocks = [
+        "html, body {",
+        "  margin: 0;",
+        "  padding: 0;",
+        "}",
+        "",
+        ".morpher-text-outline {",
+        "  display: block;",
+        "}",
+        "",
+    ]
     for node, parent in _walk(root):
         if node.kind not in _RENDERABLE_KINDS:
             continue
