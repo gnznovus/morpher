@@ -101,7 +101,8 @@ class FigmaJsonAdapter:
     def _image_opacity(cls, node: dict[str, Any]) -> float | None:
         for fill in node.get("fills", []):
             if isinstance(fill, dict) and fill.get("type") == "IMAGE" and fill.get("visible") is not False:
-                return cls._number(fill.get("opacity")) or 1.0
+                opacity = cls._number(fill.get("opacity"))
+                return 1.0 if opacity is None else opacity
         return None
 
     def _style(self, node: dict[str, Any]) -> DesignStyle:
