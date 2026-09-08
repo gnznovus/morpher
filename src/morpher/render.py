@@ -5,6 +5,7 @@ import json
 import shutil
 from pathlib import Path
 
+from morpher.compiler.layout import compile_responsive_layout
 from morpher.compiler.normalizer import normalize
 from morpher.inputs.figma_json import FigmaJsonAdapter
 from morpher.renderers.css import render_css
@@ -44,7 +45,12 @@ def render_path(path: Path) -> tuple[Path, Path, Path, int]:
     asset_sources = _copy_assets(path, storage)
     css = render_css(document.root)
     html = render_html(document.root, stylesheet=css_path.name, asset_sources=asset_sources)
-    elementor = render_elementor(document.root)
+
+    # Keep the HTML renderer on raw normalized geometry for fidelity/debugging.
+    # Elementor receives a compiled flow layout whenever the free-layout
+    # geometry can be represented safely without overlap.
+    elementor_root = compile_responsive_layout(document.root)
+    elementor = render_elementor(elementor_root)
 
     html_path.write_text(html, encoding="utf-8")
     css_path.write_text(css, encoding="utf-8")
