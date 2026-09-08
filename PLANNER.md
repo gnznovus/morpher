@@ -53,29 +53,31 @@
 - [x] Use safe deterministic filenames and replace same-name snapshots in place.
 - [x] Add listener validation and storage tests.
 - [x] Add `morpher-listen` CLI command.
-- [ ] Verify the development plugin loads in Figma Desktop.
-- [ ] Send one real frame from Figma to Morpher end-to-end.
+- [x] Verify the development plugin loads in Figma Desktop.
+- [x] Send one real frame from Figma to Morpher end-to-end.
 - [ ] Preserve that real payload as the first compiler fixture.
 
 ### Phase 3 — Figma JSON + Design IR
 
-- [ ] Add `FigmaJsonAdapter`.
-- [ ] Define output-agnostic Design IR nodes.
-- [ ] Preserve original Figma node IDs for debugging.
-- [ ] Normalize basic Figma frame/group/text/image data.
+- [x] Add `FigmaJsonAdapter`.
+- [x] Define output-agnostic Design IR nodes.
+- [x] Preserve original Figma node IDs for debugging.
+- [x] Normalize basic Figma frame/group/text/image data.
 - [ ] Support basic Auto Layout:
-  - [ ] horizontal / vertical direction
-  - [ ] gap
-  - [ ] padding
+  - [x] horizontal / vertical direction
+  - [x] gap
+  - [x] padding
   - [ ] alignment
-  - [ ] fixed / hug / fill sizing
+  - [x] fixed / hug / fill sizing
 - [ ] Support basic styling:
-  - [ ] solid backgrounds
-  - [ ] typography
+  - [x] solid backgrounds
+  - [x] typography
   - [ ] border
-  - [ ] border radius
-  - [ ] opacity
-- [ ] Add fixture-based tests using real plugin output.
+  - [x] border radius
+  - [x] opacity
+- [x] Warn on unsupported node types instead of silently dropping them.
+- [x] Add fixture-style tests based on fields observed in real plugin output.
+- [ ] Add the full real `Homepage-Hide.json` payload as a regression fixture.
 
 ### Phase 4 — HTML/CSS Renderer
 
