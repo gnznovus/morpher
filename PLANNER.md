@@ -37,6 +37,8 @@
 
 ## Morpher 1.0 Vision
 
+> **Important:** This section records the intended Morpher 1.0 product direction so today's foundations do not block it. These items are **not the current implementation scope** unless they also appear in the active prototype phases below.
+
 The intended 1.0 direction is a Morpher application rather than a CLI-only tool. The exact desktop/UI technology is intentionally **not locked yet**; candidates such as Tk/ttk or another suitable application framework can be evaluated when the UI requirements are clearer.
 
 Conceptual architecture:
@@ -62,8 +64,72 @@ Conceptual architecture:
 Planned responsibilities include:
 
 - Provide a real application/UI around Morpher Core.
-- Orchestrate compilation, projects, generated artifacts, and assets without moving compiler logic into the UI.
+- Orchestrate compilation, projects, generated artifacts, CSS, and assets without moving compiler logic into the UI.
+- Perform heavier processing/optimization in Python where appropriate rather than moving compiler/optimizer responsibilities into the WordPress plugin.
 - Connect to WordPress through the Morpher WordPress Bridge when automated deployment/integration is implemented.
+
+### Morph as the 1.0 Compilation Unit
+
+The intended 1.0 product should be able to morph an **entire page design in one operation**, rather than requiring the user to convert the page section by section.
+
+Current section-by-section Figma imports are development fixtures used to prove individual capabilities safely. They must not define the permanent product boundary.
+
+Conceptually:
+
+```text
+Project: MUU Hotel
+│
+├─ Morph: Homepage
+│  ├─ entire Homepage design/source
+│  ├─ compiled/semantic representation
+│  ├─ Elementor document
+│  ├─ one optimized Homepage CSS bundle
+│  └─ required optimized assets
+│
+├─ Morph: Offers
+│  └─ ...
+│
+└─ Morph: Contact
+   └─ ...
+```
+
+A **Morph** is intended to represent one complete page/template compilation unit. Sections remain structural children and useful development fixtures, while the Morph owns the complete generated page/template artifacts.
+
+Foundation constraint: new compiler, Elementor, CSS, and asset work should avoid assumptions that only one isolated section exists. It should remain possible for a Morph root to contain and compile many sections together.
+
+### Per-Morph CSS
+
+The 1.0 direction is **one compiled/optimized stylesheet per Morph/page**, not one stylesheet per tiny section and not necessarily one site-wide shared stylesheet.
+
+Conceptually:
+
+```text
+Homepage Morph
+      ↓
+all page/section style rules
+      ↓
+Morpher App / Python CSS optimization
+      ↓
+homepage.css
+```
+
+The Morpher App may later normalize and optimize duplicate/repeated CSS declarations across sections/elements within that Morph and produce one final page-owned stylesheet. The exact optimization algorithm and user-facing controls are intentionally deferred.
+
+Elementor Free does not need to be treated as the only style storage mechanism. Morpher-generated Elementor elements can carry stable classes, while the Morph stylesheet supplies fidelity styling that is unsuitable or unavailable through Elementor Free controls. Native Elementor settings can still be used where they improve editability.
+
+Human-facing generated classes should eventually be more descriptive than raw `morpher-{source-id}` debug classes. A candidate convention is:
+
+```text
+{name}-{id}
+```
+
+for example `offers-arrow-left-45-5253`. The exact naming/sanitization rules are not locked yet. Source IDs, Elementor internal IDs, and human-facing CSS identities should remain conceptually separate so one identifier does not have to serve every purpose.
+
+### Semantic Structure
+
+The 1.0 compiler should support semantic output rather than treating every structural container as a generic `div` forever. Semantic decisions should live above individual output renderers so HTML and Elementor can consume the same intent where supported.
+
+Potential semantic targets include `header`, `nav`, `main`, `section`, `article`, `aside`, `footer`, appropriate heading levels, paragraphs, and links/actions. Exact inference rules are deferred and should be introduced through verified deterministic slices rather than guessed globally.
 
 ### Morpher WordPress Bridge
 
@@ -74,9 +140,12 @@ The bridge is expected to eventually support operations such as:
 - authenticated Morpher ↔ WordPress communication;
 - WordPress Media Library / asset integration;
 - Elementor template/page integration;
+- receiving/registering Morpher-generated per-Morph CSS and ensuring it is loaded where required;
 - site information and operations required by Morpher workflows.
 
-Exact endpoints, authentication, permissions, and Elementor integration mechanisms are **not designed yet**. The bridge must be explicit and controlled rather than Morpher directly coupling the compiler to WordPress filesystem/database internals.
+The WordPress plugin should remain relatively thin where practical: WordPress/Elementor-specific installation, registration, storage, loading, and communication belong there, while compilation and heavier CSS/asset optimization can remain in the Python Morpher App/Core.
+
+Exact endpoints, authentication, permissions, package format, CSS registration strategy, and Elementor integration mechanisms are **not designed yet**. The bridge must be explicit and controlled rather than Morpher directly coupling the compiler to WordPress filesystem/database internals.
 
 Internal codename: **definitely-not-a-backdoor**. 😹
 
@@ -221,8 +290,12 @@ Start-small verification order:
 ### Later / Optional Outputs / Integration
 
 - [ ] Morpher application/UI.
+- [ ] Whole-page Morph compilation as the normal product workflow.
+- [ ] Per-Morph CSS optimization/bundling in Python.
+- [ ] Semantic structure compilation shared by HTML and Elementor outputs.
 - [ ] Morpher WordPress Bridge plugin (`definitely-not-a-backdoor`).
 - [ ] Automated WordPress Media Library integration through the bridge/WordPress APIs.
+- [ ] Per-Morph CSS registration/enqueue through the bridge.
 - [ ] Automated Elementor template/page deployment through the bridge where appropriate.
 - [ ] Gutenberg renderer.
 - [ ] React renderer.
@@ -270,4 +343,4 @@ Immediate sequence:
 4. Add semantic text, then image widgets and packaged assets with manual WordPress Media Library binding.
 5. Expand one verified Elementor feature at a time using the same small-fixture → import → inspect → compare loop.
 
-WordPress REST/bridge automation is intentionally deferred. The current goal is to prove portable Elementor artifacts first; later Morpher App + WordPress Bridge automation should replace the human deployment/binding steps without requiring a compiler redesign.
+WordPress REST/bridge automation and the broader Morpher 1.0 App/Morph workflow are intentionally deferred. The current goal is to prove portable Elementor artifacts first while keeping the foundations compatible with the documented 1.0 direction.
