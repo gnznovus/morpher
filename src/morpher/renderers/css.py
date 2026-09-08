@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import re
 
 from morpher.ir.nodes import DesignNode
 
@@ -40,50 +39,11 @@ def _relative_offset(child_value: float | None, parent_value: float | None) -> f
     return child_value - parent_value
 
 
-def _font_alias(postscript_name: str) -> str:
-    safe_name = re.sub(r"[^a-zA-Z0-9_-]+", "-", postscript_name).strip("-") or "face"
-    return f"morpher-{safe_name}"
-
-
 def _font_family(node: DesignNode) -> str | None:
     style = node.style
-    families: list[str] = []
-    if style.font_postscript_name:
-        families.append(f'"{_font_alias(style.font_postscript_name)}"')
-    if style.font_family:
-        families.append(f'"{style.font_family}"')
-    if not families:
+    if not style.font_family:
         return None
-    families.append("sans-serif")
-    return ", ".join(families)
-
-
-def _font_face_blocks(root: DesignNode) -> list[str]:
-    faces: dict[str, tuple[int | None, str | None]] = {}
-    for node, _ in _walk(root):
-        style = node.style
-        if node.kind != "text" or not style.font_postscript_name:
-            continue
-        faces.setdefault(
-            style.font_postscript_name,
-            (style.font_weight, style.font_style),
-        )
-
-    blocks: list[str] = []
-    for postscript_name, (weight, font_style) in sorted(faces.items()):
-        alias = _font_alias(postscript_name)
-        blocks.extend(
-            (
-                "@font-face {",
-                f'  font-family: "{alias}";',
-                f'  src: local("{postscript_name}");',
-                f"  font-weight: {weight if weight is not None else 400};",
-                f"  font-style: {'italic' if font_style and 'italic' in font_style.lower() else 'normal'};",
-                "}",
-                "",
-            )
-        )
-    return blocks
+    return f'"{style.font_family}", sans-serif'
 
 
 def _quarter_turn(rotation: float | None) -> int | None:
@@ -243,7 +203,6 @@ def _walk(node: DesignNode, parent: DesignNode | None = None):
 def render_css(root: DesignNode) -> str:
     """Render Design IR using flex for Auto Layout and absolute geometry for free layout."""
     blocks = ["html, body {", "  margin: 0;", "  padding: 0;", "}", ""]
-    blocks.extend(_font_face_blocks(root))
     for node, parent in _walk(root):
         if node.kind not in _RENDERABLE_KINDS:
             continue
