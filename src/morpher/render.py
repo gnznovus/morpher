@@ -29,7 +29,12 @@ def _copy_assets(source: Path, storage: StoragePaths, root: DesignNode) -> dict[
     asset_sources: dict[str, str] = {}
     for asset in assets:
         target = target_dir / semantic_names[asset.stem]
-        shutil.copy2(asset, target)
+        try:
+            shutil.copy2(asset, target)
+        except OSError as exc:
+            raise OSError(
+                f"Could not package Figma asset {asset!s} -> {target!s}: {exc}"
+            ) from exc
         asset_sources[asset.stem] = target.relative_to(storage.output_html).as_posix()
     return asset_sources
 
