@@ -82,7 +82,7 @@ def _apply_free_layout_geometry(
     *,
     container: bool,
 ) -> None:
-    """Mirror HTML free-layout geometry using Elementor absolute positioning."""
+    """Mirror raw free-layout geometry only when concrete coordinates exist."""
     if parent_style is None:
         if style.layout_direction is None:
             if style.width is not None:
@@ -92,6 +92,15 @@ def _apply_free_layout_geometry(
         return
 
     if parent_style.layout_direction is not None:
+        return
+
+    # A plain IR container can legitimately have no geometry at all. In that
+    # case there is nothing to position, so do not manufacture an absolute
+    # Elementor element just because the parent is not Auto Layout.
+    if any(
+        value is None
+        for value in (style.x, style.y, parent_style.x, parent_style.y)
+    ):
         return
 
     left = _relative_offset(style.x, parent_style.x)
