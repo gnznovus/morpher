@@ -21,6 +21,10 @@ class DesignStyle:
     padding_right: float | None = None
     padding_bottom: float | None = None
     padding_left: float | None = None
+    margin_top_percent: float | None = None
+    margin_right_percent: float | None = None
+    margin_bottom_percent: float | None = None
+    margin_left_percent: float | None = None
     opacity: float | None = None
     image_opacity: float | None = None
     clips_content: bool | None = None
