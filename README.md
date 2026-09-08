@@ -95,14 +95,16 @@ morpher-render storage/figma-import/Some-Frame.json
 Bulk process discovered sources:
 
 ```text
-morpher run
+morpher
 ```
 
 Replace existing output checkpoints in place:
 
 ```text
-morpher run --force
+morpher --force
 ```
+
+`morpher` is the bulk-processing CLI itself; there is no `run` subcommand.
 
 ## Storage Layout
 
