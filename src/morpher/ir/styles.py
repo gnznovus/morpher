@@ -23,6 +23,8 @@ class DesignStyle:
     opacity: float | None = None
     background: str | None = None
     text_color: str | None = None
+    stroke_color: str | None = None
+    stroke_weight: float | None = None
     border_radius: float | None = None
     layout_direction: LayoutDirection | None = None
     width_mode: SizingMode | None = None
