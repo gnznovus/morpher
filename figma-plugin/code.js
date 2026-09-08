@@ -38,6 +38,20 @@ function collectImageRefs(node, refs = new Set()) {
   return refs;
 }
 
+function collectVectorNodes(node, vectors = []) {
+  if (node.type === "VECTOR") {
+    vectors.push(node);
+  }
+
+  if ("children" in node) {
+    for (const child of node.children) {
+      collectVectorNodes(child, vectors);
+    }
+  }
+
+  return vectors;
+}
+
 async function exportImageAssets(node) {
   const assets = [];
   for (const imageRef of collectImageRefs(node)) {
@@ -45,6 +59,15 @@ async function exportImageAssets(node) {
     if (!image) continue;
     const bytes = await image.getBytesAsync();
     assets.push({ imageRef, data: bytesToBase64(bytes) });
+  }
+  return assets;
+}
+
+async function exportVectorAssets(node) {
+  const assets = [];
+  for (const vector of collectVectorNodes(node)) {
+    const bytes = await vector.exportAsync({ format: "SVG" });
+    assets.push({ sourceId: vector.id, data: bytesToBase64(bytes) });
   }
   return assets;
 }
@@ -58,6 +81,7 @@ figma.ui.onmessage = async (message) => {
 
     const payload = await node.exportAsync({ format: "JSON_REST_V1" });
     const assets = await exportImageAssets(node);
+    const vectorAssets = await exportVectorAssets(node);
     const response = await fetch(MORPHER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -66,6 +90,7 @@ figma.ui.onmessage = async (message) => {
         nodeId: node.id,
         payload,
         assets,
+        vectorAssets,
       }),
     });
 
@@ -77,7 +102,7 @@ figma.ui.onmessage = async (message) => {
     figma.ui.postMessage({
       type: "status",
       state: "success",
-      text: `Saved as ${result.filename} (${result.assetsSaved || 0} assets)`,
+      text: `Saved as ${result.filename} (${result.assetsSaved || 0} images, ${result.vectorsSaved || 0} vectors)`,
     });
   } catch (error) {
     figma.ui.postMessage({
