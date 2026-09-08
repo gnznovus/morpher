@@ -119,6 +119,8 @@ class FigmaJsonAdapter:
             opacity=self._number(node.get("opacity")),
             background=None if source_type == "TEXT" else solid_color,
             text_color=solid_color if source_type == "TEXT" else None,
+            stroke_color=self._solid_stroke_color(node),
+            stroke_weight=self._geometry_number(node.get("strokeWeight")),
             border_radius=self._geometry_number(node.get("cornerRadius")),
             layout_direction=self._layout_direction(layout_mode),
             width_mode=self._sizing_mode(node.get("layoutSizingHorizontal")),
@@ -163,18 +165,34 @@ class FigmaJsonAdapter:
         return None
 
     @staticmethod
-    def _solid_color(node: dict[str, Any]) -> str | None:
+    def _paint_color(paint: dict[str, Any]) -> str | None:
+        if paint.get("type") != "SOLID" or paint.get("visible") is False:
+            return None
+        color = paint.get("color") or {}
+        if not all(channel in color for channel in ("r", "g", "b")):
+            return None
+        r = round(float(color["r"]) * 255)
+        g = round(float(color["g"]) * 255)
+        b = round(float(color["b"]) * 255)
+        alpha = float(color.get("a", 1)) * float(paint.get("opacity", 1))
+        return f"rgba({r}, {g}, {b}, {alpha:g})"
+
+    @classmethod
+    def _solid_color(cls, node: dict[str, Any]) -> str | None:
         for fill in node.get("fills", []):
-            if not isinstance(fill, dict) or fill.get("type") != "SOLID" or fill.get("visible") is False:
-                continue
-            color = fill.get("color") or {}
-            if not all(channel in color for channel in ("r", "g", "b")):
-                continue
-            r = round(float(color["r"]) * 255)
-            g = round(float(color["g"]) * 255)
-            b = round(float(color["b"]) * 255)
-            alpha = float(color.get("a", 1)) * float(fill.get("opacity", 1))
-            return f"rgba({r}, {g}, {b}, {alpha:g})"
+            if isinstance(fill, dict):
+                color = cls._paint_color(fill)
+                if color:
+                    return color
+        return None
+
+    @classmethod
+    def _solid_stroke_color(cls, node: dict[str, Any]) -> str | None:
+        for stroke in node.get("strokes", []):
+            if isinstance(stroke, dict):
+                color = cls._paint_color(stroke)
+                if color:
+                    return color
         return None
 
     @staticmethod
