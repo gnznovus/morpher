@@ -54,8 +54,8 @@ def test_renders_auto_layout_container_text_and_shape_settings():
             padding_left=32,
             width_mode="fixed",
             height_mode="hug",
-            primary_axis_align="CENTER",
-            counter_axis_align="CENTER",
+            primary_axis_align="center",
+            counter_axis_align="center",
         ),
         children=[
             DesignNode(
@@ -65,7 +65,7 @@ def test_renders_auto_layout_container_text_and_shape_settings():
                 style=DesignStyle(
                     width_mode="hug",
                     height_mode="hug",
-                    layout_align="INHERIT",
+                    layout_align="inherit",
                     font_family="Arial",
                     font_weight=400,
                     font_size=12,
@@ -80,7 +80,7 @@ def test_renders_auto_layout_container_text_and_shape_settings():
                 style=DesignStyle(
                     width_mode="fill",
                     height_mode="hug",
-                    layout_align="STRETCH",
+                    layout_align="stretch",
                     font_family="Arial",
                     font_weight=400,
                     font_size=12,
@@ -94,7 +94,7 @@ def test_renders_auto_layout_container_text_and_shape_settings():
                 style=DesignStyle(
                     width_mode="fill",
                     height_mode="fixed",
-                    layout_align="STRETCH",
+                    layout_align="stretch",
                     height=80,
                     background="rgba(217, 217, 217, 1)",
                 ),
@@ -123,7 +123,7 @@ def test_renders_auto_layout_container_text_and_shape_settings():
 
     first_heading = container["elements"][0]
     assert first_heading["settings"]["_element_width"] == "auto"
-    assert first_heading["settings"]["_element_align"] == "center"
+    assert first_heading["settings"]["align"] == "center"
     assert first_heading["settings"]["typography_typography"] == "custom"
     assert first_heading["settings"]["typography_font_size"]["size"] == 12
 
