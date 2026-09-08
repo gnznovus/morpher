@@ -143,7 +143,7 @@ def test_renders_auto_layout_container_text_and_shape_settings():
     assert shape["settings"]["background_color"] == "rgba(217, 217, 217, 1)"
 
 
-def test_nested_hug_container_uses_figma_width():
+def test_nested_hug_container_uses_figma_width_and_full_content_width():
     root = DesignNode(
         kind="container",
         source_id="1:1",
@@ -188,6 +188,7 @@ def test_nested_hug_container_uses_figma_width():
         "size": 88,
         "sizes": [],
     }
+    assert button_container["settings"]["content_width"] == "full"
 
 
 def test_elementor_ids_are_deterministic_and_valid_length():
