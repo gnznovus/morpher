@@ -99,7 +99,14 @@ async function exportVectorAssets(node) {
 async function exportTextAssets(node) {
   const assets = [];
   for (const text of collectTextAssets(node)) {
-    const bytes = await text.exportAsync({ format: "SVG", svgOutlineText: true });
+    // Keep Figma's complete text-node canvas instead of cropping the SVG to
+    // visible glyph paths. This preserves intentional empty geometry such as
+    // leading spaces while still outlining the glyphs for font fidelity.
+    const bytes = await text.exportAsync({
+      format: "SVG",
+      svgOutlineText: true,
+      useAbsoluteBounds: true,
+    });
     assets.push({ sourceId: text.id, data: bytesToBase64(bytes) });
   }
   return assets;
