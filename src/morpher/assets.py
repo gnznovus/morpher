@@ -17,9 +17,13 @@ def semantic_asset_names(root: DesignNode, source_assets: list[Path]) -> dict[st
 
     The root name provides semantic context while the original Figma node name
     is preserved for traceability. Raw hashes/source ids remain lookup keys only.
+
+    ``source_assets`` describes exported asset paths; callers may pass discovered
+    filesystem paths or synthetic Paths in unit tests, so existence is deliberately
+    not checked here. Filesystem filtering belongs to the discovery/copy boundary.
     """
     context = _slug(root.name, "design")
-    assets_by_key = {asset.stem: asset for asset in source_assets if asset.is_file()}
+    assets_by_key = {asset.stem: asset for asset in source_assets}
     result: dict[str, str] = {}
     used: set[str] = set()
 
