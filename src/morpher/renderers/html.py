@@ -5,7 +5,7 @@ from html import escape
 from morpher.ir.nodes import DesignNode
 
 
-_RENDERABLE_KINDS = {"container", "text", "shape", "image", "icon"}
+_RENDERABLE_KINDS = {"container", "text", "shape", "image", "icon", "divider"}
 
 
 def _class_name(node: DesignNode) -> str:
