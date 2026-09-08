@@ -169,6 +169,26 @@ def _render_shape(node: DesignNode, path: str, parent_style: DesignStyle | None 
     return {"id": _element_id(node, path), "settings": _container_settings(node.style, parent_style), "elements": [], "isInner": False, "elType": "container"}
 
 
+def _is_container_backdrop_asset(node: DesignNode, parent: DesignNode) -> bool:
+    """Identify large decorative vectors that belong to a content wrapper.
+
+    Figma often exports a transparent wrapper containing both semantic content and
+    a nearly full-size vector used as a decorative backdrop. That vector is not a
+    standalone Elementor widget; it belongs to the wrapper composition.
+    """
+    if node.kind != "icon" or parent.style.background:
+        return False
+    if not any(child.kind in {"text", "shape"} for child in parent.children if child is not node):
+        return False
+    if any(value is None for value in (node.style.width, node.style.height, parent.style.width, parent.style.height)):
+        return False
+    assert node.style.width is not None and node.style.height is not None
+    assert parent.style.width is not None and parent.style.height is not None
+    if parent.style.width <= 0 or parent.style.height <= 0:
+        return False
+    return node.style.width / parent.style.width >= 0.7 and node.style.height / parent.style.height >= 0.7
+
+
 def _render_asset_widget(node: DesignNode, path: str, parent_style: DesignStyle | None, asset_sources: dict[str, str]) -> dict | None:
     key = node.image_ref.replace(":", "-") if node.kind == "image" and node.image_ref else (node.source_id or "").replace(":", "-")
     source = asset_sources.get(key)
@@ -193,7 +213,7 @@ def _render_container(node: DesignNode, path: str, parent_style: DesignStyle | N
             elements.append(_render_heading(child, child_path, node.style))
         elif child.kind == "shape":
             elements.append(_render_shape(child, child_path, node.style))
-        elif child.kind in {"image", "icon"}:
+        elif child.kind in {"image", "icon"} and not _is_container_backdrop_asset(child, node):
             asset = _render_asset_widget(child, child_path, node.style, asset_sources)
             if asset is not None:
                 elements.append(asset)
