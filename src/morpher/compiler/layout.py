@@ -190,9 +190,11 @@ def _compile_free_layout(node: DesignNode) -> DesignNode:
 
 
 def _compile_node(node: DesignNode) -> DesignNode:
-    node.children = [_compile_node(child) for child in node.children]
+    # Compile the parent from untouched Figma geometry first. Child compilation
+    # can clear x/y once those coordinates are no longer needed by the parent.
     if node.kind == "container" and node.style.layout_direction is None:
         node = _compile_free_layout(node)
+    node.children = [_compile_node(child) for child in node.children]
     return node
 
 
