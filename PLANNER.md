@@ -20,7 +20,8 @@
   - `storage/output/html/{name}.css`
   - `storage/output/elementor/{name}_template.json`
 - Existing output is skipped by default.
-- `--force` replaces existing outputs in place; it must not create numbered duplicates.
+- Bulk-processing CLI is `morpher`; there is no `run` subcommand.
+- `morpher --force` replaces existing outputs in place; it must not create numbered duplicates.
 - Source files should only move to `processed/` after all required outputs succeed.
 - Failed inputs stay in `input/` for retry.
 - No ZIP/RAR input packaging for the prototype.
@@ -120,8 +121,8 @@
 - [x] Add rich `morpher-inspect` trace output.
 - [x] Keep inspect trace ownership separate from normal render output.
 - [x] Add `morpher-render` for direct rendering of a source.
-- [x] Add `morpher run` bulk processing.
-- [x] Add `morpher run --force` replacement flow.
+- [x] Add `morpher` bulk processing CLI.
+- [x] Add `morpher --force` replacement flow.
 - [x] Verify bulk processing across multiple preserved Figma imports.
 
 ### Phase 6 — Elementor Renderer
