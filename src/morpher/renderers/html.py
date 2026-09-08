@@ -27,10 +27,16 @@ def _render_node(node: DesignNode, asset_sources: dict[str, str], depth: int = 1
     if node.kind == "text":
         source = asset_sources.get(_asset_key(node.source_id))
         if source and source.lower().endswith(".svg"):
+            # Keep the semantic text node's layout box as the positioned/flex item.
+            # Replacing that node itself with <img> changes replaced-element sizing
+            # and can disturb Auto Layout rows. The outlined SVG is only the visual
+            # payload inside the original box.
             return [
-                f'{indent}<img class="{class_name} morpher-text-outline" '
-                f'src="{escape(source, quote=True)}" alt="{escape(node.text or "", quote=True)}" '
-                f'data-morpher-source-id="{escape(node.source_id or "", quote=True)}">'
+                f'{indent}<div class="{class_name} morpher-text-outline" '
+                f'data-morpher-source-id="{escape(node.source_id or "", quote=True)}">',
+                f'{indent}  <img class="morpher-text-outline-asset" '
+                f'src="{escape(source, quote=True)}" alt="{escape(node.text or "", quote=True)}">',
+                f"{indent}</div>",
             ]
         return [f'{indent}<div class="{class_name}">{escape(node.text or "")}</div>']
 
