@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Morpher runtime / generated data
+storage/input/*
+storage/processed/*
+storage/figma-import/*
+storage/log/*
+storage/output/*
+
+# Keep storage directories if placeholder files are used
+!storage/**/.gitkeep
+
+# WordPress / Docker local runtime
+wordpress/
+wp-data/
+mysql/
+mysql-data/
+db-data/
+
+# Logs / temp
+*.log
+*.tmp
+*.bak
