@@ -81,6 +81,77 @@ def test_compiles_free_layout_into_vertical_bands_and_horizontal_row():
     assert body_settings["width"]["unit"] == "%"
 
 
+def test_decorative_media_overlap_does_not_force_text_absolute():
+    root = DesignNode(
+        kind="container",
+        name="Discovery",
+        source_id="45:5267",
+        style=DesignStyle(x=0, y=960, width=1920, height=960),
+        children=[
+            DesignNode(
+                kind="text",
+                source_id="45:5268",
+                text="Discovery.",
+                style=DesignStyle(x=179, y=1059, width=160, height=36),
+            ),
+            DesignNode(
+                kind="container",
+                name="Frame",
+                source_id="45:5269",
+                style=DesignStyle(x=367, y=1411, width=1326.79, height=1519.57),
+                children=[
+                    DesignNode(
+                        kind="icon",
+                        source_id="45:5270",
+                        style=DesignStyle(x=442, y=1285, width=1233, height=1412),
+                    ),
+                    DesignNode(
+                        kind="text",
+                        source_id="45:5271",
+                        text="Muu is a new, unpretentious yet luxurious hotel brand.",
+                        style=DesignStyle(x=496, y=1818, width=1013, height=86),
+                    ),
+                ],
+            ),
+            DesignNode(
+                kind="image",
+                source_id="45:5272",
+                style=DesignStyle(x=0, y=1111, width=1198, height=673),
+            ),
+            DesignNode(
+                kind="icon",
+                source_id="45:5273",
+                style=DesignStyle(x=510, y=1366, width=144, height=144),
+            ),
+            DesignNode(
+                kind="text",
+                source_id="45:5276",
+                text="– LOREM IPSUM DOLOR SIT AMET",
+                style=DesignStyle(x=972, y=1375, width=732, height=360),
+            ),
+        ],
+    )
+
+    compiled = compile_responsive_layout(root)
+    elementor = render_elementor(compiled)
+    section = elementor["content"][0]
+
+    assert compiled.style.layout_direction == "vertical"
+    assert section["settings"]["flex_direction"] == "column"
+
+    rendered_headings = []
+    stack = list(section["elements"])
+    while stack:
+        element = stack.pop()
+        stack.extend(element.get("elements", []))
+        if element.get("widgetType") == "heading":
+            rendered_headings.append(element)
+
+    assert len(rendered_headings) == 3
+    for heading in rendered_headings:
+        assert "_position" not in heading["settings"]
+
+
 def test_keeps_overlapping_free_layout_for_specialized_layering():
     root = DesignNode(
         kind="container",
