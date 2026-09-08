@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font-family: Inter, sans-serif; margin: 16px; color: #222; }
+      button { width: 100%; padding: 10px 12px; font: inherit; cursor: pointer; }
+      #status { margin-top: 12px; font-size: 12px; line-height: 1.4; min-height: 34px; }
+      .sending { opacity: 0.75; }
+      .success { color: #16803c; }
+      .error { color: #b42318; }
+    </style>
+  </head>
+  <body>
+    <button id="send">Send selected node to Morpher</button>
+    <div id="status">Select exactly one frame or node in Figma.</div>
+
+    <script>
+      const button = document.getElementById("send");
+      const status = document.getElementById("status");
+
+      button.addEventListener("click", () => {
+        button.disabled = true;
+        status.className = "sending";
+        status.textContent = "Sending...";
+        parent.postMessage({ pluginMessage: { type: "send-to-morpher" } }, "*");
+      });
+
+      onmessage = (event) => {
+        const message = event.data.pluginMessage;
+        if (!message || message.type !== "status") return;
+        status.className = message.state;
+        status.textContent = message.text;
+        button.disabled = message.state === "sending";
+      };
+    </script>
+  </body>
+</html>
