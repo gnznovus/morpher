@@ -60,7 +60,32 @@ def _apply_item_sizing(settings: dict, style: DesignStyle, *, container: bool) -
         settings["min_height"] = _size("px", style.height)
 
 
-def _container_settings(style: DesignStyle) -> dict:
+def _apply_child_alignment(
+    settings: dict,
+    style: DesignStyle,
+    parent_style: DesignStyle | None,
+    *,
+    container: bool,
+) -> None:
+    if parent_style is None or parent_style.counter_axis_align != "CENTER":
+        return
+
+    # A stretched/fill child consumes the cross axis; centering is represented by
+    # its width rather than by self-alignment. HUG/FIXED children inherit the
+    # parent's centered counter-axis placement.
+    if style.layout_align == "STRETCH" or style.width_mode == "fill":
+        return
+
+    if container:
+        settings["align_self"] = "center"
+    else:
+        settings["_element_align"] = "center"
+
+
+def _container_settings(
+    style: DesignStyle,
+    parent_style: DesignStyle | None = None,
+) -> dict:
     settings: dict = {}
 
     if style.layout_direction:
@@ -95,6 +120,7 @@ def _container_settings(style: DesignStyle) -> dict:
         settings["padding"] = _dimensions(top, right, bottom, left)
 
     _apply_item_sizing(settings, style, container=True)
+    _apply_child_alignment(settings, style, parent_style, container=True)
 
     if style.background:
         settings["background_background"] = "classic"
@@ -106,7 +132,10 @@ def _container_settings(style: DesignStyle) -> dict:
     return settings
 
 
-def _heading_settings(node: DesignNode) -> dict:
+def _heading_settings(
+    node: DesignNode,
+    parent_style: DesignStyle | None = None,
+) -> dict:
     style = node.style
     settings: dict = {"title": node.text or ""}
 
@@ -148,13 +177,18 @@ def _heading_settings(node: DesignNode) -> dict:
         settings["align"] = text_align
 
     _apply_item_sizing(settings, style, container=False)
+    _apply_child_alignment(settings, style, parent_style, container=False)
     return settings
 
 
-def _render_heading(node: DesignNode, path: str) -> dict:
+def _render_heading(
+    node: DesignNode,
+    path: str,
+    parent_style: DesignStyle | None = None,
+) -> dict:
     return {
         "id": _element_id(node, path),
-        "settings": _heading_settings(node),
+        "settings": _heading_settings(node, parent_style),
         "elements": [],
         "isInner": False,
         "widgetType": "heading",
@@ -162,28 +196,36 @@ def _render_heading(node: DesignNode, path: str) -> dict:
     }
 
 
-def _render_shape(node: DesignNode, path: str) -> dict:
+def _render_shape(
+    node: DesignNode,
+    path: str,
+    parent_style: DesignStyle | None = None,
+) -> dict:
     return {
         "id": _element_id(node, path),
-        "settings": _container_settings(node.style),
+        "settings": _container_settings(node.style, parent_style),
         "elements": [],
         "isInner": False,
         "elType": "container",
     }
 
 
-def _render_container(node: DesignNode, path: str) -> dict:
+def _render_container(
+    node: DesignNode,
+    path: str,
+    parent_style: DesignStyle | None = None,
+) -> dict:
     elements = []
     for index, child in enumerate(node.children):
         child_path = f"{path}.{index}"
         if child.kind == "container":
-            elements.append(_render_container(child, child_path))
+            elements.append(_render_container(child, child_path, node.style))
         elif child.kind == "text":
-            elements.append(_render_heading(child, child_path))
+            elements.append(_render_heading(child, child_path, node.style))
         elif child.kind == "shape":
-            elements.append(_render_shape(child, child_path))
+            elements.append(_render_shape(child, child_path, node.style))
 
-    settings = _container_settings(node.style)
+    settings = _container_settings(node.style, parent_style)
     return {
         "id": _element_id(node, path),
         "settings": settings if settings else [],
