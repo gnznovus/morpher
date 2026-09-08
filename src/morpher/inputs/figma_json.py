@@ -46,11 +46,13 @@ class FigmaJsonAdapter:
                 f"Unsupported Figma node type {source_type!r} at {node.get('id', '<unknown>')} ({node.get('name', 'unnamed')})"
             )
 
-        children = [
-            self._normalize_node(child, warnings)
-            for child in node.get("children", [])
-            if isinstance(child, dict)
-        ]
+        children = []
+        if kind != "icon" or source_type == "VECTOR":
+            children = [
+                self._normalize_node(child, warnings)
+                for child in node.get("children", [])
+                if isinstance(child, dict)
+            ]
 
         return DesignNode(
             kind=kind,
@@ -65,6 +67,8 @@ class FigmaJsonAdapter:
 
     def _kind_for(self, node: dict[str, Any]) -> str:
         source_type = node.get("type")
+        if source_type == "VECTOR" or self._is_vector_composite(node):
+            return "icon"
         if source_type in _CONTAINER_TYPES:
             return "container"
         if source_type == "TEXT":
@@ -73,9 +77,17 @@ class FigmaJsonAdapter:
             return "divider"
         if source_type == "RECTANGLE":
             return "image" if self._image_ref(node) else "shape"
-        if source_type == "VECTOR":
-            return "icon"
         return "unsupported"
+
+    @staticmethod
+    def _is_vector_composite(node: dict[str, Any]) -> bool:
+        children = node.get("children")
+        return (
+            node.get("type") in _CONTAINER_TYPES
+            and isinstance(children, list)
+            and bool(children)
+            and all(isinstance(child, dict) and child.get("type") == "VECTOR" for child in children)
+        )
 
     @staticmethod
     def _image_ref(node: dict[str, Any]) -> str | None:
