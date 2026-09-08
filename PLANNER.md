@@ -5,6 +5,10 @@
 - Project name: **Morpher**.
 - Core architecture is compiler-style: input adapter → Design IR → compiler → output renderer.
 - The Design IR must stay independent from Elementor and any specific output target.
+- Figma prototype entry path is **local Figma plugin → local Morpher listener → `storage/figma-import/`**.
+- The Figma plugin stays thin: select/export/send/status only. All normalization and compilation stays in Morpher.
+- Local listener default: `http://127.0.0.1:8767/figma/import`.
+- Re-sending the same Figma name replaces that import snapshot in place and reports that it was replaced; no numbered duplicates.
 - Default source scan priority:
   1. `storage/figma-import/`
   2. `storage/input/`
@@ -26,19 +30,34 @@
 
 ### Phase 1 — Foundation
 
-- [ ] Create Python package/project configuration.
-- [ ] Create storage directory structure.
-- [ ] Add source-path and output-path helpers.
-- [ ] Add adapter protocol/base interface.
-- [ ] Add input adapter registry.
-- [ ] Add source scanner using registered extensions.
-- [ ] Add deterministic processed/output naming.
-- [ ] Add processing result model.
-- [ ] Add batch processor skeleton.
-- [ ] Add `--force` policy foundation.
-- [ ] Add unit tests for storage/scanner/naming behavior.
+- [x] Create Python package/project configuration.
+- [x] Create storage directory structure.
+- [x] Add source-path and output-path helpers.
+- [x] Add adapter protocol/base interface.
+- [x] Add input adapter registry.
+- [x] Add source scanner using registered extensions.
+- [x] Add deterministic processed/output naming.
+- [x] Add processing result model.
+- [x] Add batch processor skeleton.
+- [x] Add `--force` policy foundation.
+- [x] Add CI smoke coverage.
 
-### Phase 2 — Figma JSON + Design IR
+### Phase 2 — Figma Plugin + Local Listener
+
+- [x] Add local Figma development plugin scaffold.
+- [x] Add minimal plugin UI with **Send selected node to Morpher**.
+- [x] Export selected node using `JSON_REST_V1`.
+- [x] POST export to local Morpher listener.
+- [x] Add listener endpoint at `/figma/import`.
+- [x] Save payload into `storage/figma-import/`.
+- [x] Use safe deterministic filenames and replace same-name snapshots in place.
+- [x] Add listener validation and storage tests.
+- [x] Add `morpher-listen` CLI command.
+- [ ] Verify the development plugin loads in Figma Desktop.
+- [ ] Send one real frame from Figma to Morpher end-to-end.
+- [ ] Preserve that real payload as the first compiler fixture.
+
+### Phase 3 — Figma JSON + Design IR
 
 - [ ] Add `FigmaJsonAdapter`.
 - [ ] Define output-agnostic Design IR nodes.
@@ -56,9 +75,9 @@
   - [ ] border
   - [ ] border radius
   - [ ] opacity
-- [ ] Add fixture-based tests.
+- [ ] Add fixture-based tests using real plugin output.
 
-### Phase 3 — HTML/CSS Renderer
+### Phase 4 — HTML/CSS Renderer
 
 - [ ] Generate semantic HTML from Design IR.
 - [ ] Generate scoped CSS.
@@ -68,7 +87,7 @@
 - [ ] Produce `{name}.html` + `{name}.css` together.
 - [ ] Add renderer tests.
 
-### Phase 4 — Elementor Renderer
+### Phase 5 — Elementor Renderer
 
 - [ ] Generate Elementor-compatible template JSON.
 - [ ] Map IR container → Elementor Container.
@@ -77,7 +96,7 @@
 - [ ] Keep Elementor-only details isolated inside renderer code.
 - [ ] Validate generated template JSON against real Elementor import behavior.
 
-### Phase 5 — Fidelity
+### Phase 6 — Fidelity
 
 - [ ] Add SVG support.
 - [ ] Add image/SVG asset handling and deduplication.
@@ -94,7 +113,7 @@
 - [ ] JPG/JPEG adapter.
 - [ ] PDF adapter.
 - [ ] Figma REST adapter.
-- [ ] Figma plugin exporter workflow.
+- [ ] Published Figma plugin workflow.
 
 ### Later / Optional Outputs
 
@@ -105,7 +124,19 @@
 
 ## First Prototype Success Test
 
-Input design:
+Transport proof:
+
+```text
+Figma selected frame
+  ↓ JSON_REST_V1
+Morpher plugin
+  ↓ localhost POST
+Morpher listener
+  ↓
+storage/figma-import/{frame-name}.json
+```
+
+Compiler proof after transport is verified:
 
 ```text
 Frame
@@ -130,4 +161,4 @@ Elementor Container
 └─ Image
 ```
 
-The first milestone is successful when both outputs are generated from the same Design IR and visually represent the source frame closely enough to validate the architecture.
+The transport milestone succeeds when a real selected Figma frame reaches `storage/figma-import/` with no manual file movement. The compiler milestone succeeds when both outputs are generated from the same Design IR and visually represent the source frame closely enough to validate the architecture.
