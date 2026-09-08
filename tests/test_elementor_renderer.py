@@ -65,6 +65,7 @@ def test_renders_auto_layout_container_text_and_shape_settings():
                 style=DesignStyle(
                     width_mode="hug",
                     height_mode="hug",
+                    layout_align="INHERIT",
                     font_family="Arial",
                     font_weight=400,
                     font_size=12,
@@ -79,6 +80,7 @@ def test_renders_auto_layout_container_text_and_shape_settings():
                 style=DesignStyle(
                     width_mode="fill",
                     height_mode="hug",
+                    layout_align="STRETCH",
                     font_family="Arial",
                     font_weight=400,
                     font_size=12,
@@ -92,6 +94,7 @@ def test_renders_auto_layout_container_text_and_shape_settings():
                 style=DesignStyle(
                     width_mode="fill",
                     height_mode="fixed",
+                    layout_align="STRETCH",
                     height=80,
                     background="rgba(217, 217, 217, 1)",
                 ),
@@ -120,6 +123,7 @@ def test_renders_auto_layout_container_text_and_shape_settings():
 
     first_heading = container["elements"][0]
     assert first_heading["settings"]["_element_width"] == "auto"
+    assert first_heading["settings"]["_element_align"] == "center"
     assert first_heading["settings"]["typography_typography"] == "custom"
     assert first_heading["settings"]["typography_font_size"]["size"] == 12
 
