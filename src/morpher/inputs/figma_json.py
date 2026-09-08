@@ -7,6 +7,8 @@ from morpher.ir.styles import DesignStyle
 
 
 _CONTAINER_TYPES = {"FRAME", "GROUP", "SECTION", "COMPONENT", "INSTANCE"}
+_GEOMETRY_EPSILON = 1e-3
+_GEOMETRY_PRECISION = 6
 
 
 class FigmaJsonAdapter:
@@ -90,19 +92,19 @@ class FigmaJsonAdapter:
         layout_mode = node.get("layoutMode")
 
         return DesignStyle(
-            width=self._number(box.get("width")),
-            height=self._number(box.get("height")),
-            x=self._number(box.get("x")),
-            y=self._number(box.get("y")),
-            rotation=self._number(node.get("rotation")),
-            gap=self._number(node.get("itemSpacing")),
-            padding_top=self._number(node.get("paddingTop")),
-            padding_right=self._number(node.get("paddingRight")),
-            padding_bottom=self._number(node.get("paddingBottom")),
-            padding_left=self._number(node.get("paddingLeft")),
+            width=self._geometry_number(box.get("width")),
+            height=self._geometry_number(box.get("height")),
+            x=self._geometry_number(box.get("x")),
+            y=self._geometry_number(box.get("y")),
+            rotation=self._geometry_number(node.get("rotation")),
+            gap=self._geometry_number(node.get("itemSpacing")),
+            padding_top=self._geometry_number(node.get("paddingTop")),
+            padding_right=self._geometry_number(node.get("paddingRight")),
+            padding_bottom=self._geometry_number(node.get("paddingBottom")),
+            padding_left=self._geometry_number(node.get("paddingLeft")),
             opacity=self._number(node.get("opacity")),
             background=self._solid_color(node),
-            border_radius=self._number(node.get("cornerRadius")),
+            border_radius=self._geometry_number(node.get("cornerRadius")),
             layout_direction=self._layout_direction(layout_mode),
             width_mode=self._sizing_mode(node.get("layoutSizingHorizontal")),
             height_mode=self._sizing_mode(node.get("layoutSizingVertical")),
@@ -111,9 +113,9 @@ class FigmaJsonAdapter:
             font_family=text_style.get("fontFamily"),
             font_style=text_style.get("fontStyle"),
             font_weight=self._integer(text_style.get("fontWeight")),
-            font_size=self._number(text_style.get("fontSize")),
-            letter_spacing=self._number(text_style.get("letterSpacing")),
-            line_height=self._number(text_style.get("lineHeightPx")),
+            font_size=self._geometry_number(text_style.get("fontSize")),
+            letter_spacing=self._geometry_number(text_style.get("letterSpacing")),
+            line_height=self._geometry_number(text_style.get("lineHeightPx")),
             text_align_horizontal=text_style.get("textAlignHorizontal"),
             text_align_vertical=text_style.get("textAlignVertical"),
         )
@@ -155,6 +157,15 @@ class FigmaJsonAdapter:
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             return float(value)
         return None
+
+    @classmethod
+    def _geometry_number(cls, value: Any) -> float | None:
+        number = cls._number(value)
+        if number is None:
+            return None
+        if abs(number) < _GEOMETRY_EPSILON:
+            return 0.0
+        return round(number, _GEOMETRY_PRECISION)
 
     @staticmethod
     def _integer(value: Any) -> int | None:
