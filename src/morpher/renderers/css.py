@@ -69,6 +69,12 @@ def _absolute_geometry(node: DesignNode, parent: DesignNode) -> tuple[float | No
     height = style.height
     rotation_degrees: float | None = None
 
+    # LINE absoluteBoundingBox already describes the final rendered orientation.
+    # Re-rotating a zero-width/zero-height divider swaps its usable axis and can
+    # collapse the CSS border, so render dividers directly from that final box.
+    if node.kind == "divider":
+        return left, top, width, height, None
+
     quarter = _quarter_turn(style.rotation)
     if quarter is not None:
         normalized = quarter % 4
