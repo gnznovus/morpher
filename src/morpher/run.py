@@ -19,8 +19,12 @@ class RunResult:
 
 
 def _outputs_exist(source: Path, storage: StoragePaths) -> bool:
-    """A source is processed only when the outputs required today both exist."""
-    return storage.html_output(source).exists() and storage.css_output(source).exists()
+    """A source is processed only when all currently required outputs exist."""
+    return (
+        storage.html_output(source).exists()
+        and storage.css_output(source).exists()
+        and storage.elementor_output(source).exists()
+    )
 
 
 def run_source(source: Path, storage: StoragePaths, *, force: bool = False) -> RunResult:
@@ -30,7 +34,7 @@ def run_source(source: Path, storage: StoragePaths, *, force: bool = False) -> R
     try:
         # Inspect exactly once so the rich diagnostic trace remains the canonical trace.
         inspect_path(source)
-        _, _, warning_count = render_path(source)
+        _, _, _, warning_count = render_path(source)
         return RunResult(source=source, status="processed", warnings=warning_count)
     except (OSError, ValueError) as exc:
         return RunResult(source=source, status="failed", error=str(exc))
@@ -55,7 +59,7 @@ def main() -> None:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Reprocess sources even when their HTML/CSS outputs already exist.",
+        help="Reprocess sources even when their required outputs already exist.",
     )
     args = parser.parse_args()
 
