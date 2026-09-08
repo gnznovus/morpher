@@ -11,6 +11,7 @@ class DesignStyle:
     """Output-agnostic style foundation for Design IR nodes."""
 
     width: float | None = None
+    width_percent: float | None = None
     height: float | None = None
     x: float | None = None
     y: float | None = None
