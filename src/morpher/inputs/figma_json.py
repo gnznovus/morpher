@@ -108,6 +108,10 @@ class FigmaJsonAdapter:
             layout_direction=self._layout_direction(layout_mode),
             width_mode=self._sizing_mode(node.get("layoutSizingHorizontal")),
             height_mode=self._sizing_mode(node.get("layoutSizingVertical")),
+            primary_axis_align=self._layout_alignment(node.get("primaryAxisAlignItems")),
+            counter_axis_align=self._layout_alignment(node.get("counterAxisAlignItems")),
+            layout_align=self._layout_alignment(node.get("layoutAlign")),
+            layout_grow=self._geometry_number(node.get("layoutGrow")),
             constraint_horizontal=constraints.get("horizontal"),
             constraint_vertical=constraints.get("vertical"),
             font_family=text_style.get("fontFamily"),
@@ -136,6 +140,12 @@ class FigmaJsonAdapter:
             "FILL": "fill",
         }
         return mapping.get(value)
+
+    @staticmethod
+    def _layout_alignment(value: Any) -> str | None:
+        if isinstance(value, str) and value:
+            return value.lower()
+        return None
 
     @staticmethod
     def _solid_color(node: dict[str, Any]) -> str | None:
