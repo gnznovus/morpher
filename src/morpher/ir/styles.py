@@ -22,6 +22,7 @@ class DesignStyle:
     padding_left: float | None = None
     opacity: float | None = None
     background: str | None = None
+    text_color: str | None = None
     border_radius: float | None = None
     layout_direction: LayoutDirection | None = None
     width_mode: SizingMode | None = None
