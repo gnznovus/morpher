@@ -26,6 +26,10 @@ class DesignStyle:
     layout_direction: LayoutDirection | None = None
     width_mode: SizingMode | None = None
     height_mode: SizingMode | None = None
+    primary_axis_align: str | None = None
+    counter_axis_align: str | None = None
+    layout_align: str | None = None
+    layout_grow: float | None = None
     constraint_horizontal: str | None = None
     constraint_vertical: str | None = None
     font_family: str | None = None
