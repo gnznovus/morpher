@@ -25,6 +25,13 @@ def _render_node(node: DesignNode, asset_sources: dict[str, str], depth: int = 1
     class_name = _class_name(node)
 
     if node.kind == "text":
+        source = asset_sources.get(_asset_key(node.source_id))
+        if source and source.lower().endswith(".svg"):
+            return [
+                f'{indent}<img class="{class_name} morpher-text-outline" '
+                f'src="{escape(source, quote=True)}" alt="{escape(node.text or "", quote=True)}" '
+                f'data-morpher-source-id="{escape(node.source_id or "", quote=True)}">'
+            ]
         return [f'{indent}<div class="{class_name}">{escape(node.text or "")}</div>']
 
     if node.kind == "image":
