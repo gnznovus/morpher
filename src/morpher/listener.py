@@ -32,6 +32,13 @@ def _asset_extension(data: bytes) -> str:
     return ".bin"
 
 
+def _decode_asset(encoded: str, label: str) -> bytes:
+    try:
+        return base64.b64decode(encoded, validate=True)
+    except ValueError as exc:
+        raise ValueError(f"Invalid base64 asset for {label}.") from exc
+
+
 def _save_assets(envelope: dict[str, Any], storage: StoragePaths, source: Path) -> int:
     assets = envelope.get("assets", [])
     if assets is None:
@@ -48,11 +55,8 @@ def _save_assets(envelope: dict[str, Any], storage: StoragePaths, source: Path) 
         encoded = asset.get("data")
         if not isinstance(image_ref, str) or not image_ref or not isinstance(encoded, str) or not encoded:
             continue
-        try:
-            data = base64.b64decode(encoded, validate=True)
-        except ValueError as exc:
-            raise ValueError(f"Invalid base64 image asset for {image_ref}.") from exc
 
+        data = _decode_asset(encoded, image_ref)
         asset_dir.mkdir(parents=True, exist_ok=True)
         target = asset_dir / f"{safe_stem(image_ref)}{_asset_extension(data)}"
         temporary = target.with_suffix(target.suffix + ".tmp")
@@ -62,7 +66,37 @@ def _save_assets(envelope: dict[str, Any], storage: StoragePaths, source: Path) 
     return saved
 
 
-def save_figma_import(envelope: dict[str, Any], storage: StoragePaths) -> tuple[Path, bool, int]:
+def _save_vector_assets(envelope: dict[str, Any], storage: StoragePaths, source: Path) -> int:
+    assets = envelope.get("vectorAssets", [])
+    if assets is None:
+        return 0
+    if not isinstance(assets, list):
+        raise ValueError("Request 'vectorAssets' must be an array when provided.")
+
+    asset_dir = storage.figma_asset_dir(source)
+    saved = 0
+    for asset in assets:
+        if not isinstance(asset, dict):
+            continue
+        source_id = asset.get("sourceId")
+        encoded = asset.get("data")
+        if not isinstance(source_id, str) or not source_id or not isinstance(encoded, str) or not encoded:
+            continue
+
+        data = _decode_asset(encoded, source_id)
+        if b"<svg" not in data[:1024].lower():
+            raise ValueError(f"Vector asset for {source_id} is not SVG data.")
+
+        asset_dir.mkdir(parents=True, exist_ok=True)
+        target = asset_dir / f"{safe_stem(source_id)}.svg"
+        temporary = target.with_suffix(".svg.tmp")
+        temporary.write_bytes(data)
+        temporary.replace(target)
+        saved += 1
+    return saved
+
+
+def save_figma_import(envelope: dict[str, Any], storage: StoragePaths) -> tuple[Path, bool, int, int]:
     name = envelope.get("name")
     payload = envelope.get("payload")
 
@@ -80,7 +114,8 @@ def save_figma_import(envelope: dict[str, Any], storage: StoragePaths) -> tuple[
     temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     temporary.replace(target)
     assets_saved = _save_assets(envelope, storage, target)
-    return target, replaced, assets_saved
+    vectors_saved = _save_vector_assets(envelope, storage, target)
+    return target, replaced, assets_saved, vectors_saved
 
 
 class MorpherRequestHandler(BaseHTTPRequestHandler):
@@ -114,7 +149,7 @@ class MorpherRequestHandler(BaseHTTPRequestHandler):
             if not isinstance(envelope, dict):
                 raise ValueError("Request body must be a JSON object.")
 
-            target, replaced, assets_saved = save_figma_import(envelope, self.storage)
+            target, replaced, assets_saved, vectors_saved = save_figma_import(envelope, self.storage)
             self._json(
                 200,
                 {
@@ -122,6 +157,7 @@ class MorpherRequestHandler(BaseHTTPRequestHandler):
                     "filename": target.name,
                     "replaced": replaced,
                     "assetsSaved": assets_saved,
+                    "vectorsSaved": vectors_saved,
                 },
             )
         except (ValueError, json.JSONDecodeError) as error:
