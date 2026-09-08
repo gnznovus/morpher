@@ -36,6 +36,19 @@ def _relative_offset(child_value: float | None, parent_value: float | None) -> f
     return child_value - parent_value
 
 
+def _font_family(node: DesignNode) -> str | None:
+    style = node.style
+    families: list[str] = []
+    if style.font_postscript_name:
+        families.append(f'"{style.font_postscript_name}"')
+    if style.font_family and style.font_family != style.font_postscript_name:
+        families.append(f'"{style.font_family}"')
+    if not families:
+        return None
+    families.append("sans-serif")
+    return ", ".join(families)
+
+
 def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
     style = node.style
     is_root = parent is None
@@ -106,14 +119,17 @@ def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
 
     if node.kind == "image":
         declarations.extend(("display: block", "object-fit: cover"))
+        if style.image_opacity is not None:
+            declarations.append(f"opacity: {style.image_opacity:g}")
     elif node.kind == "icon":
         declarations.extend(("display: block", "object-fit: contain"))
 
     if node.kind == "text":
         if style.text_color:
             declarations.append(f"color: {style.text_color}")
-        if style.font_family:
-            declarations.append(f'font-family: "{style.font_family}", sans-serif')
+        family = _font_family(node)
+        if family:
+            declarations.append(f"font-family: {family}")
         if style.font_size is not None:
             declarations.append(f"font-size: {_px(style.font_size)}")
         if style.font_weight is not None:
