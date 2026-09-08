@@ -94,9 +94,11 @@ def _make_child_flow(child: DesignNode, *, width_percent: float | None = None) -
         child.style.height_mode = "hug"
 
 
-def _flow_container_style(node: DesignNode, children: list[DesignNode]) -> DesignStyle:
+def _flow_container_style(
+    node: DesignNode,
+    child_bounds: list[tuple[float, float, float, float]],
+) -> DesignStyle:
     px, py, pr, pb = _bounds(node)
-    child_bounds = [_bounds(child) for child in children]
     min_x = min(box[0] for box in child_bounds)
     min_y = min(box[1] for box in child_bounds)
     max_x = max(box[2] for box in child_bounds)
@@ -122,9 +124,11 @@ def _compile_free_layout(node: DesignNode) -> DesignNode:
     if not children or not _has_box(node) or not all(_has_box(child) for child in children):
         return node
 
+    original_child_bounds = [_bounds(child) for child in children]
+
     if len(children) == 1:
         child = children[0]
-        node.style = _flow_container_style(node, children)
+        node.style = _flow_container_style(node, original_child_bounds)
         _make_child_flow(child)
         node.children = [child]
         return node
@@ -188,7 +192,7 @@ def _compile_free_layout(node: DesignNode) -> DesignNode:
         for previous, current in zip(band_boxes, band_boxes[1:])
     ]
 
-    compiled_style = _flow_container_style(node, children)
+    compiled_style = _flow_container_style(node, original_child_bounds)
     compiled_style.gap = _positive_median(vertical_gaps)
 
     node.style = compiled_style
