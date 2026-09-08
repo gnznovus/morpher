@@ -1,0 +1,31 @@
+services:
+  db:
+    image: mariadb:11.8
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: morpher
+      MARIADB_USER: morpher
+      MARIADB_PASSWORD: morpher
+      MARIADB_ROOT_PASSWORD: morpher-root
+    volumes:
+      - morpher_db:/var/lib/mysql
+
+  wordpress:
+    image: wordpress:php8.2-apache
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "8080:80"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: morpher
+      WORDPRESS_DB_USER: morpher
+      WORDPRESS_DB_PASSWORD: morpher
+      WORDPRESS_DEBUG: "1"
+    volumes:
+      - morpher_wordpress:/var/www/html
+
+volumes:
+  morpher_db:
+  morpher_wordpress:

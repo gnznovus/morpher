@@ -1,34 +1,110 @@
 # Morpher
 
-Morpher is a modular design compiler prototype that transforms Figma and other supported design inputs into clean HTML/CSS and editable Elementor templates.
+Morpher is a modular design compiler prototype that transforms Figma and other supported design inputs into clean HTML/CSS and, later, editable Elementor templates.
 
 The project is built around a shared intermediate representation so input formats and output targets can evolve independently without coupling the compiler core to Figma or Elementor.
 
-## Prototype Goals
+> Design in. Structure out.
 
-- Figma-first structural conversion.
-- Clean HTML and CSS output.
-- Editable Elementor template JSON output.
-- Bulk processing through filesystem-based queues.
-- Preserved Figma imports for repeatable conversion and debugging.
-- Extensible input and output adapter architecture.
-- Pixel-perfect visual fidelity as the long-term target.
+## Current Prototype
 
-## Processing Model
+The current verified path is:
 
 ```text
-Figma / supported input
+Figma selected frame
+        ↓ JSON_REST_V1 + assets
+Local Morpher Figma plugin
+        ↓ localhost POST
+Morpher listener
         ↓
-Input adapter
+storage/figma-import/
+        ↓
+Figma JSON adapter
         ↓
 Design IR
         ↓
-Compiler
-        ↓
-Compiled design
-   ↙            ↘
-HTML/CSS     Elementor
+HTML/CSS renderer
 ```
+
+Real Figma sections with substantially different compositions have been imported, normalized, rendered, and visually compared. The current HTML fidelity path has been verified with free-layout sections, Auto Layout fixtures, raster image fills, composite SVG icons, raw vectors, dividers, rotated elements, clipping, multiline text, and outlined text assets.
+
+This is a prototype checkpoint, not a claim that every Figma feature is supported.
+
+## Fidelity Strategy
+
+Morpher preserves two useful representations of Figma text:
+
+```text
+Figma TEXT
+├─ semantic representation
+│  ├─ characters
+│  └─ typography metadata
+│
+└─ fidelity representation
+   └─ outlined SVG exported by Figma
+```
+
+The semantic text remains available in the Design IR for future semantic HTML and Elementor output. The current fidelity HTML renderer uses the outlined SVG companion when available so browser font availability does not change the visual result.
+
+Outlined text is exported with `svgOutlineText: true` and `useAbsoluteBounds: true`. Preserving the full Figma text-node bounds is important for source designs that use empty text geometry such as leading whitespace.
+
+SVG-backed icon assets remain authoritative for their own fill, stroke, opacity, and internal vector geometry. CSS controls their external layout geometry only; Morpher does not repaint an SVG vector fill as a rectangular CSS background.
+
+## Verified Figma Reconstruction
+
+Current verified behavior includes:
+
+- Figma `JSON_REST_V1` import through the local plugin/listener.
+- Preserved Figma source IDs for deterministic asset mapping and debugging.
+- Free-layout reconstruction using absolute Figma geometry.
+- Auto Layout direction, gap, padding, alignment, and fixed/hug/fill sizing foundations.
+- Raster image-fill asset transport and `object-fit: cover` rendering.
+- Image-fill opacity preservation.
+- SVG vector asset transport.
+- Composite vector-only frame/group export as a single SVG asset.
+- Raw vector rendering without CSS background-fill corruption.
+- Outlined text fidelity assets with original text retained semantically.
+- Explicit multiline text and leading-whitespace geometry preservation.
+- Horizontal and vertical dividers.
+- Frame clipping through `overflow: hidden`.
+- Quarter-turn reconstruction for rotated free-layout elements.
+- Deterministic HTML/CSS class names based on Figma source IDs.
+- Rich inspect traces for debugging normalized Design IR.
+- Bulk processing and force-replacement of existing outputs.
+
+## Processing Commands
+
+Run the local Figma import listener:
+
+```text
+morpher-listen
+```
+
+Inspect a preserved Figma import:
+
+```text
+morpher-inspect storage/figma-import/Some-Frame.json
+```
+
+Render one import:
+
+```text
+morpher-render storage/figma-import/Some-Frame.json
+```
+
+Bulk process discovered sources:
+
+```text
+morpher
+```
+
+Replace existing output checkpoints in place:
+
+```text
+morpher --force
+```
+
+`morpher` is the bulk-processing CLI itself; there is no `run` subcommand.
 
 ## Storage Layout
 
@@ -37,6 +113,7 @@ storage/
 ├─ figma-import/
 ├─ input/
 ├─ processed/
+├─ log/
 └─ output/
    ├─ html/
    └─ elementor/
@@ -49,14 +126,11 @@ Morpher scans sources in this order:
 1. `storage/figma-import/`
 2. `storage/input/`
 
-`figma-import/` is preserved as a reusable source repository. Successfully processed files from `input/` are moved to `processed/` and renamed using the `_P` suffix.
+`figma-import/` is a preserved source repository, not a processing queue. Re-sending the same named Figma frame replaces its import snapshot in place while keeping it available for repeatable conversion and debugging.
 
-Example:
+Successfully processed files from `input/` move to `processed/` with `_P` added before the extension. A source moves only after all required outputs succeed; failed inputs remain available for retry.
 
-```text
-storage/input/homepage.svg
-→ storage/processed/homepage_P.svg
-```
+Existing outputs are skipped by default. `--force` replaces them in place rather than creating numbered copies.
 
 ## Output Naming
 
@@ -68,66 +142,43 @@ storage/output/html/homepage.css
 storage/output/elementor/homepage_template.json
 ```
 
-Existing outputs are skipped by default. A future `--force` option will replace existing outputs in place rather than create numbered copies.
-
-## Planned Input Support
-
-Prototype priority:
-
-1. Figma-compatible JSON
-2. SVG
-3. PNG
-4. JPG / JPEG
-5. PDF
-
-Figma JSON is intended to be the primary structural input. Visual formats require progressively more reconstruction and inference.
+The HTML/CSS path is active. Elementor remains a planned output renderer.
 
 ## Architecture Direction
 
 ```text
-src/
-├─ inputs/
-│  ├─ base.py
-│  ├─ registry.py
-│  └─ figma_json.py
-├─ storage/
-│  ├─ paths.py
-│  ├─ scanner.py
-│  └─ processor.py
-├─ ir/
-│  ├─ nodes.py
-│  └─ styles.py
-├─ compiler/
-│  ├─ normalizer.py
-│  └─ layout.py
-├─ renderers/
-│  ├─ html.py
-│  ├─ css.py
-│  └─ elementor.py
-└─ cli.py
+Figma / supported input
+        ↓
+Input adapter
+        ↓
+Design IR
+        ↓
+Layout / semantic compiler
+        ↓
+Compiled IR
+   ↙            ↘
+HTML/CSS     Elementor
+renderer     renderer
+        ↓
+ future visual validator
 ```
 
-The IR must remain output-agnostic. Elementor-specific concerns belong only in the Elementor renderer.
+The Design IR must remain output-agnostic. Elementor-specific concerns belong only in the Elementor renderer.
 
-## Prototype Success Criteria
+Current source organization follows the same separation of concerns across input adapters, IR, compiler, renderers, storage, listener, tracing, and CLI layers.
 
-A simple Figma frame containing a vertical layout with heading, paragraph, and image should compile into both:
+## Planned Input Support
 
-```text
-HTML/CSS
-```
+Prototype priority beyond the current Figma JSON path:
 
-and:
+1. SVG
+2. PNG
+3. JPG / JPEG
+4. PDF
+5. Optional Figma REST adapter
 
-```text
-Elementor Container
-├─ Heading
-├─ Text Editor
-└─ Image
-```
+Figma JSON remains the primary structural input. Visual-only formats require progressively more reconstruction and inference.
 
-with matching layout and styling as closely as practical.
+## Next Direction
 
-## Status
-
-Prototype foundation in progress.
+The current Figma → fidelity HTML slice is strong enough to expand deliberately rather than adding broad behavior speculatively. Next work should focus on additional unsupported Figma features and regression fixtures, then semantic/responsive compilation and the Elementor renderer while preserving the verified fidelity path.
