@@ -87,6 +87,13 @@ def _flow_style(style: DesignStyle, *, width_percent: float | None = None) -> De
     return result
 
 
+def _make_child_flow(child: DesignNode, *, width_percent: float | None = None) -> None:
+    child.style = _flow_style(child.style, width_percent=width_percent)
+    if child.kind == "container" and child.style.layout_direction is None:
+        child.style.layout_direction = "vertical"
+        child.style.height_mode = "hug"
+
+
 def _flow_container_style(node: DesignNode, children: list[DesignNode]) -> DesignStyle:
     px, py, pr, pb = _bounds(node)
     child_bounds = [_bounds(child) for child in children]
@@ -118,7 +125,7 @@ def _compile_free_layout(node: DesignNode) -> DesignNode:
     if len(children) == 1:
         child = children[0]
         node.style = _flow_container_style(node, children)
-        child.style = _flow_style(child.style)
+        _make_child_flow(child)
         node.children = [child]
         return node
 
@@ -144,7 +151,7 @@ def _compile_free_layout(node: DesignNode) -> DesignNode:
 
         if len(band) == 1:
             child = band[0]
-            child.style = _flow_style(child.style)
+            _make_child_flow(child)
             compiled_children.append(child)
             continue
 
@@ -158,7 +165,7 @@ def _compile_free_layout(node: DesignNode) -> DesignNode:
         row_children: list[DesignNode] = []
         for child, width in zip(band, widths):
             percent = (width / total_width * 100.0) if total_width > 0 else None
-            child.style = _flow_style(child.style, width_percent=percent)
+            _make_child_flow(child, width_percent=percent)
             row_children.append(child)
 
         row = DesignNode(
