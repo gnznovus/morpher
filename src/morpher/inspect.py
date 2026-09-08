@@ -23,6 +23,43 @@ def _label(node: DesignNode) -> str:
     if node.kind == "image" and node.image_ref:
         parts.append(f"imageRef={node.image_ref}")
 
+    layout_parts: list[str] = []
+    if node.style.layout_direction:
+        layout_parts.append(f"layout={node.style.layout_direction}")
+    if node.style.width_mode:
+        layout_parts.append(f"width={node.style.width_mode}")
+    if node.style.height_mode:
+        layout_parts.append(f"height={node.style.height_mode}")
+    if node.style.gap is not None:
+        layout_parts.append(f"gap={node.style.gap:g}")
+    if any(
+        value is not None
+        for value in (
+            node.style.padding_top,
+            node.style.padding_right,
+            node.style.padding_bottom,
+            node.style.padding_left,
+        )
+    ):
+        layout_parts.append(
+            "padding="
+            f"{node.style.padding_top or 0:g}/"
+            f"{node.style.padding_right or 0:g}/"
+            f"{node.style.padding_bottom or 0:g}/"
+            f"{node.style.padding_left or 0:g}"
+        )
+    if node.style.primary_axis_align:
+        layout_parts.append(f"primary={node.style.primary_axis_align}")
+    if node.style.counter_axis_align:
+        layout_parts.append(f"counter={node.style.counter_axis_align}")
+    if node.style.layout_align:
+        layout_parts.append(f"align={node.style.layout_align}")
+    if node.style.layout_grow is not None:
+        layout_parts.append(f"grow={node.style.layout_grow:g}")
+
+    if layout_parts:
+        parts.append("{" + ", ".join(layout_parts) + "}")
+
     return " ".join(parts)
 
 
