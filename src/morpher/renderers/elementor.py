@@ -32,12 +32,12 @@ def _dimensions(
 
 def _alignment(value: str | None) -> str | None:
     mapping = {
-        "MIN": "flex-start",
-        "CENTER": "center",
-        "MAX": "flex-end",
-        "SPACE_BETWEEN": "space-between",
+        "min": "flex-start",
+        "center": "center",
+        "max": "flex-end",
+        "space_between": "space-between",
     }
-    return mapping.get(value or "")
+    return mapping.get((value or "").lower())
 
 
 def _apply_item_sizing(settings: dict, style: DesignStyle, *, container: bool) -> None:
@@ -67,19 +67,20 @@ def _apply_child_alignment(
     *,
     container: bool,
 ) -> None:
-    if parent_style is None or parent_style.counter_axis_align != "CENTER":
+    if parent_style is None or (parent_style.counter_axis_align or "").lower() != "center":
         return
 
-    # A stretched/fill child consumes the cross axis; centering is represented by
-    # its width rather than by self-alignment. HUG/FIXED children inherit the
-    # parent's centered counter-axis placement.
-    if style.layout_align == "STRETCH" or style.width_mode == "fill":
+    # A stretched/fill child consumes the cross axis. HUG/FIXED children inherit
+    # the parent's centered counter-axis placement.
+    if (style.layout_align or "").lower() == "stretch" or style.width_mode == "fill":
         return
 
     if container:
         settings["align_self"] = "center"
     else:
-        settings["_element_align"] = "center"
+        # Elementor's exported Heading JSON represents this visually with the
+        # widget's native alignment control while keeping width=auto.
+        settings["align"] = "center"
 
 
 def _container_settings(
