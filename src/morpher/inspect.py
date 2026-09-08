@@ -20,6 +20,9 @@ def _label(node: DesignNode) -> str:
     if node.kind == "text" and node.text is not None:
         parts.append(repr(node.text))
 
+    if node.style.rotation is not None:
+        parts.append(f"rotation={node.style.rotation:g}rad")
+
     if node.kind == "image" and node.image_ref:
         parts.append(f"imageRef={node.image_ref}")
         if node.style.image_opacity is not None:
