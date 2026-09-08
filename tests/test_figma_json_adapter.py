@@ -76,11 +76,12 @@ def test_normalizes_realistic_figma_payload():
     assert text.style.font_weight == 600
     assert text.style.font_size == 16
     assert text.style.letter_spacing == 1.6
-    assert text.style.background == "rgba(255, 255, 255, 1)"
+    assert text.style.text_color == "rgba(255, 255, 255, 1)"
+    assert text.style.background is None
 
     vector = result.root.children[2]
-    assert vector.kind == "unsupported"
-    assert any("VECTOR" in warning and "45:5306" in warning for warning in result.warnings)
+    assert vector.kind == "icon"
+    assert not any("VECTOR" in warning and "45:5306" in warning for warning in result.warnings)
 
 
 def test_normalizes_auto_layout_fields_when_present():
