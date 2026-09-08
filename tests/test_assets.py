@@ -47,3 +47,22 @@ def test_semantic_asset_names_are_deterministic_and_collision_safe() -> None:
         "1-1": "discovery-icon.svg",
         "1-2": "discovery-icon-2.svg",
     }
+
+
+def test_semantic_asset_names_bound_long_figma_text_names_and_keep_traceability() -> None:
+    long_name = (
+        "MUU IS A NEW, UNPRETENTIOUS YET LUXURIOUS HOTEL BRAND THAT IS BUILT AROUND "
+        "A BELIEF THAT HAPPINESS COMES FROM BEING ONESELF THROUGH DYNAMIC ARTISTIC SPACES"
+    )
+    root = DesignNode(
+        kind="container",
+        name="Discovery",
+        children=[DesignNode(kind="text", name=long_name, source_id="45:5271")],
+    )
+
+    names = semantic_asset_names(root, [Path("45-5271.svg")])
+    filename = names["45-5271"]
+
+    assert filename.startswith("discovery-muu-is-a-new-unpretentious-yet-luxurious-hotel-brand")
+    assert filename.endswith("-45-5271.svg")
+    assert len(filename) < 128
