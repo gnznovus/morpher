@@ -62,6 +62,20 @@ function collectVectorAssets(node, assets = []) {
   return assets;
 }
 
+function collectTextAssets(node, assets = []) {
+  if (node.type === "TEXT") {
+    assets.push(node);
+  }
+
+  if ("children" in node) {
+    for (const child of node.children) {
+      collectTextAssets(child, assets);
+    }
+  }
+
+  return assets;
+}
+
 async function exportImageAssets(node) {
   const assets = [];
   for (const imageRef of collectImageRefs(node)) {
@@ -82,6 +96,15 @@ async function exportVectorAssets(node) {
   return assets;
 }
 
+async function exportTextAssets(node) {
+  const assets = [];
+  for (const text of collectTextAssets(node)) {
+    const bytes = await text.exportAsync({ format: "SVG", svgOutlineText: true });
+    assets.push({ sourceId: text.id, data: bytesToBase64(bytes) });
+  }
+  return assets;
+}
+
 figma.ui.onmessage = async (message) => {
   if (message.type !== "send-to-morpher") return;
 
@@ -92,6 +115,7 @@ figma.ui.onmessage = async (message) => {
     const payload = await node.exportAsync({ format: "JSON_REST_V1" });
     const assets = await exportImageAssets(node);
     const vectorAssets = await exportVectorAssets(node);
+    const textAssets = await exportTextAssets(node);
     const response = await fetch(MORPHER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -101,6 +125,7 @@ figma.ui.onmessage = async (message) => {
         payload,
         assets,
         vectorAssets,
+        textAssets,
       }),
     });
 
@@ -112,7 +137,7 @@ figma.ui.onmessage = async (message) => {
     figma.ui.postMessage({
       type: "status",
       state: "success",
-      text: `Saved as ${result.filename} (${result.assetsSaved || 0} images, ${result.vectorsSaved || 0} vectors)`,
+      text: `Saved as ${result.filename} (${result.assetsSaved || 0} images, ${result.vectorsSaved || 0} vectors, ${result.textsSaved || 0} outlined texts)`,
     });
   } catch (error) {
     figma.ui.postMessage({
