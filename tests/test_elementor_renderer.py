@@ -27,7 +27,7 @@ def test_renders_container_with_heading():
 
     container = result["content"][0]
     assert container["elType"] == "container"
-    assert container["settings"] == []
+    assert container["settings"] == {"content_width": "full"}
     assert container["isInner"] is False
 
     heading = container["elements"][0]
@@ -106,6 +106,7 @@ def test_renders_auto_layout_container_text_and_shape_settings():
     container = result["content"][0]
     settings = container["settings"]
 
+    assert settings["content_width"] == "full"
     assert settings["flex_direction"] == "column"
     assert settings["flex_justify_content"] == "center"
     assert settings["flex_align_items"] == "center"
@@ -137,6 +138,7 @@ def test_renders_auto_layout_container_text_and_shape_settings():
 
     shape = container["elements"][2]
     assert shape["elType"] == "container"
+    assert shape["settings"]["content_width"] == "full"
     assert shape["settings"]["width"] == {"unit": "%", "size": 100, "sizes": []}
     assert shape["settings"]["min_height"] == {"unit": "px", "size": 80, "sizes": []}
     assert shape["settings"]["background_background"] == "classic"
@@ -181,8 +183,10 @@ def test_nested_hug_container_uses_figma_width_and_full_content_width():
     )
 
     result = render_elementor(root)
-    button_container = result["content"][0]["elements"][1]
+    root_container = result["content"][0]
+    button_container = root_container["elements"][1]
 
+    assert root_container["settings"]["content_width"] == "full"
     assert button_container["settings"]["width"] == {
         "unit": "px",
         "size": 88,
