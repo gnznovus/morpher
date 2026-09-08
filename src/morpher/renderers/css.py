@@ -148,7 +148,9 @@ def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
         if style.layout_grow is not None and style.layout_grow > 0:
             declarations.append(f"flex-grow: {style.layout_grow:g}")
 
-    if style.background:
+    # SVG-backed icons already carry their own fill/stroke inside the asset.
+    # Painting the IR fill as a CSS background turns vector bounds into solid boxes.
+    if style.background and node.kind != "icon":
         declarations.append(f"background: {style.background}")
 
     if node.kind == "divider" and style.stroke_color:
