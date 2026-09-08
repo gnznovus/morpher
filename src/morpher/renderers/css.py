@@ -3,7 +3,7 @@ from __future__ import annotations
 from morpher.ir.nodes import DesignNode
 
 
-_RENDERABLE_KINDS = {"container", "text", "shape"}
+_RENDERABLE_KINDS = {"container", "text", "shape", "image"}
 
 
 def _class_name(node: DesignNode) -> str:
@@ -96,6 +96,9 @@ def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
 
     if style.background:
         declarations.append(f"background: {style.background}")
+
+    if node.kind == "image":
+        declarations.extend(("display: block", "object-fit: cover"))
 
     if node.kind == "text":
         if style.text_color:
