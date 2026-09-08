@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 from pathlib import Path
 
 from morpher.compiler.normalizer import normalize
 from morpher.inputs.figma_json import FigmaJsonAdapter
 from morpher.renderers.css import render_css
+from morpher.renderers.elementor import render_elementor
 from morpher.renderers.html import render_html
 from morpher.storage.paths import StoragePaths
 
@@ -29,7 +31,7 @@ def _copy_assets(source: Path, storage: StoragePaths) -> dict[str, str]:
     return asset_sources
 
 
-def render_path(path: Path) -> tuple[Path, Path, int]:
+def render_path(path: Path) -> tuple[Path, Path, Path, int]:
     adapter = FigmaJsonAdapter()
     document = normalize(adapter.load(path))
 
@@ -37,26 +39,33 @@ def render_path(path: Path) -> tuple[Path, Path, int]:
     storage.ensure()
     html_path = storage.html_output(path)
     css_path = storage.css_output(path)
+    elementor_path = storage.elementor_output(path)
 
     asset_sources = _copy_assets(path, storage)
     css = render_css(document.root)
     html = render_html(document.root, stylesheet=css_path.name, asset_sources=asset_sources)
+    elementor = render_elementor(document.root)
 
     html_path.write_text(html, encoding="utf-8")
     css_path.write_text(css, encoding="utf-8")
+    elementor_path.write_text(
+        json.dumps(elementor, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
 
-    return html_path, css_path, len(document.warnings)
+    return html_path, css_path, elementor_path, len(document.warnings)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Render a supported design source to HTML/CSS.")
+    parser = argparse.ArgumentParser(description="Render a supported design source to HTML/CSS and Elementor JSON.")
     parser.add_argument("path", type=Path, help="Path to a supported design source.")
     args = parser.parse_args()
 
     try:
-        html_path, css_path, warning_count = render_path(args.path)
+        html_path, css_path, elementor_path, warning_count = render_path(args.path)
         print(f"HTML: {html_path}")
         print(f"CSS: {css_path}")
+        print(f"Elementor: {elementor_path}")
         print(f"Warnings: {warning_count}")
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
