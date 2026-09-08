@@ -3,6 +3,9 @@ from __future__ import annotations
 from morpher.ir.nodes import DesignNode
 
 
+_RENDERABLE_KINDS = {"container", "text", "shape"}
+
+
 def _class_name(node: DesignNode) -> str:
     source_id = (node.source_id or "node").replace(":", "-")
     return f"morpher-{source_id}"
@@ -23,11 +26,36 @@ def _alignment(value: str | None) -> str | None:
     return mapping.get(value)
 
 
-def _declarations(node: DesignNode, is_root: bool) -> list[str]:
+def _is_free_layout(parent: DesignNode | None) -> bool:
+    return parent is not None and parent.style.layout_direction is None
+
+
+def _relative_offset(child_value: float | None, parent_value: float | None) -> float | None:
+    if child_value is None or parent_value is None:
+        return None
+    return child_value - parent_value
+
+
+def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
     style = node.style
+    is_root = parent is None
+    is_absolute = _is_free_layout(parent)
     declarations = ["box-sizing: border-box"]
 
     if is_root:
+        if style.width is not None:
+            declarations.append(f"width: {_px(style.width)}")
+        if style.height is not None:
+            declarations.append(f"height: {_px(style.height)}")
+    elif is_absolute:
+        declarations.append("position: absolute")
+
+        left = _relative_offset(style.x, parent.style.x)
+        top = _relative_offset(style.y, parent.style.y)
+        if left is not None:
+            declarations.append(f"left: {_px(left)}")
+        if top is not None:
+            declarations.append(f"top: {_px(top)}")
         if style.width is not None:
             declarations.append(f"width: {_px(style.width)}")
         if style.height is not None:
@@ -40,6 +68,9 @@ def _declarations(node: DesignNode, is_root: bool) -> list[str]:
 
         if style.height_mode == "fixed" and style.height is not None:
             declarations.append(f"height: {_px(style.height)}")
+
+    if node.kind == "container" and style.layout_direction is None and not is_absolute:
+        declarations.append("position: relative")
 
     if style.layout_direction:
         declarations.extend(("display: flex", f"flex-direction: {'row' if style.layout_direction == 'horizontal' else 'column'}"))
@@ -57,10 +88,11 @@ def _declarations(node: DesignNode, is_root: bool) -> list[str]:
         if counter:
             declarations.append(f"align-items: {counter}")
 
-    if style.layout_align == "stretch":
-        declarations.append("align-self: stretch")
-    if style.layout_grow is not None and style.layout_grow > 0:
-        declarations.append(f"flex-grow: {style.layout_grow:g}")
+    if not is_absolute:
+        if style.layout_align == "stretch":
+            declarations.append("align-self: stretch")
+        if style.layout_grow is not None and style.layout_grow > 0:
+            declarations.append(f"flex-grow: {style.layout_grow:g}")
 
     if style.background:
         declarations.append(f"background: {style.background}")
@@ -82,19 +114,19 @@ def _declarations(node: DesignNode, is_root: bool) -> list[str]:
     return declarations
 
 
-def _walk(node: DesignNode):
-    yield node
+def _walk(node: DesignNode, parent: DesignNode | None = None):
+    yield node, parent
     for child in node.children:
-        yield from _walk(child)
+        yield from _walk(child, node)
 
 
 def render_css(root: DesignNode) -> str:
-    """Render container/text/shape IR and Auto Layout as deterministic CSS."""
+    """Render Design IR using flex for Auto Layout and absolute geometry for free layout."""
     blocks = ["html, body {", "  margin: 0;", "  padding: 0;", "}", ""]
-    for node in _walk(root):
-        if node.kind not in {"container", "text", "shape"}:
+    for node, parent in _walk(root):
+        if node.kind not in _RENDERABLE_KINDS:
             continue
         blocks.append(f".{_class_name(node)} {{")
-        blocks.extend(f"  {declaration};" for declaration in _declarations(node, node is root))
+        blocks.extend(f"  {declaration};" for declaration in _declarations(node, parent))
         blocks.extend(("}", ""))
     return "\n".join(blocks)
