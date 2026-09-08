@@ -90,6 +90,8 @@ class FigmaJsonAdapter:
         constraints = node.get("constraints") or {}
         text_style = node.get("style") or {}
         layout_mode = node.get("layoutMode")
+        source_type = node.get("type")
+        solid_color = self._solid_color(node)
 
         return DesignStyle(
             width=self._geometry_number(box.get("width")),
@@ -103,7 +105,8 @@ class FigmaJsonAdapter:
             padding_bottom=self._geometry_number(node.get("paddingBottom")),
             padding_left=self._geometry_number(node.get("paddingLeft")),
             opacity=self._number(node.get("opacity")),
-            background=self._solid_color(node),
+            background=None if source_type == "TEXT" else solid_color,
+            text_color=solid_color if source_type == "TEXT" else None,
             border_radius=self._geometry_number(node.get("cornerRadius")),
             layout_direction=self._layout_direction(layout_mode),
             width_mode=self._sizing_mode(node.get("layoutSizingHorizontal")),
