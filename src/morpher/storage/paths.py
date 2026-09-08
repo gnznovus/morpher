@@ -19,6 +19,10 @@ class StoragePaths:
         return self.root / "processed"
 
     @property
+    def log(self) -> Path:
+        return self.root / "log"
+
+    @property
     def output_html(self) -> Path:
         return self.root / "output" / "html"
 
@@ -31,6 +35,7 @@ class StoragePaths:
             self.figma_import,
             self.input,
             self.processed,
+            self.log,
             self.output_html,
             self.output_elementor,
         ):
@@ -44,6 +49,9 @@ class StoragePaths:
 
     def elementor_output(self, source: Path) -> Path:
         return self.output_elementor / f"{source.stem}_template.json"
+
+    def trace_output(self, source: Path) -> Path:
+        return self.log / f"{source.stem}.txt"
 
     def processed_output(self, source: Path) -> Path:
         return self.processed / f"{source.stem}_P{source.suffix}"
