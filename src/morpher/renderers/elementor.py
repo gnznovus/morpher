@@ -50,9 +50,9 @@ def _apply_item_sizing(settings: dict, style: DesignStyle, *, container: bool) -
     elif style.width_mode == "hug":
         if container and style.width is not None:
             # Elementor containers stretch by default. Preserve Figma's resolved
-            # HUG width and make the container content span that intrinsic box.
+            # HUG width explicitly while the shared full-content rule keeps the
+            # container's own content inside that box.
             settings["width"] = _size("px", style.width)
-            settings["content_width"] = "full"
         elif not container:
             settings["_element_width"] = "auto"
     elif style.width_mode == "fixed" and style.width is not None:
@@ -93,7 +93,10 @@ def _container_settings(
     style: DesignStyle,
     parent_style: DesignStyle | None = None,
 ) -> dict:
-    settings: dict = {}
+    # Elementor defaults containers to boxed content. Figma frames already own
+    # their dimensions, padding and child layout, so boxed content adds an extra
+    # layout layer and distorts FIXED/FILL/HUG fidelity.
+    settings: dict = {"content_width": "full"}
 
     if style.layout_direction:
         settings["flex_direction"] = "row" if style.layout_direction == "horizontal" else "column"
@@ -235,7 +238,7 @@ def _render_container(
     settings = _container_settings(node.style, parent_style)
     return {
         "id": _element_id(node, path),
-        "settings": settings if settings else [],
+        "settings": settings,
         "elements": elements,
         "isInner": False,
         "elType": "container",
