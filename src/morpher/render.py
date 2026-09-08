@@ -61,7 +61,7 @@ def render_path(path: Path) -> tuple[Path, Path, Path, int]:
         storage.html_asset_dir(path),
         storage.output_html,
     )
-    _copy_assets(
+    elementor_asset_sources = _copy_assets(
         path,
         storage,
         document.root,
@@ -76,7 +76,7 @@ def render_path(path: Path) -> tuple[Path, Path, Path, int]:
     # Elementor receives a compiled flow layout whenever the free-layout
     # geometry can be represented safely without overlap.
     elementor_root = compile_responsive_layout(document.root)
-    elementor = render_elementor(elementor_root)
+    elementor = render_elementor(elementor_root, asset_sources=elementor_asset_sources)
 
     html_path.write_text(html, encoding="utf-8")
     css_path.write_text(css, encoding="utf-8")
