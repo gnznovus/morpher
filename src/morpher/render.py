@@ -5,16 +5,18 @@ import json
 import shutil
 from pathlib import Path
 
+from morpher.assets import semantic_asset_names
 from morpher.compiler.layout import compile_responsive_layout
 from morpher.compiler.normalizer import normalize
 from morpher.inputs.figma_json import FigmaJsonAdapter
+from morpher.ir.nodes import DesignNode
 from morpher.renderers.css import render_css
 from morpher.renderers.elementor import render_elementor
 from morpher.renderers.html import render_html
 from morpher.storage.paths import StoragePaths
 
 
-def _copy_assets(source: Path, storage: StoragePaths) -> dict[str, str]:
+def _copy_assets(source: Path, storage: StoragePaths, root: DesignNode) -> dict[str, str]:
     source_dir = storage.figma_asset_dir(source)
     if not source_dir.exists():
         return {}
@@ -22,11 +24,11 @@ def _copy_assets(source: Path, storage: StoragePaths) -> dict[str, str]:
     target_dir = storage.html_asset_dir(source)
     target_dir.mkdir(parents=True, exist_ok=True)
 
+    assets = [asset for asset in source_dir.iterdir() if asset.is_file()]
+    semantic_names = semantic_asset_names(root, assets)
     asset_sources: dict[str, str] = {}
-    for asset in source_dir.iterdir():
-        if not asset.is_file():
-            continue
-        target = target_dir / asset.name
+    for asset in assets:
+        target = target_dir / semantic_names[asset.stem]
         shutil.copy2(asset, target)
         asset_sources[asset.stem] = target.relative_to(storage.output_html).as_posix()
     return asset_sources
@@ -42,7 +44,7 @@ def render_path(path: Path) -> tuple[Path, Path, Path, int]:
     css_path = storage.css_output(path)
     elementor_path = storage.elementor_output(path)
 
-    asset_sources = _copy_assets(path, storage)
+    asset_sources = _copy_assets(path, storage, document.root)
     css = render_css(document.root)
     html = render_html(document.root, stylesheet=css_path.name, asset_sources=asset_sources)
 
