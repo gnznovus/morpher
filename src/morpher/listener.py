@@ -66,12 +66,18 @@ def _save_assets(envelope: dict[str, Any], storage: StoragePaths, source: Path) 
     return saved
 
 
-def _save_vector_assets(envelope: dict[str, Any], storage: StoragePaths, source: Path) -> int:
-    assets = envelope.get("vectorAssets", [])
+def _save_svg_assets(
+    envelope: dict[str, Any],
+    key: str,
+    label: str,
+    storage: StoragePaths,
+    source: Path,
+) -> int:
+    assets = envelope.get(key, [])
     if assets is None:
         return 0
     if not isinstance(assets, list):
-        raise ValueError("Request 'vectorAssets' must be an array when provided.")
+        raise ValueError(f"Request '{key}' must be an array when provided.")
 
     asset_dir = storage.figma_asset_dir(source)
     saved = 0
@@ -85,7 +91,7 @@ def _save_vector_assets(envelope: dict[str, Any], storage: StoragePaths, source:
 
         data = _decode_asset(encoded, source_id)
         if b"<svg" not in data[:1024].lower():
-            raise ValueError(f"Vector asset for {source_id} is not SVG data.")
+            raise ValueError(f"{label} asset for {source_id} is not SVG data.")
 
         asset_dir.mkdir(parents=True, exist_ok=True)
         target = asset_dir / f"{safe_stem(source_id)}.svg"
@@ -96,7 +102,15 @@ def _save_vector_assets(envelope: dict[str, Any], storage: StoragePaths, source:
     return saved
 
 
-def save_figma_import(envelope: dict[str, Any], storage: StoragePaths) -> tuple[Path, bool, int, int]:
+def _save_vector_assets(envelope: dict[str, Any], storage: StoragePaths, source: Path) -> int:
+    return _save_svg_assets(envelope, "vectorAssets", "Vector", storage, source)
+
+
+def _save_text_assets(envelope: dict[str, Any], storage: StoragePaths, source: Path) -> int:
+    return _save_svg_assets(envelope, "textAssets", "Text outline", storage, source)
+
+
+def save_figma_import(envelope: dict[str, Any], storage: StoragePaths) -> tuple[Path, bool, int, int, int]:
     name = envelope.get("name")
     payload = envelope.get("payload")
 
@@ -115,7 +129,8 @@ def save_figma_import(envelope: dict[str, Any], storage: StoragePaths) -> tuple[
     temporary.replace(target)
     assets_saved = _save_assets(envelope, storage, target)
     vectors_saved = _save_vector_assets(envelope, storage, target)
-    return target, replaced, assets_saved, vectors_saved
+    texts_saved = _save_text_assets(envelope, storage, target)
+    return target, replaced, assets_saved, vectors_saved, texts_saved
 
 
 class MorpherRequestHandler(BaseHTTPRequestHandler):
@@ -149,7 +164,7 @@ class MorpherRequestHandler(BaseHTTPRequestHandler):
             if not isinstance(envelope, dict):
                 raise ValueError("Request body must be a JSON object.")
 
-            target, replaced, assets_saved, vectors_saved = save_figma_import(envelope, self.storage)
+            target, replaced, assets_saved, vectors_saved, texts_saved = save_figma_import(envelope, self.storage)
             self._json(
                 200,
                 {
@@ -158,6 +173,7 @@ class MorpherRequestHandler(BaseHTTPRequestHandler):
                     "replaced": replaced,
                     "assetsSaved": assets_saved,
                     "vectorsSaved": vectors_saved,
+                    "textsSaved": texts_saved,
                 },
             )
         except (ValueError, json.JSONDecodeError) as error:
