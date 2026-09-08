@@ -22,6 +22,7 @@ class DesignStyle:
     padding_left: float | None = None
     opacity: float | None = None
     image_opacity: float | None = None
+    clips_content: bool | None = None
     background: str | None = None
     text_color: str | None = None
     stroke_color: str | None = None
@@ -43,5 +44,6 @@ class DesignStyle:
     font_size: float | None = None
     letter_spacing: float | None = None
     line_height: float | None = None
+    text_auto_resize: str | None = None
     text_align_horizontal: str | None = None
     text_align_vertical: str | None = None
