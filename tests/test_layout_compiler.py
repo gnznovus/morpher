@@ -138,6 +138,17 @@ def test_decorative_media_overlap_does_not_force_text_absolute():
 
     assert compiled.style.layout_direction == "vertical"
     assert section["settings"]["flex_direction"] == "column"
+    assert section["settings"]["padding"]["top"] == "99"
+
+    label, statement, body = compiled.children[:3]
+    assert round(label.style.width_percent or 0, 3) == 8.333
+    assert round(label.style.margin_left_percent or 0, 3) == 9.323
+    assert round(statement.style.width_percent or 0, 3) == 38.125
+    assert round(statement.style.margin_left_percent or 0, 3) == 50.625
+    assert round(statement.style.margin_top_percent or 0, 3) == 14.583
+    assert round(body.style.width_percent or 0, 3) == 52.760
+    assert round(body.style.margin_left_percent or 0, 3) == 25.833
+    assert round(body.style.margin_top_percent or 0, 3) == 4.323
 
     rendered_headings = []
     stack = list(section["elements"])
@@ -151,8 +162,15 @@ def test_decorative_media_overlap_does_not_force_text_absolute():
     for heading in rendered_headings:
         assert "_position" not in heading["settings"]
 
+    statement_settings = section["elements"][1]["settings"]
+    body_settings = section["elements"][2]["settings"]
+    assert statement_settings["_margin"]["unit"] == "%"
+    assert statement_settings["_margin"]["top"] == str(statement.style.margin_top_percent)
+    assert body_settings["margin"]["unit"] == "%"
+    assert body_settings["margin"]["left"] == str(body.style.margin_left_percent)
 
-def test_keeps_overlapping_free_layout_for_specialized_layering():
+
+def test_keeps_strongly_layered_free_layout_for_specialized_positioning():
     root = DesignNode(
         kind="container",
         source_id="20:1",
