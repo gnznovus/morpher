@@ -10,6 +10,45 @@ function selectedNode() {
   return selection[0];
 }
 
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, Math.min(index + chunkSize, bytes.length));
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+function collectImageRefs(node, refs = new Set()) {
+  if ("fills" in node && Array.isArray(node.fills)) {
+    for (const fill of node.fills) {
+      if (fill && fill.type === "IMAGE" && fill.imageHash) {
+        refs.add(fill.imageHash);
+      }
+    }
+  }
+
+  if ("children" in node) {
+    for (const child of node.children) {
+      collectImageRefs(child, refs);
+    }
+  }
+
+  return refs;
+}
+
+async function exportImageAssets(node) {
+  const assets = [];
+  for (const imageRef of collectImageRefs(node)) {
+    const image = figma.getImageByHash(imageRef);
+    if (!image) continue;
+    const bytes = await image.getBytesAsync();
+    assets.push({ imageRef, data: bytesToBase64(bytes) });
+  }
+  return assets;
+}
+
 figma.ui.onmessage = async (message) => {
   if (message.type !== "send-to-morpher") return;
 
@@ -18,6 +57,7 @@ figma.ui.onmessage = async (message) => {
     figma.ui.postMessage({ type: "status", state: "sending", text: `Exporting ${node.name}...` });
 
     const payload = await node.exportAsync({ format: "JSON_REST_V1" });
+    const assets = await exportImageAssets(node);
     const response = await fetch(MORPHER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -25,6 +65,7 @@ figma.ui.onmessage = async (message) => {
         name: node.name,
         nodeId: node.id,
         payload,
+        assets,
       }),
     });
 
@@ -36,7 +77,7 @@ figma.ui.onmessage = async (message) => {
     figma.ui.postMessage({
       type: "status",
       state: "success",
-      text: `Saved as ${result.filename}`,
+      text: `Saved as ${result.filename} (${result.assetsSaved || 0} assets)`,
     });
   } catch (error) {
     figma.ui.postMessage({
