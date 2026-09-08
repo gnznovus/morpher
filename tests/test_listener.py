@@ -17,7 +17,7 @@ def test_save_figma_import_writes_payload(tmp_path: Path) -> None:
     storage = StoragePaths(tmp_path / "storage")
     payload = {"document": {"id": "1:2", "name": "Hero", "type": "FRAME"}}
 
-    target, replaced, assets_saved = save_figma_import(
+    target, replaced, assets_saved, vectors_saved = save_figma_import(
         {"name": "Hero / Desktop", "nodeId": "1:2", "payload": payload},
         storage,
     )
@@ -25,6 +25,7 @@ def test_save_figma_import_writes_payload(tmp_path: Path) -> None:
     assert target == storage.figma_import / "Hero-Desktop.json"
     assert replaced is False
     assert assets_saved == 0
+    assert vectors_saved == 0
     assert json.loads(target.read_text(encoding="utf-8")) == payload
 
 
@@ -34,10 +35,11 @@ def test_save_figma_import_replaces_same_named_snapshot(tmp_path: Path) -> None:
     second = {"document": {"id": "1:2", "name": "Hero v2", "type": "FRAME"}}
 
     save_figma_import({"name": "Hero", "payload": first}, storage)
-    target, replaced, assets_saved = save_figma_import({"name": "Hero", "payload": second}, storage)
+    target, replaced, assets_saved, vectors_saved = save_figma_import({"name": "Hero", "payload": second}, storage)
 
     assert replaced is True
     assert assets_saved == 0
+    assert vectors_saved == 0
     assert json.loads(target.read_text(encoding="utf-8")) == second
 
 
@@ -46,7 +48,7 @@ def test_save_figma_import_writes_image_assets(tmp_path: Path) -> None:
     payload = {"document": {"id": "1:2", "name": "Hero", "type": "FRAME"}}
     png = b"\x89PNG\r\n\x1a\nexample"
 
-    target, _, assets_saved = save_figma_import(
+    target, _, assets_saved, vectors_saved = save_figma_import(
         {
             "name": "Hero",
             "payload": payload,
@@ -57,7 +59,28 @@ def test_save_figma_import_writes_image_assets(tmp_path: Path) -> None:
 
     asset = storage.figma_asset_dir(target) / "abc123.png"
     assert assets_saved == 1
+    assert vectors_saved == 0
     assert asset.read_bytes() == png
+
+
+def test_save_figma_import_writes_vector_assets(tmp_path: Path) -> None:
+    storage = StoragePaths(tmp_path / "storage")
+    payload = {"document": {"id": "1:2", "name": "Hero", "type": "FRAME"}}
+    svg = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>'
+
+    target, _, assets_saved, vectors_saved = save_figma_import(
+        {
+            "name": "Hero",
+            "payload": payload,
+            "vectorAssets": [{"sourceId": "45:5306", "data": base64.b64encode(svg).decode("ascii")}],
+        },
+        storage,
+    )
+
+    asset = storage.figma_asset_dir(target) / "45-5306.svg"
+    assert assets_saved == 0
+    assert vectors_saved == 1
+    assert asset.read_bytes() == svg
 
 
 @pytest.mark.parametrize(
