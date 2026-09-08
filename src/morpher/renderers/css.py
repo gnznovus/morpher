@@ -63,16 +63,12 @@ def _absolute_geometry(node: DesignNode, parent: DesignNode) -> tuple[float | No
     height = style.height
     rotation_degrees: float | None = None
 
-    # Figma LINE bounding boxes already encode their final orientation. Re-applying
-    # quarter-turn reconstruction turns vertical zero-width dividers invisible.
     if node.kind != "divider":
         quarter = _quarter_turn(style.rotation)
         if quarter is not None:
             normalized = quarter % 4
             rotation_degrees = quarter * 90.0
             if normalized in (1, 3) and width is not None and height is not None:
-                # Figma absoluteBoundingBox is post-rotation. Reconstruct the pre-rotation
-                # box around the same center so CSS rotation reproduces the same bounds.
                 original_width = height
                 original_height = width
                 if left is not None:
@@ -98,7 +94,6 @@ def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
             declarations.append(f"height: {_px(style.height)}")
     elif is_absolute:
         declarations.append("position: absolute")
-
         left, top, width, height, rotation_degrees = _absolute_geometry(node, parent)
         if left is not None:
             declarations.append(f"left: {_px(left)}")
@@ -116,13 +111,11 @@ def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
             declarations.append(f"width: {_px(style.width)}")
         elif style.width_mode == "fill":
             declarations.append("width: 100%")
-
         if style.height_mode == "fixed" and style.height is not None:
             declarations.append(f"height: {_px(style.height)}")
 
     if node.kind == "container" and style.layout_direction is None and not is_absolute:
         declarations.append("position: relative")
-
     if style.clips_content:
         declarations.append("overflow: hidden")
 
@@ -131,10 +124,7 @@ def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
         if style.gap is not None:
             declarations.append(f"gap: {_px(style.gap)}")
         if all(value is not None for value in (style.padding_top, style.padding_right, style.padding_bottom, style.padding_left)):
-            declarations.append(
-                "padding: "
-                + " ".join(_px(value) for value in (style.padding_top, style.padding_right, style.padding_bottom, style.padding_left))
-            )
+            declarations.append("padding: " + " ".join(_px(value) for value in (style.padding_top, style.padding_right, style.padding_bottom, style.padding_left)))
         primary = _alignment(style.primary_axis_align)
         counter = _alignment(style.counter_axis_align)
         if primary:
@@ -150,7 +140,6 @@ def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
 
     if style.background:
         declarations.append(f"background: {style.background}")
-
     if node.kind == "divider" and style.stroke_color:
         weight = style.stroke_weight if style.stroke_weight is not None else 1.0
         if (style.width or 0) >= (style.height or 0):
@@ -179,16 +168,9 @@ def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
             declarations.append(f"line-height: {_px(style.line_height)}")
         if style.letter_spacing is not None:
             declarations.append(f"letter-spacing: {_px(style.letter_spacing)}")
-
-        # JSON_REST_V1 preserves deliberate Figma line breaks in `characters`.
-        # Keep those breaks (and meaningful leading spaces) instead of collapsing
-        # them into one browser line. `pre-wrap` still permits wrapping if local
-        # font metrics differ slightly from Figma.
         if "\n" in (node.text or ""):
             declarations.append("white-space: pre-wrap")
         elif style.text_auto_resize == "WIDTH_AND_HEIGHT":
-            # Single-line auto-sized labels such as CHECK AVIABILITY should not
-            # wrap merely because browser font metrics differ by a few pixels.
             declarations.append("white-space: nowrap")
 
     return declarations
@@ -210,6 +192,12 @@ def render_css(root: DesignNode) -> str:
         "",
         ".morpher-text-outline {",
         "  display: block;",
+        "}",
+        "",
+        ".morpher-text-outline-asset {",
+        "  display: block;",
+        "  width: 100%;",
+        "  height: 100%;",
         "}",
         "",
     ]
