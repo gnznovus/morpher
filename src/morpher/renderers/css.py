@@ -40,8 +40,6 @@ def _declarations(node: DesignNode, is_root: bool) -> list[str]:
 
         if style.height_mode == "fixed" and style.height is not None:
             declarations.append(f"height: {_px(style.height)}")
-        elif style.height_mode == "fill":
-            declarations.append("flex-grow: 1")
 
     if style.layout_direction:
         declarations.extend(("display: flex", f"flex-direction: {'row' if style.layout_direction == 'horizontal' else 'column'}"))
@@ -68,6 +66,8 @@ def _declarations(node: DesignNode, is_root: bool) -> list[str]:
         declarations.append(f"background: {style.background}")
 
     if node.kind == "text":
+        if style.text_color:
+            declarations.append(f"color: {style.text_color}")
         if style.font_family:
             declarations.append(f'font-family: "{style.font_family}", sans-serif')
         if style.font_size is not None:
