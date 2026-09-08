@@ -87,29 +87,49 @@ def _flow_style(style: DesignStyle, *, width_percent: float | None = None) -> De
     return result
 
 
-def _compile_free_layout(node: DesignNode) -> DesignNode:
-    children = node.children
-    if len(children) < 2 or not all(_has_box(child) for child in children):
-        return node
-    if _has_real_overlap(children):
-        # Overlap is a signal that the design may genuinely require layering.
-        # Keep the raw free-layout geometry instead of fabricating a flow layout.
-        return node
-
-    parent_style = node.style
-    if not _has_box(node):
-        return node
-
-    bands = _bands(children)
-    if not bands:
-        return node
-
+def _flow_container_style(node: DesignNode, children: list[DesignNode]) -> DesignStyle:
     px, py, pr, pb = _bounds(node)
     child_bounds = [_bounds(child) for child in children]
     min_x = min(box[0] for box in child_bounds)
     min_y = min(box[1] for box in child_bounds)
     max_x = max(box[2] for box in child_bounds)
     max_y = max(box[3] for box in child_bounds)
+
+    style = deepcopy(node.style)
+    style.x = None
+    style.y = None
+    style.width = None
+    style.height = None
+    style.layout_direction = "vertical"
+    style.width_mode = "fill"
+    style.height_mode = "hug"
+    style.padding_left = max(0.0, min_x - px)
+    style.padding_top = max(0.0, min_y - py)
+    style.padding_right = max(0.0, pr - max_x)
+    style.padding_bottom = max(0.0, pb - max_y)
+    return style
+
+
+def _compile_free_layout(node: DesignNode) -> DesignNode:
+    children = node.children
+    if not children or not _has_box(node) or not all(_has_box(child) for child in children):
+        return node
+
+    if len(children) == 1:
+        child = children[0]
+        node.style = _flow_container_style(node, children)
+        child.style = _flow_style(child.style)
+        node.children = [child]
+        return node
+
+    if _has_real_overlap(children):
+        # Overlap is a signal that the design may genuinely require layering.
+        # Keep the raw free-layout geometry instead of fabricating a flow layout.
+        return node
+
+    bands = _bands(children)
+    if not bands:
+        return node
 
     compiled_children: list[DesignNode] = []
     band_boxes: list[tuple[float, float, float, float]] = []
@@ -161,19 +181,8 @@ def _compile_free_layout(node: DesignNode) -> DesignNode:
         for previous, current in zip(band_boxes, band_boxes[1:])
     ]
 
-    compiled_style = deepcopy(parent_style)
-    compiled_style.x = None
-    compiled_style.y = None
-    compiled_style.width = None
-    compiled_style.height = None
-    compiled_style.layout_direction = "vertical"
-    compiled_style.width_mode = "fill"
-    compiled_style.height_mode = "hug"
+    compiled_style = _flow_container_style(node, children)
     compiled_style.gap = _positive_median(vertical_gaps)
-    compiled_style.padding_left = max(0.0, min_x - px)
-    compiled_style.padding_top = max(0.0, min_y - py)
-    compiled_style.padding_right = max(0.0, pr - max_x)
-    compiled_style.padding_bottom = max(0.0, pb - max_y)
 
     node.style = compiled_style
     node.children = compiled_children
