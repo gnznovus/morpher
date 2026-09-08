@@ -19,9 +19,11 @@ def _dimensions(
     right: float,
     bottom: float,
     left: float,
+    *,
+    unit: str = "px",
 ) -> dict:
     return {
-        "unit": "px",
+        "unit": unit,
         "top": str(top),
         "right": str(right),
         "bottom": str(bottom),
@@ -75,6 +77,26 @@ def _apply_item_sizing(settings: dict, style: DesignStyle, *, container: bool) -
         settings["min_height"] = _size("px", style.height)
 
 
+def _apply_flow_margin(settings: dict, style: DesignStyle, *, container: bool) -> None:
+    margins = (
+        style.margin_top_percent,
+        style.margin_right_percent,
+        style.margin_bottom_percent,
+        style.margin_left_percent,
+    )
+    if not any(value is not None for value in margins):
+        return
+
+    top, right, bottom, left = (value or 0 for value in margins)
+    settings["margin" if container else "_margin"] = _dimensions(
+        top,
+        right,
+        bottom,
+        left,
+        unit="%",
+    )
+
+
 def _apply_free_layout_geometry(
     settings: dict,
     style: DesignStyle,
@@ -94,9 +116,6 @@ def _apply_free_layout_geometry(
     if parent_style.layout_direction is not None:
         return
 
-    # A plain IR container can legitimately have no geometry at all. In that
-    # case there is nothing to position, so do not manufacture an absolute
-    # Elementor element just because the parent is not Auto Layout.
     if any(
         value is None
         for value in (style.x, style.y, parent_style.x, parent_style.y)
@@ -186,6 +205,7 @@ def _container_settings(
         settings["padding"] = _dimensions(top, right, bottom, left)
 
     _apply_item_sizing(settings, style, container=True)
+    _apply_flow_margin(settings, style, container=True)
     _apply_free_layout_geometry(settings, style, parent_style, container=True)
     _apply_child_alignment(settings, style, parent_style, container=True)
 
@@ -244,6 +264,7 @@ def _heading_settings(
         settings["align"] = text_align
 
     _apply_item_sizing(settings, style, container=False)
+    _apply_flow_margin(settings, style, container=False)
     _apply_free_layout_geometry(settings, style, parent_style, container=False)
     _apply_child_alignment(settings, style, parent_style, container=False)
     return settings
