@@ -97,6 +97,13 @@ class FigmaJsonAdapter:
                 return str(value) if value else None
         return None
 
+    @classmethod
+    def _image_opacity(cls, node: dict[str, Any]) -> float | None:
+        for fill in node.get("fills", []):
+            if isinstance(fill, dict) and fill.get("type") == "IMAGE" and fill.get("visible") is not False:
+                return cls._number(fill.get("opacity")) or 1.0
+        return None
+
     def _style(self, node: dict[str, Any]) -> DesignStyle:
         box = node.get("absoluteBoundingBox") or {}
         constraints = node.get("constraints") or {}
@@ -117,6 +124,7 @@ class FigmaJsonAdapter:
             padding_bottom=self._geometry_number(node.get("paddingBottom")),
             padding_left=self._geometry_number(node.get("paddingLeft")),
             opacity=self._number(node.get("opacity")),
+            image_opacity=self._image_opacity(node),
             background=None if source_type == "TEXT" else solid_color,
             text_color=solid_color if source_type == "TEXT" else None,
             stroke_color=self._solid_stroke_color(node),
@@ -132,6 +140,7 @@ class FigmaJsonAdapter:
             constraint_horizontal=constraints.get("horizontal"),
             constraint_vertical=constraints.get("vertical"),
             font_family=text_style.get("fontFamily"),
+            font_postscript_name=text_style.get("fontPostScriptName"),
             font_style=text_style.get("fontStyle"),
             font_weight=self._integer(text_style.get("fontWeight")),
             font_size=self._geometry_number(text_style.get("fontSize")),
