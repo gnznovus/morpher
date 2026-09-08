@@ -16,12 +16,17 @@ from morpher.renderers.html import render_html
 from morpher.storage.paths import StoragePaths
 
 
-def _copy_assets(source: Path, storage: StoragePaths, root: DesignNode) -> dict[str, str]:
+def _copy_assets(
+    source: Path,
+    storage: StoragePaths,
+    root: DesignNode,
+    target_dir: Path,
+    relative_root: Path,
+) -> dict[str, str]:
     source_dir = storage.figma_asset_dir(source)
     if not source_dir.exists():
         return {}
 
-    target_dir = storage.html_asset_dir(source)
     target_dir.mkdir(parents=True, exist_ok=True)
 
     assets = [asset for asset in source_dir.iterdir() if asset.is_file()]
@@ -35,7 +40,7 @@ def _copy_assets(source: Path, storage: StoragePaths, root: DesignNode) -> dict[
             raise OSError(
                 f"Could not package Figma asset {asset!s} -> {target!s}: {exc}"
             ) from exc
-        asset_sources[asset.stem] = target.relative_to(storage.output_html).as_posix()
+        asset_sources[asset.stem] = target.relative_to(relative_root).as_posix()
     return asset_sources
 
 
@@ -49,9 +54,23 @@ def render_path(path: Path) -> tuple[Path, Path, Path, int]:
     css_path = storage.css_output(path)
     elementor_path = storage.elementor_output(path)
 
-    asset_sources = _copy_assets(path, storage, document.root)
+    html_asset_sources = _copy_assets(
+        path,
+        storage,
+        document.root,
+        storage.html_asset_dir(path),
+        storage.output_html,
+    )
+    _copy_assets(
+        path,
+        storage,
+        document.root,
+        storage.elementor_asset_dir(path),
+        storage.output_elementor,
+    )
+
     css = render_css(document.root)
-    html = render_html(document.root, stylesheet=css_path.name, asset_sources=asset_sources)
+    html = render_html(document.root, stylesheet=css_path.name, asset_sources=html_asset_sources)
 
     # Keep the HTML renderer on raw normalized geometry for fidelity/debugging.
     # Elementor receives a compiled flow layout whenever the free-layout
