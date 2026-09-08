@@ -53,6 +53,9 @@ class StoragePaths:
     def html_asset_dir(self, source: Path) -> Path:
         return self.output_html / "assets" / source.stem
 
+    def elementor_asset_dir(self, source: Path) -> Path:
+        return self.output_elementor / "assets" / source.stem
+
     def elementor_output(self, source: Path) -> Path:
         return self.output_elementor / f"{source.stem}_template.json"
 
