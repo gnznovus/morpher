@@ -3,7 +3,7 @@ from __future__ import annotations
 from morpher.ir.nodes import DesignNode
 
 
-_RENDERABLE_KINDS = {"container", "text", "shape", "image", "icon"}
+_RENDERABLE_KINDS = {"container", "text", "shape", "image", "icon", "divider"}
 
 
 def _class_name(node: DesignNode) -> str:
@@ -96,6 +96,13 @@ def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
 
     if style.background:
         declarations.append(f"background: {style.background}")
+
+    if node.kind == "divider" and style.stroke_color:
+        weight = style.stroke_weight if style.stroke_weight is not None else 1.0
+        if (style.width or 0) >= (style.height or 0):
+            declarations.append(f"border-top: {_px(weight)} solid {style.stroke_color}")
+        else:
+            declarations.append(f"border-left: {_px(weight)} solid {style.stroke_color}")
 
     if node.kind == "image":
         declarations.extend(("display: block", "object-fit: cover"))
