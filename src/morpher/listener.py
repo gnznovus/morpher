@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -19,7 +20,49 @@ def safe_stem(value: str) -> str:
     return stem or "figma-node"
 
 
-def save_figma_import(envelope: dict[str, Any], storage: StoragePaths) -> tuple[Path, bool]:
+def _asset_extension(data: bytes) -> str:
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+    if data.startswith(b"GIF87a") or data.startswith(b"GIF89a"):
+        return ".gif"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    return ".bin"
+
+
+def _save_assets(envelope: dict[str, Any], storage: StoragePaths, source: Path) -> int:
+    assets = envelope.get("assets", [])
+    if assets is None:
+        return 0
+    if not isinstance(assets, list):
+        raise ValueError("Request 'assets' must be an array when provided.")
+
+    asset_dir = storage.figma_asset_dir(source)
+    saved = 0
+    for asset in assets:
+        if not isinstance(asset, dict):
+            continue
+        image_ref = asset.get("imageRef")
+        encoded = asset.get("data")
+        if not isinstance(image_ref, str) or not image_ref or not isinstance(encoded, str) or not encoded:
+            continue
+        try:
+            data = base64.b64decode(encoded, validate=True)
+        except ValueError as exc:
+            raise ValueError(f"Invalid base64 image asset for {image_ref}.") from exc
+
+        asset_dir.mkdir(parents=True, exist_ok=True)
+        target = asset_dir / f"{safe_stem(image_ref)}{_asset_extension(data)}"
+        temporary = target.with_suffix(target.suffix + ".tmp")
+        temporary.write_bytes(data)
+        temporary.replace(target)
+        saved += 1
+    return saved
+
+
+def save_figma_import(envelope: dict[str, Any], storage: StoragePaths) -> tuple[Path, bool, int]:
     name = envelope.get("name")
     payload = envelope.get("payload")
 
@@ -36,7 +79,8 @@ def save_figma_import(envelope: dict[str, Any], storage: StoragePaths) -> tuple[
     temporary = target.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     temporary.replace(target)
-    return target, replaced
+    assets_saved = _save_assets(envelope, storage, target)
+    return target, replaced, assets_saved
 
 
 class MorpherRequestHandler(BaseHTTPRequestHandler):
@@ -70,13 +114,14 @@ class MorpherRequestHandler(BaseHTTPRequestHandler):
             if not isinstance(envelope, dict):
                 raise ValueError("Request body must be a JSON object.")
 
-            target, replaced = save_figma_import(envelope, self.storage)
+            target, replaced, assets_saved = save_figma_import(envelope, self.storage)
             self._json(
                 200,
                 {
                     "ok": True,
                     "filename": target.name,
                     "replaced": replaced,
+                    "assetsSaved": assets_saved,
                 },
             )
         except (ValueError, json.JSONDecodeError) as error:
