@@ -22,6 +22,27 @@ def _label(node: DesignNode) -> str:
 
     if node.kind == "image" and node.image_ref:
         parts.append(f"imageRef={node.image_ref}")
+        if node.style.image_opacity is not None:
+            parts.append(f"imageOpacity={node.style.image_opacity:g}")
+
+    if node.kind == "text":
+        typography_parts: list[str] = []
+        if node.style.font_family:
+            typography_parts.append(f"family={node.style.font_family}")
+        if node.style.font_postscript_name:
+            typography_parts.append(f"face={node.style.font_postscript_name}")
+        if node.style.font_style:
+            typography_parts.append(f"style={node.style.font_style}")
+        if node.style.font_weight is not None:
+            typography_parts.append(f"weight={node.style.font_weight}")
+        if node.style.font_size is not None:
+            typography_parts.append(f"size={node.style.font_size:g}")
+        if node.style.letter_spacing is not None:
+            typography_parts.append(f"tracking={node.style.letter_spacing:g}")
+        if node.style.line_height is not None:
+            typography_parts.append(f"line={node.style.line_height:g}")
+        if typography_parts:
+            parts.append("<" + ", ".join(typography_parts) + ">")
 
     layout_parts: list[str] = []
     if node.style.layout_direction:
