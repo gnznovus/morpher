@@ -1,4 +1,4 @@
-const MORPHER_URL = "http://127.0.0.1:8767/figma/import";
+const MORPHER_URL = "http://localhost:8767/figma/import";
 
 figma.showUI(__html__, { width: 320, height: 180 });
 
