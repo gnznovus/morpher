@@ -32,6 +32,55 @@
 - Outlined text export uses `svgOutlineText: true` and `useAbsoluteBounds: true` so the full Figma text-node canvas, including meaningful empty geometry, is preserved.
 - **Do not wrap outlined text SVGs and force-fit them into a second semantic geometry box.** The direct SVG element is the verified fidelity path.
 - SVG-backed icons own their internal fill/stroke/opacity. CSS must not repaint vector fill as an element background.
+- The CLI is a frontend to Morpher Core, not the permanent product boundary. Core compiler behavior must remain reusable by a future application/UI.
+- Elementor rendering, asset packaging, and WordPress deployment/integration must remain separable responsibilities so later automation does not require rewriting the compiler.
+
+## Morpher 1.0 Vision
+
+The intended 1.0 direction is a Morpher application rather than a CLI-only tool. The exact desktop/UI technology is intentionally **not locked yet**; candidates such as Tk/ttk or another suitable application framework can be evaluated when the UI requirements are clearer.
+
+Conceptual architecture:
+
+```text
+                 Morpher Core
+                     │
+       ┌─────────────┼─────────────┐
+       ↓             ↓             ↓
+      CLI        Morpher App    future API
+                     │
+                     ↓
+             WordPress connection
+                     │
+                     ↓
+          Morpher WordPress Bridge
+                     │
+              WordPress / Elementor
+```
+
+### Morpher App
+
+Planned responsibilities include:
+
+- Provide a real application/UI around Morpher Core.
+- Orchestrate compilation, projects, generated artifacts, and assets without moving compiler logic into the UI.
+- Connect to WordPress through the Morpher WordPress Bridge when automated deployment/integration is implemented.
+
+### Morpher WordPress Bridge
+
+Morpher 1.0 is intended to include a custom WordPress plugin acting as the controlled bridge between the Morpher application and WordPress/Elementor.
+
+The bridge is expected to eventually support operations such as:
+
+- authenticated Morpher ↔ WordPress communication;
+- WordPress Media Library / asset integration;
+- Elementor template/page integration;
+- site information and operations required by Morpher workflows.
+
+Exact endpoints, authentication, permissions, and Elementor integration mechanisms are **not designed yet**. The bridge must be explicit and controlled rather than Morpher directly coupling the compiler to WordPress filesystem/database internals.
+
+Internal codename: **definitely-not-a-backdoor**. 😹
+
+Additional Morpher 1.0 ideas will be appended here as they are remembered and defined.
 
 ## Prototype Scope
 
@@ -127,13 +176,26 @@
 
 ### Phase 6 — Elementor Renderer
 
-- [ ] Generate Elementor-compatible template JSON.
+Current prototype workflow is deliberately semi-manual. Morpher generates an Elementor template plus a human-friendly asset package; a human imports the template, uploads packaged media to WordPress, and manually binds the appropriate Media Library item in Elementor image/background controls. WordPress REST/bridge automation is deferred until the renderer itself is proven.
+
+Start-small verification order:
+
+1. Container → Heading.
+2. Container → Heading + Text.
+3. Container → Heading + Text + Image with manual Media Library binding.
+4. Expand nested containers, layout, styling, and harder fidelity only after the smaller slices import and remain editable.
+
+- [ ] Add reproducible local Docker Compose WordPress testbed with Elementor Free for real import testing.
+- [ ] Create/export a tiny real Elementor template as a golden structural reference.
+- [ ] Generate Elementor-compatible template JSON from Design IR rather than scraping generated HTML.
 - [ ] Map IR container → Elementor Container.
 - [ ] Map semantic text → Heading or Text Editor using deterministic rules.
-- [ ] Map image → Image widget.
+- [ ] Map image → Image widget with manual media binding in the current prototype.
+- [ ] Package required Elementor assets alongside the generated template using useful deterministic names.
+- [ ] Avoid fake WordPress URLs, local output paths, and hard-coded WordPress attachment IDs in portable generated templates.
 - [ ] Map preserved typography without depending on fidelity SVG text.
 - [ ] Keep Elementor-only details isolated inside renderer code.
-- [ ] Validate generated template JSON against real Elementor import behavior.
+- [ ] Validate generated template JSON against real Elementor import behavior and confirm imported elements remain editable.
 
 ### Phase 7 — Fidelity Expansion / Compiler
 
@@ -156,8 +218,12 @@
 - [ ] Figma REST adapter.
 - [ ] Published Figma plugin workflow.
 
-### Later / Optional Outputs
+### Later / Optional Outputs / Integration
 
+- [ ] Morpher application/UI.
+- [ ] Morpher WordPress Bridge plugin (`definitely-not-a-backdoor`).
+- [ ] Automated WordPress Media Library integration through the bridge/WordPress APIs.
+- [ ] Automated Elementor template/page deployment through the bridge where appropriate.
 - [ ] Gutenberg renderer.
 - [ ] React renderer.
 - [ ] Tailwind renderer.
@@ -194,11 +260,14 @@ The current checkpoint demonstrates a strong Figma → fidelity HTML path across
 
 ## Next Slice
 
-Keep the verified fidelity path stable. Expand only through small real fixtures that expose a missing Figma feature, then trace → render → compare before generalizing the rule.
+Enter the Elementor phase without disturbing the verified Figma → HTML fidelity path.
 
-Near-term candidates:
+Immediate sequence:
 
-1. Add/strengthen regression fixtures for newly solved text-bound and vector-fill cases.
-2. Choose the next unsupported Figma styling/transform feature from real evidence rather than speculation.
-3. Begin the semantic/responsive compiler layer once raw reconstruction coverage is sufficient.
-4. Start the Elementor renderer from preserved semantic IR, not from fidelity SVG output.
+1. Add the minimal Docker Compose WordPress + Elementor Free testbed.
+2. Manually create/export a tiny Elementor Container → Heading template and preserve it as the first golden reference.
+3. Implement the smallest Elementor renderer slice from Design IR and prove its generated JSON imports successfully and remains editable.
+4. Add semantic text, then image widgets and packaged assets with manual WordPress Media Library binding.
+5. Expand one verified Elementor feature at a time using the same small-fixture → import → inspect → compare loop.
+
+WordPress REST/bridge automation is intentionally deferred. The current goal is to prove portable Elementor artifacts first; later Morpher App + WordPress Bridge automation should replace the human deployment/binding steps without requiring a compiler redesign.
