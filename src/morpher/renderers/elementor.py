@@ -47,7 +47,13 @@ def _relative_offset(value: float | None, parent_value: float | None) -> float |
 
 
 def _apply_item_sizing(settings: dict, style: DesignStyle, *, container: bool) -> None:
-    if style.width_mode == "fill":
+    if style.width_percent is not None:
+        if container:
+            settings["width"] = _size("%", style.width_percent)
+        else:
+            settings["_element_width"] = "initial"
+            settings["_element_custom_width"] = _size("%", style.width_percent)
+    elif style.width_mode == "fill":
         if container:
             settings["width"] = _size("%", 100)
         else:
@@ -55,9 +61,6 @@ def _apply_item_sizing(settings: dict, style: DesignStyle, *, container: bool) -
             settings["_element_custom_width"] = _size("%", 100)
     elif style.width_mode == "hug":
         if container and style.width is not None:
-            # Elementor containers stretch by default. Preserve Figma's resolved
-            # HUG width explicitly while the shared full-content rule keeps the
-            # container's own content inside that box.
             settings["width"] = _size("px", style.width)
         elif not container:
             settings["_element_width"] = "auto"
@@ -127,16 +130,12 @@ def _apply_child_alignment(
     if parent_style is None or (parent_style.counter_axis_align or "").lower() != "center":
         return
 
-    # A stretched/fill child consumes the cross axis. HUG/FIXED children inherit
-    # the parent's centered counter-axis placement.
     if (style.layout_align or "").lower() == "stretch" or style.width_mode == "fill":
         return
 
     if container:
         settings["align_self"] = "center"
     else:
-        # Elementor's exported Heading JSON represents this visually with the
-        # widget's native alignment control while keeping width=auto.
         settings["align"] = "center"
 
 
@@ -144,9 +143,6 @@ def _container_settings(
     style: DesignStyle,
     parent_style: DesignStyle | None = None,
 ) -> dict:
-    # Elementor defaults containers to boxed content. Figma frames already own
-    # their dimensions, padding and child layout, so boxed content adds an extra
-    # layout layer and distorts FIXED/FILL/HUG fidelity.
     settings: dict = {"content_width": "full"}
 
     if style.layout_direction:
