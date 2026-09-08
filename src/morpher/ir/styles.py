@@ -21,6 +21,7 @@ class DesignStyle:
     padding_bottom: float | None = None
     padding_left: float | None = None
     opacity: float | None = None
+    image_opacity: float | None = None
     background: str | None = None
     text_color: str | None = None
     stroke_color: str | None = None
@@ -36,6 +37,7 @@ class DesignStyle:
     constraint_horizontal: str | None = None
     constraint_vertical: str | None = None
     font_family: str | None = None
+    font_postscript_name: str | None = None
     font_style: str | None = None
     font_weight: int | None = None
     font_size: float | None = None
