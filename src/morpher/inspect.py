@@ -6,6 +6,7 @@ from pathlib import Path
 from morpher.compiler.normalizer import normalize
 from morpher.inputs.figma_json import FigmaJsonAdapter
 from morpher.ir.nodes import DesignNode
+from morpher.trace import Trace
 
 
 def _label(node: DesignNode) -> str:
@@ -41,19 +42,21 @@ def _tree_lines(node: DesignNode, prefix: str = "", is_last: bool = True, root: 
     return lines
 
 
-def inspect_path(path: Path) -> str:
+def inspect_path(path: Path) -> tuple[str, Path]:
     adapter = FigmaJsonAdapter()
     source = adapter.load(path)
     document = normalize(source)
 
-    lines = [f"Morpher IR: {path}", ""]
-    lines.extend(_tree_lines(document.root))
+    trace = Trace(path)
+    trace.section("DESIGN IR")
+    trace.extend(_tree_lines(document.root))
 
     if document.warnings:
-        lines.extend(["", f"Warnings ({len(document.warnings)}):"])
-        lines.extend(f"- {warning}" for warning in document.warnings)
+        trace.section(f"WARNINGS ({len(document.warnings)})")
+        trace.extend(f"- {warning}" for warning in document.warnings)
 
-    return "\n".join(lines)
+    output = trace.write()
+    return trace.render(), output
 
 
 def main() -> None:
@@ -62,7 +65,9 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        print(inspect_path(args.path))
+        text, output = inspect_path(args.path)
+        print(text, end="")
+        print(f"Trace saved: {output}")
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
 
