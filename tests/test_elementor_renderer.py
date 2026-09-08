@@ -143,6 +143,53 @@ def test_renders_auto_layout_container_text_and_shape_settings():
     assert shape["settings"]["background_color"] == "rgba(217, 217, 217, 1)"
 
 
+def test_nested_hug_container_uses_figma_width():
+    root = DesignNode(
+        kind="container",
+        source_id="1:1",
+        style=DesignStyle(layout_direction="horizontal", width_mode="fixed", width=536),
+        children=[
+            DesignNode(
+                kind="text",
+                source_id="1:2",
+                text="Morpher",
+                style=DesignStyle(width_mode="fill"),
+            ),
+            DesignNode(
+                kind="container",
+                source_id="1:3",
+                style=DesignStyle(
+                    width=88,
+                    width_mode="hug",
+                    height_mode="hug",
+                    layout_direction="horizontal",
+                    padding_top=12,
+                    padding_right=20,
+                    padding_bottom=12,
+                    padding_left=20,
+                ),
+                children=[
+                    DesignNode(
+                        kind="text",
+                        source_id="1:4",
+                        text="Continue",
+                        style=DesignStyle(width_mode="hug"),
+                    )
+                ],
+            ),
+        ],
+    )
+
+    result = render_elementor(root)
+    button_container = result["content"][0]["elements"][1]
+
+    assert button_container["settings"]["width"] == {
+        "unit": "px",
+        "size": 88,
+        "sizes": [],
+    }
+
+
 def test_elementor_ids_are_deterministic_and_valid_length():
     root = DesignNode(
         kind="container",
