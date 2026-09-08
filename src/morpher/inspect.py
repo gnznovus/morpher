@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from pathlib import Path
 
 from morpher.compiler.normalizer import normalize
@@ -42,12 +43,36 @@ def _tree_lines(node: DesignNode, prefix: str = "", is_last: bool = True, root: 
     return lines
 
 
+def _walk(node: DesignNode):
+    yield node
+    for child in node.children:
+        yield from _walk(child)
+
+
+def _summary_lines(root: DesignNode, warning_count: int) -> list[str]:
+    nodes = list(_walk(root))
+    kinds = Counter(node.kind for node in nodes)
+    source_types = Counter(node.source_type or "UNKNOWN" for node in nodes)
+
+    lines = [
+        f"Total nodes: {len(nodes)}",
+        f"Warnings: {warning_count}",
+        "Kinds: " + ", ".join(f"{kind}={count}" for kind, count in sorted(kinds.items())),
+        "Source types: "
+        + ", ".join(f"{source_type}={count}" for source_type, count in sorted(source_types.items())),
+    ]
+    return lines
+
+
 def inspect_path(path: Path) -> tuple[str, Path]:
     adapter = FigmaJsonAdapter()
     source = adapter.load(path)
     document = normalize(source)
 
     trace = Trace(path)
+    trace.section("SUMMARY")
+    trace.extend(_summary_lines(document.root, len(document.warnings)))
+
     trace.section("DESIGN IR")
     trace.extend(_tree_lines(document.root))
 
