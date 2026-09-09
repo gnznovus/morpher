@@ -74,8 +74,12 @@ def render_path(path: Path) -> tuple[Path, Path, Path, int]:
 
     # Keep the HTML renderer on raw normalized geometry for fidelity/debugging.
     # Elementor receives a compiled flow layout whenever the free-layout
-    # geometry can be represented safely without overlap.
+    # geometry can be represented safely without overlap. Preserve the source
+    # Figma viewport width as compiler metadata for fluid typography math.
+    design_viewport = document.root.style.width
     elementor_root = compile_responsive_layout(document.root)
+    elementor_root.style.width = design_viewport
+    elementor_root.style.design_viewport_width = design_viewport
     elementor = render_elementor(elementor_root, asset_sources=elementor_asset_sources)
 
     html_path.write_text(html, encoding="utf-8")
