@@ -40,16 +40,72 @@ def _is_visual(node: DesignNode) -> bool:
     return node.kind in {"image", "icon"} and _has_box(node)
 
 
+def _is_flow_visual(node: DesignNode) -> bool:
+    return _is_visual(node) and node.style.position_mode != "absolute"
+
+
 def _layout_bounds(node: DesignNode) -> tuple[float, float, float, float]:
     if node.kind == "container" and not node.style.background:
         descendant_boxes = [
             _layout_bounds(child)
             for child in node.children
-            if (_participates_in_flow(child) or _is_visual(child)) and _has_box(child)
+            if (_participates_in_flow(child) or _is_flow_visual(child)) and _has_box(child)
         ]
         if descendant_boxes:
             return _union_bounds(descendant_boxes)
     return _bounds(node)
+
+
+def _contains(outer: tuple[float, float, float, float], inner: tuple[float, float, float, float]) -> bool:
+    return outer[0] <= inner[0] and outer[1] <= inner[1] and outer[2] >= inner[2] and outer[3] >= inner[3]
+
+
+def _semantic_anchor_bounds(node: DesignNode) -> tuple[float, float, float, float]:
+    semantic_boxes = [
+        _layout_bounds(child)
+        for child in node.children
+        if _has_box(child) and _participates_in_flow(child)
+    ]
+    if semantic_boxes:
+        return _union_bounds(semantic_boxes)
+    return _bounds(node)
+
+
+def _is_independent_visual(node: DesignNode, parent: DesignNode, siblings: list[DesignNode]) -> bool:
+    if node.kind != "icon" or not _has_box(node) or not _has_box(parent):
+        return False
+
+    node_box = _bounds(node)
+    parent_box = _bounds(parent)
+    node_area = (node_box[2] - node_box[0]) * (node_box[3] - node_box[1])
+    parent_area = (parent_box[2] - parent_box[0]) * (parent_box[3] - parent_box[1])
+    if parent_area > 0 and node_area / parent_area > 0.5:
+        return True
+
+    for sibling in siblings:
+        if sibling is node or not _is_visual(sibling):
+            continue
+        if _contains(_bounds(sibling), node_box):
+            return True
+    return False
+
+
+def _mark_independent_visual_layers(node: DesignNode) -> None:
+    if not _has_box(node):
+        for child in node.children:
+            _mark_independent_visual_layers(child)
+        return
+
+    siblings = list(node.children)
+    anchor = _semantic_anchor_bounds(node) if node.kind == "container" and not node.style.background else _bounds(node)
+    anchor_x, anchor_y, _, _ = anchor
+
+    for child in siblings:
+        if _is_independent_visual(child, node, siblings):
+            child.style.position_mode = "absolute"
+            child.style.offset_x = (child.style.x or 0) - anchor_x
+            child.style.offset_y = (child.style.y or 0) - anchor_y
+        _mark_independent_visual_layers(child)
 
 
 def _overlap_area(
@@ -64,13 +120,6 @@ def _overlap_area(
 
 
 def _is_semantic_collision_node(node: DesignNode) -> bool:
-    """Return True only for nodes whose overlap should block flow compilation.
-
-    Transparent wrappers can contain both semantic copy and large decorative
-    visuals. Their union bounds are structural rather than a real semantic box,
-    so treating the wrapper itself as a collision node makes decorative assets
-    incorrectly force the whole section back to absolute positioning.
-    """
     return node.kind in {"text", "shape"} or (node.kind == "container" and bool(node.style.background))
 
 
@@ -109,9 +158,7 @@ def _same_band(
     b: DesignNode,
     boxes: dict[int, tuple[float, float, float, float]],
 ) -> bool:
-    # Visual assets keep independent flow blocks. Their source overlap is then
-    # represented by negative margins instead of an artificial flex row.
-    if _is_visual(a) or _is_visual(b):
+    if _is_flow_visual(a) or _is_flow_visual(b):
         return False
     a_box = boxes[id(a)]
     b_box = boxes[id(b)]
@@ -220,7 +267,7 @@ def _compile_free_layout(node: DesignNode) -> DesignNode:
     flow_children = [
         child
         for child in children
-        if _has_box(child) and (_participates_in_flow(child) or _is_visual(child))
+        if _has_box(child) and (_participates_in_flow(child) or _is_flow_visual(child))
     ]
     if not flow_children:
         return node
@@ -321,11 +368,13 @@ def _compile_node(node: DesignNode) -> DesignNode:
 
 
 def compile_responsive_layout(root: DesignNode) -> DesignNode:
-    """Compile desktop free-layout content into normal flow.
+    """Compile desktop free-layout content into normal flow plus explicit layers.
 
-    Auto Layout passes through unchanged. Free-layout semantic content and visual
-    assets keep their source desktop x/width and vertical relationships through
-    proportional widths and margins. Visual overlaps are preserved with negative
-    margins; semantic collisions can still fall back to specialized positioning.
+    Normal content and compositional visuals use flow with proportional widths
+    and margins. Icons that are contained inside another visual or dominate a
+    transparent wrapper are classified as independent layers so they no longer
+    consume document flow.
     """
-    return _compile_node(deepcopy(root))
+    compiled = deepcopy(root)
+    _mark_independent_visual_layers(compiled)
+    return _compile_node(compiled)
