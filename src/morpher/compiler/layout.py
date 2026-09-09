@@ -89,13 +89,11 @@ def _layer_anchor_bounds(node: DesignNode) -> tuple[float, float, float, float]:
 def _is_independent_visual(node: DesignNode, parent: DesignNode, siblings: list[DesignNode]) -> bool:
     if node.kind != "icon" or not _has_box(node) or not _has_box(parent):
         return False
-
     node_box = _bounds(node)
     parent_box = _bounds(parent)
     parent_area = _area(parent_box)
     if parent_area > 0 and _area(node_box) / parent_area > 0.5:
         return True
-
     for sibling in siblings:
         if sibling is node or not _is_visual(sibling):
             continue
@@ -109,10 +107,8 @@ def _mark_independent_visual_layers(node: DesignNode) -> None:
         for child in node.children:
             _mark_independent_visual_layers(child)
         return
-
     siblings = list(node.children)
     anchor_x, anchor_y, _, _ = _layer_anchor_bounds(node)
-
     for child in siblings:
         if _is_independent_visual(child, node, siblings):
             child.style.position_mode = "absolute"
@@ -158,8 +154,6 @@ def _vertical_overlap(a: tuple[float, float, float, float], b: tuple[float, floa
 
 
 def _same_band(a: DesignNode, b: DesignNode, boxes: dict[int, tuple[float, float, float, float]]) -> bool:
-    # A large media item should not pull nearby semantic content into a row,
-    # but peer media and small vector/navigation items may form real rows.
     if (a.kind == "image") != (b.kind == "image"):
         return False
     a_box = boxes[id(a)]
@@ -185,21 +179,14 @@ def _bands(children: list[DesignNode], boxes: dict[int, tuple[float, float, floa
     return bands
 
 
-def _horizontal_regions(
-    children: list[DesignNode],
-    boxes: dict[int, tuple[float, float, float, float]],
-    parent_width: float,
-) -> list[list[DesignNode]]:
-    """Find separated X clusters whose vertical spans overlap substantially."""
+def _horizontal_regions(children: list[DesignNode], boxes: dict[int, tuple[float, float, float, float]], parent_width: float) -> list[list[DesignNode]]:
     if len(children) < 4 or parent_width <= 0:
         return []
-
     tolerance = max(8.0, parent_width * 0.005)
     ordered = sorted(children, key=lambda child: (boxes[id(child)][0], boxes[id(child)][1]))
     regions: list[list[DesignNode]] = []
     current: list[DesignNode] = []
     current_right: float | None = None
-
     for child in ordered:
         left = boxes[id(child)][0]
         right = boxes[id(child)][2]
@@ -211,10 +198,8 @@ def _horizontal_regions(
         current_right = right if current_right is None else max(current_right, right)
     if current:
         regions.append(current)
-
     if len(regions) != 2 or any(len(region) < 2 for region in regions):
         return []
-
     first_box = _union_bounds([boxes[id(child)] for child in regions[0]])
     second_box = _union_bounds([boxes[id(child)] for child in regions[1]])
     overlap = _vertical_overlap(first_box, second_box)
@@ -249,7 +234,12 @@ def _flow_style(style: DesignStyle, *, width_percent: float | None = None, margi
 
 
 def _make_child_flow(child: DesignNode, *, width_percent: float | None = None, margin_top_percent: float | None = None, margin_left_percent: float | None = None) -> None:
+    intrinsic_text = child.kind == "text" and (child.style.text_auto_resize or "").upper() == "WIDTH_AND_HEIGHT"
+    if intrinsic_text:
+        width_percent = None
     child.style = _flow_style(child.style, width_percent=width_percent, margin_top_percent=margin_top_percent, margin_left_percent=margin_left_percent)
+    if intrinsic_text:
+        child.style.width_mode = "hug"
     if child.kind == "container" and child.style.layout_direction is None:
         child.style.layout_direction = "vertical"
         child.style.height_mode = "hug"
@@ -275,58 +265,46 @@ def _flow_container_style(node: DesignNode, child_bounds: list[tuple[float, floa
     return style
 
 
-def _compile_horizontal_regions(
-    node: DesignNode,
-    regions: list[list[DesignNode]],
-    boxes: dict[int, tuple[float, float, float, float]],
-    original_child_bounds: list[tuple[float, float, float, float]],
-    design_viewport_width: float,
-) -> DesignNode:
+def _compile_horizontal_regions(node: DesignNode, regions: list[list[DesignNode]], boxes: dict[int, tuple[float, float, float, float]], original_child_bounds: list[tuple[float, float, float, float]], design_viewport_width: float) -> DesignNode:
     px, _, _, _ = _bounds(node)
     parent_width = _bounds(node)[2] - px
     region_boxes = [_union_bounds([boxes[id(child)] for child in region]) for region in regions]
     row_left = min(box[0] for box in region_boxes)
     row_top = min(box[1] for box in region_boxes)
     row_children: list[DesignNode] = []
-
     for index, (region, box) in enumerate(zip(regions, region_boxes)):
         x1, y1, x2, y2 = box
-        region_node = DesignNode(
-            kind="container",
-            name=f"{node.name or 'section'} region {index + 1}",
-            source_id=f"{node.source_id or 'node'}::region-{index + 1}",
-            style=DesignStyle(
-                x=x1,
-                y=y1,
-                width=x2 - x1,
-                height=y2 - y1,
-                width_percent=_percent(x2 - x1, design_viewport_width),
-                margin_top_percent=_percent(y1 - row_top, parent_width),
-            ),
-            children=region,
-        )
+        region_node = DesignNode(kind="container", name=f"{node.name or 'section'} region {index + 1}", source_id=f"{node.source_id or 'node'}::region-{index + 1}", style=DesignStyle(x=x1, y=y1, width=x2 - x1, height=y2 - y1, width_percent=_percent(x2 - x1, design_viewport_width), margin_top_percent=_percent(y1 - row_top, parent_width)), children=region)
         row_children.append(region_node)
-
     gap = region_boxes[1][0] - region_boxes[0][2]
-    row = DesignNode(
-        kind="container",
-        name=f"{node.name or 'section'} composition row",
-        source_id=f"{node.source_id or 'node'}::composition-row",
-        style=DesignStyle(
-            layout_direction="horizontal",
-            width_mode="fill",
-            height_mode="hug",
-            gap=max(0.0, gap),
-            counter_axis_align="min",
-            margin_left_percent=_percent(row_left - px, parent_width),
-        ),
-        children=row_children,
-    )
+    row = DesignNode(kind="container", name=f"{node.name or 'section'} composition row", source_id=f"{node.source_id or 'node'}::composition-row", style=DesignStyle(layout_direction="horizontal", width_mode="fill", height_mode="hug", gap=max(0.0, gap), counter_axis_align="min", margin_left_percent=_percent(row_left - px, parent_width)), children=row_children)
 
     flow_ids = {id(child) for region in regions for child in region}
     deferred_children = [child for child in node.children if id(child) not in flow_ids]
+    remaining_deferred: list[DesignNode] = []
+    for child in deferred_children:
+        if child.style.position_mode != "absolute" or not _has_box(child):
+            remaining_deferred.append(child)
+            continue
+        child_box = _bounds(child)
+        child_area = _area(child_box)
+        center_x = (child_box[0] + child_box[2]) / 2
+        center_y = (child_box[1] + child_box[3]) / 2
+        anchored = False
+        for region_node, region_box in zip(row_children, region_boxes):
+            region_area = _area(region_box)
+            center_inside = region_box[0] <= center_x <= region_box[2] and region_box[1] <= center_y <= region_box[3]
+            if center_inside and region_area > 0 and child_area / region_area <= 0.25:
+                child.style.offset_x = child_box[0] - region_box[0]
+                child.style.offset_y = child_box[1] - region_box[1]
+                region_node.children.append(child)
+                anchored = True
+                break
+        if not anchored:
+            remaining_deferred.append(child)
+
     node.style = _flow_container_style(node, original_child_bounds)
-    node.children = [row, *deferred_children]
+    node.children = [row, *remaining_deferred]
     return node
 
 
@@ -344,10 +322,6 @@ def _compile_free_layout(node: DesignNode, design_viewport_width: float) -> Desi
     if len(flow_children) == 1:
         child = flow_children[0]
         box = boxes[id(child)]
-        # A structural wrapper may itself contain the real free-layout composition.
-        # Compile that inner geometry before converting the wrapper into parent flow;
-        # otherwise setting it to a vertical container erases the chance to infer
-        # rows/regions from its original Figma coordinates.
         if child.kind == "container" and child.style.layout_direction is None:
             child = _compile_node(child, design_viewport_width)
             flow_children[0] = child
@@ -357,11 +331,9 @@ def _compile_free_layout(node: DesignNode, design_viewport_width: float) -> Desi
         return node
     if _has_real_overlap(flow_children, boxes):
         return node
-
     regions = _horizontal_regions(flow_children, boxes, parent_width)
     if regions:
         return _compile_horizontal_regions(node, regions, boxes, original_child_bounds, design_viewport_width)
-
     bands = _bands(flow_children, boxes)
     if not bands:
         return node
