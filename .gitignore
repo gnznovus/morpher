@@ -36,6 +36,14 @@ mysql/
 mysql-data/
 db-data/
 
+# Local Elementor fidelity fixtures
+# Font binaries stay local; Morpher only mounts them into the testbed.
+testbed/fonts/*.woff
+testbed/fonts/*.woff2
+testbed/fonts/*.eot
+testbed/fonts/*.ttf
+testbed/fonts/*.otf
+
 # Logs / temp
 *.log
 *.tmp
