@@ -30,9 +30,8 @@ def test_compiles_free_layout_into_vertical_bands_and_horizontal_row():
     assert row.style.width_mode == "fill"
     assert len(row.children) == 2
     statement, body = row.children
-    assert statement.style.width_percent is not None
-    assert body.style.width_percent is not None
-    assert round(statement.style.width_percent + body.style.width_percent, 6) == 100
+    assert round(statement.style.width_percent or 0, 3) == 46.667
+    assert round(body.style.width_percent or 0, 3) == 35.0
     assert statement.style.x is None
     assert body.style.x is None
     elementor = render_elementor(compiled)
@@ -45,8 +44,8 @@ def test_compiles_free_layout_into_vertical_bands_and_horizontal_row():
     body_settings = row_json["elements"][1]["settings"]
     assert "_position" not in statement_settings
     assert "position" not in body_settings
-    assert statement_settings["_element_custom_width"]["unit"] == "%"
-    assert body_settings["width"]["unit"] == "%"
+    assert statement_settings["_element_custom_width"]["unit"] == "vw"
+    assert body_settings["width"]["unit"] == "vw"
 
 
 def test_discovery_visuals_join_flow_without_forcing_text_absolute():
