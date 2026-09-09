@@ -3,7 +3,7 @@ import pytest
 from morpher.ir.nodes import DesignNode
 from morpher.ir.styles import DesignStyle
 from morpher.renderers.elementor import render_elementor
-from morpher.typography import fluid_font_size, minimum_font_size
+from morpher.typography import fluid_font_size, minimum_font_size, relative_typography_value
 
 
 def test_mobile_floor_is_dynamic_from_figma_font_size():
@@ -18,9 +18,8 @@ def test_magic_clamp_is_derived_from_figma_viewport_and_font_size():
     assert scale is not None
     assert scale.minimum_rem == pytest.approx(1.5625)
     assert scale.maximum_rem == pytest.approx(3.125)
-    assert scale.intercept_rem == pytest.approx(1.183252, abs=1e-6)
-    assert scale.slope_vw == pytest.approx(1.618123, abs=1e-6)
-    assert scale.css() == "clamp(1.5625rem, calc(1.1833rem + 1.6181vw), 3.125rem)"
+    assert scale.preferred_vw == pytest.approx(2.6041667, abs=1e-6)
+    assert scale.css() == "clamp(1.5625rem, 2.6042vw, 3.125rem)"
 
 
 def test_magic_clamp_changes_when_design_viewport_changes():
@@ -31,7 +30,13 @@ def test_magic_clamp_changes_when_design_viewport_changes():
     assert wide.maximum_rem == compact.maximum_rem == 4
 
 
-def test_elementor_uses_custom_unit_for_dynamic_font_size():
+def test_relative_typography_uses_font_size_as_scale():
+    assert relative_typography_value(60, 50) == pytest.approx(1.2)
+    assert relative_typography_value(5, 50) == pytest.approx(0.1)
+    assert relative_typography_value(5, 0) is None
+
+
+def test_elementor_uses_fluid_font_size_and_relative_typography_siblings():
     root = DesignNode(
         kind="container",
         name="Fluid Type",
@@ -42,14 +47,24 @@ def test_elementor_uses_custom_unit_for_dynamic_font_size():
                 kind="text",
                 source_id="fluid:heading",
                 text="MAGIC CLAMP",
-                style=DesignStyle(font_size=50),
+                style=DesignStyle(font_size=50, line_height=60, letter_spacing=5),
             )
         ],
     )
     heading = render_elementor(root)["content"][0]["elements"][0]
     assert heading["settings"]["typography_font_size"] == {
         "unit": "custom",
-        "size": "clamp(1.5625rem, calc(1.1833rem + 1.6181vw), 3.125rem)",
+        "size": "clamp(1.5625rem, 2.6042vw, 3.125rem)",
+        "sizes": [],
+    }
+    assert heading["settings"]["typography_line_height"] == {
+        "unit": "em",
+        "size": pytest.approx(1.2),
+        "sizes": [],
+    }
+    assert heading["settings"]["typography_letter_spacing"] == {
+        "unit": "em",
+        "size": pytest.approx(0.1),
         "sizes": [],
     }
 
