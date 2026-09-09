@@ -81,7 +81,7 @@ def test_compiles_free_layout_into_vertical_bands_and_horizontal_row():
     assert body_settings["width"]["unit"] == "%"
 
 
-def test_decorative_media_overlap_does_not_force_text_absolute():
+def test_discovery_primary_visuals_join_flow_without_forcing_text_absolute():
     root = DesignNode(
         kind="container",
         name="Discovery",
@@ -129,6 +129,11 @@ def test_decorative_media_overlap_does_not_force_text_absolute():
                 text="– LOREM IPSUM DOLOR SIT AMET",
                 style=DesignStyle(x=972, y=1375, width=732, height=360),
             ),
+            DesignNode(
+                kind="icon",
+                source_id="45:5277",
+                style=DesignStyle(x=972, y=1172, width=589.82, height=141.57),
+            ),
         ],
     )
 
@@ -140,12 +145,31 @@ def test_decorative_media_overlap_does_not_force_text_absolute():
     assert section["settings"]["flex_direction"] == "column"
     assert section["settings"]["padding"]["top"] == "99"
 
-    label, statement, body = compiled.children[:3]
+    label, hero, muu, statement, body = compiled.children[:5]
+    play = compiled.children[5]
+
+    assert label.kind == "text"
+    assert hero.kind == "image"
+    assert muu.kind == "icon"
+    assert statement.kind == "text"
+    assert body.kind == "container"
+    assert play.source_id == "45:5273"
+
     assert round(label.style.width_percent or 0, 3) == 8.333
     assert round(label.style.margin_left_percent or 0, 3) == 9.323
+
+    assert round(hero.style.width_percent or 0, 3) == 62.396
+    assert round(hero.style.margin_left_percent or 0, 3) == 0
+    assert round(hero.style.margin_top_percent or 0, 3) == 0.833
+
+    assert round(muu.style.width_percent or 0, 3) == 30.720
+    assert round(muu.style.margin_left_percent or 0, 3) == 50.625
+    assert round(muu.style.margin_top_percent or 0, 3) == -31.875
+
     assert round(statement.style.width_percent or 0, 3) == 38.125
     assert round(statement.style.margin_left_percent or 0, 3) == 50.625
-    assert round(statement.style.margin_top_percent or 0, 3) == 14.583
+    assert round(statement.style.margin_top_percent or 0, 3) == 3.199
+
     assert round(body.style.width_percent or 0, 3) == 52.760
     assert round(body.style.margin_left_percent or 0, 3) == 25.833
     assert round(body.style.margin_top_percent or 0, 3) == 4.323
@@ -162,11 +186,16 @@ def test_decorative_media_overlap_does_not_force_text_absolute():
     for heading in rendered_headings:
         assert "_position" not in heading["settings"]
 
-    statement_settings = section["elements"][1]["settings"]
-    body_settings = section["elements"][2]["settings"]
+    hero_settings = section["elements"][1]["settings"]
+    muu_settings = section["elements"][2]["settings"]
+    statement_settings = section["elements"][3]["settings"]
+    body_settings = section["elements"][4]["settings"]
+
+    assert hero_settings["_element_custom_width"]["unit"] == "%"
+    assert hero_settings["_margin"]["top"] == str(hero.style.margin_top_percent)
+    assert muu_settings["_element_custom_width"]["unit"] == "%"
+    assert muu_settings["_margin"]["top"] == str(muu.style.margin_top_percent)
     assert statement_settings["_margin"]["unit"] == "%"
-    assert statement_settings["_margin"]["top"] == str(statement.style.margin_top_percent)
-    assert body_settings["margin"]["unit"] == "%"
     assert body_settings["margin"]["left"] == str(body.style.margin_left_percent)
 
 
