@@ -80,10 +80,17 @@ def test_discovery_visuals_join_flow_without_forcing_text_absolute():
     assert section["settings"]["padding"]["top"] == "99"
 
     assert len(compiled.children) == 5
-    label, hero, muu, play, statement = compiled.children
+    label, hero, muu, play_statement_row, body = compiled.children
     assert label.kind == "text"
     assert hero.source_id == "45:5272"
     assert muu.source_id == "45:5277"
+    assert play_statement_row.kind == "container"
+    assert play_statement_row.source_id == "45:5267::row-4"
+    assert play_statement_row.style.layout_direction == "horizontal"
+    assert body.source_id == "45:5269"
+
+    assert len(play_statement_row.children) == 2
+    play, statement = play_statement_row.children
     assert play.source_id == "45:5273"
     assert statement.source_id == "45:5276"
 
@@ -95,11 +102,8 @@ def test_discovery_visuals_join_flow_without_forcing_text_absolute():
     assert round(muu.style.width_percent or 0, 3) == 30.720
     assert round(muu.style.margin_left_percent or 0, 3) == 50.625
     assert round(muu.style.margin_top_percent or 0, 3) == -31.875
-    assert round(play.style.width_percent or 0, 3) == 7.5
-    assert round(play.style.margin_left_percent or 0, 3) == 26.562
-    assert round(play.style.margin_top_percent or 0, 3) < 0
-    assert round(statement.style.width_percent or 0, 3) == 38.125
-    assert round(statement.style.margin_left_percent or 0, 3) == 50.625
+    assert round(body.style.width_percent or 0, 3) == 64.219
+    assert round(body.style.margin_left_percent or 0, 3) == 23.021
 
     rendered_headings = []
     stack = list(section["elements"])
@@ -112,11 +116,13 @@ def test_discovery_visuals_join_flow_without_forcing_text_absolute():
     for heading in rendered_headings:
         assert "_position" not in heading["settings"]
 
-    rendered_images = [element for element in section["elements"] if element.get("widgetType") == "image"]
-    assert len(rendered_images) == 3
-    for image in rendered_images:
-        assert "_position" not in image["settings"]
-        assert image["settings"]["_element_custom_width"]["unit"] == "%"
+    row_json = section["elements"][3]
+    assert row_json["settings"]["flex_direction"] == "row"
+    assert "position" not in row_json["settings"]
+    assert row_json["elements"][0]["widgetType"] == "image"
+    assert row_json["elements"][1]["widgetType"] == "heading"
+    assert "_position" not in row_json["elements"][0]["settings"]
+    assert "_position" not in row_json["elements"][1]["settings"]
 
 
 def test_keeps_strongly_layered_free_layout_for_specialized_positioning():
