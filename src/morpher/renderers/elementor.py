@@ -65,6 +65,24 @@ def _apply_flow_margin(settings: dict, style: DesignStyle, *, container: bool) -
 
 
 def _apply_free_layout_geometry(settings: dict, style: DesignStyle, parent_style: DesignStyle | None, *, container: bool) -> None:
+    if style.position_mode == "absolute":
+        settings["position" if container else "_position"] = "absolute"
+        settings["_offset_orientation_h"] = "start"
+        settings["_offset_orientation_v"] = "start"
+        if style.offset_x is not None:
+            settings["_offset_x"] = _size("px", style.offset_x)
+        if style.offset_y is not None:
+            settings["_offset_y"] = _size("px", style.offset_y)
+        if style.width is not None:
+            if container:
+                settings["width"] = _size("px", style.width)
+            else:
+                settings["_element_width"] = "initial"
+                settings["_element_custom_width"] = _size("px", style.width)
+        if style.height is not None and container:
+            settings["min_height"] = _size("px", style.height)
+        return
+
     if parent_style is None:
         if style.layout_direction is None:
             if style.width is not None:
