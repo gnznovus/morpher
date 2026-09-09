@@ -2,15 +2,15 @@ import hashlib
 
 from morpher.ir.nodes import DesignNode
 from morpher.ir.styles import DesignStyle
+from morpher.typography import fluid_font_size
 
 
 def _element_id(node: DesignNode, path: str) -> str:
-    """Return a stable 8-character Elementor element id for an IR node."""
     identity = f"{node.source_id or ''}|{node.kind}|{path}"
     return hashlib.sha1(identity.encode("utf-8")).hexdigest()[:8]
 
 
-def _size(unit: str, value: float) -> dict:
+def _size(unit: str, value) -> dict:
     return {"unit": unit, "size": value, "sizes": []}
 
 
@@ -82,7 +82,6 @@ def _apply_free_layout_geometry(settings: dict, style: DesignStyle, parent_style
         if style.height is not None and container:
             settings["min_height"] = _size("px", style.height)
         return
-
     if parent_style is None:
         if style.layout_direction is None:
             if style.width is not None:
@@ -151,11 +150,10 @@ def _container_settings(style: DesignStyle, parent_style: DesignStyle | None = N
 
 
 def _elementor_text(value: str | None) -> str:
-    """Preserve authored Figma line breaks in Elementor text fields."""
     return (value or "").replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
 
 
-def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None) -> dict:
+def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None, *, design_viewport: float | None = None) -> dict:
     style = node.style
     settings: dict = {"title": _elementor_text(node.text)}
     has_typography = any(value is not None for value in (style.font_family, style.font_weight, style.font_size, style.line_height, style.letter_spacing))
@@ -167,7 +165,8 @@ def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None)
         if style.font_weight is not None:
             settings["typography_font_weight"] = str(style.font_weight)
         if style.font_size is not None:
-            settings["typography_font_size"] = _size("px", style.font_size)
+            fluid = fluid_font_size(style.font_size, design_viewport) if design_viewport is not None else None
+            settings["typography_font_size"] = _size("custom", fluid.css()) if fluid is not None else _size("px", style.font_size)
         if style.line_height is not None:
             settings["typography_line_height"] = _size("px", style.line_height)
         if style.letter_spacing is not None:
@@ -184,8 +183,8 @@ def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None)
     return settings
 
 
-def _render_heading(node: DesignNode, path: str, parent_style: DesignStyle | None = None) -> dict:
-    return {"id": _element_id(node, path), "settings": _heading_settings(node, parent_style), "elements": [], "isInner": False, "widgetType": "heading", "elType": "widget"}
+def _render_heading(node: DesignNode, path: str, parent_style: DesignStyle | None = None, *, design_viewport: float | None = None) -> dict:
+    return {"id": _element_id(node, path), "settings": _heading_settings(node, parent_style, design_viewport=design_viewport), "elements": [], "isInner": False, "widgetType": "heading", "elType": "widget"}
 
 
 def _render_shape(node: DesignNode, path: str, parent_style: DesignStyle | None = None) -> dict:
@@ -205,15 +204,15 @@ def _render_asset_widget(node: DesignNode, path: str, parent_style: DesignStyle 
     return {"id": _element_id(node, path), "settings": settings, "elements": [], "isInner": False, "widgetType": "image", "elType": "widget"}
 
 
-def _render_container(node: DesignNode, path: str, parent_style: DesignStyle | None = None, asset_sources: dict[str, str] | None = None) -> dict:
+def _render_container(node: DesignNode, path: str, parent_style: DesignStyle | None = None, asset_sources: dict[str, str] | None = None, *, design_viewport: float | None = None) -> dict:
     asset_sources = asset_sources or {}
     elements = []
     for index, child in enumerate(node.children):
         child_path = f"{path}.{index}"
         if child.kind == "container":
-            elements.append(_render_container(child, child_path, node.style, asset_sources))
+            elements.append(_render_container(child, child_path, node.style, asset_sources, design_viewport=design_viewport))
         elif child.kind == "text":
-            elements.append(_render_heading(child, child_path, node.style))
+            elements.append(_render_heading(child, child_path, node.style, design_viewport=design_viewport))
         elif child.kind == "shape":
             elements.append(_render_shape(child, child_path, node.style))
         elif child.kind in {"image", "icon"}:
@@ -224,7 +223,7 @@ def _render_container(node: DesignNode, path: str, parent_style: DesignStyle | N
 
 
 def render_elementor(root: DesignNode, asset_sources: dict[str, str] | None = None) -> dict:
-    """Render portable Elementor JSON from Morpher's shared Design IR."""
     if root.kind != "container":
         raise ValueError("Elementor template root must be a container")
-    return {"content": [_render_container(root, "0", asset_sources=asset_sources)], "page_settings": [], "version": "0.4", "title": root.name or "Morpher Template", "type": "container"}
+    design_viewport = root.style.width
+    return {"content": [_render_container(root, "0", asset_sources=asset_sources, design_viewport=design_viewport)], "page_settings": [], "version": "0.4", "title": root.name or "Morpher Template", "type": "container"}
