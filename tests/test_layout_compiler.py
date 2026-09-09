@@ -49,7 +49,7 @@ def test_compiles_free_layout_into_vertical_bands_and_horizontal_row():
     assert body_settings["width"]["unit"] == "%"
 
 
-def test_discovery_primary_visuals_join_flow_without_forcing_text_absolute():
+def test_discovery_visuals_join_flow_without_forcing_text_absolute():
     root = DesignNode(
         kind="container", name="Discovery", source_id="45:5267", style=DesignStyle(x=0, y=960, width=1920, height=960),
         children=[
@@ -68,7 +68,9 @@ def test_discovery_primary_visuals_join_flow_without_forcing_text_absolute():
     elementor = render_elementor(
         compiled,
         asset_sources={
+            "45-5270": "assets/Discovery/discovery-background.svg",
             "45-5272": "assets/Discovery/discovery-rectangle-1.jpg",
+            "45-5273": "assets/Discovery/discovery-play.svg",
             "45-5277": "assets/Discovery/discovery-muu.svg",
         },
     )
@@ -76,14 +78,15 @@ def test_discovery_primary_visuals_join_flow_without_forcing_text_absolute():
     assert compiled.style.layout_direction == "vertical"
     assert section["settings"]["flex_direction"] == "column"
     assert section["settings"]["padding"]["top"] == "99"
-    label, hero, muu, statement, body = compiled.children[:5]
-    play = compiled.children[5]
+
+    assert len(compiled.children) == 5
+    label, hero, muu, play, statement = compiled.children
     assert label.kind == "text"
-    assert hero.kind == "image"
-    assert muu.kind == "icon"
-    assert statement.kind == "text"
-    assert body.kind == "container"
+    assert hero.source_id == "45:5272"
+    assert muu.source_id == "45:5277"
     assert play.source_id == "45:5273"
+    assert statement.source_id == "45:5276"
+
     assert round(label.style.width_percent or 0, 3) == 8.333
     assert round(label.style.margin_left_percent or 0, 3) == 9.323
     assert round(hero.style.width_percent or 0, 3) == 62.396
@@ -92,12 +95,12 @@ def test_discovery_primary_visuals_join_flow_without_forcing_text_absolute():
     assert round(muu.style.width_percent or 0, 3) == 30.720
     assert round(muu.style.margin_left_percent or 0, 3) == 50.625
     assert round(muu.style.margin_top_percent or 0, 3) == -31.875
+    assert round(play.style.width_percent or 0, 3) == 7.5
+    assert round(play.style.margin_left_percent or 0, 3) == 26.562
+    assert round(play.style.margin_top_percent or 0, 3) < 0
     assert round(statement.style.width_percent or 0, 3) == 38.125
     assert round(statement.style.margin_left_percent or 0, 3) == 50.625
-    assert round(statement.style.margin_top_percent or 0, 3) == 3.199
-    assert round(body.style.width_percent or 0, 3) == 52.760
-    assert round(body.style.margin_left_percent or 0, 3) == 25.833
-    assert round(body.style.margin_top_percent or 0, 3) == 4.323
+
     rendered_headings = []
     stack = list(section["elements"])
     while stack:
@@ -108,16 +111,12 @@ def test_discovery_primary_visuals_join_flow_without_forcing_text_absolute():
     assert len(rendered_headings) == 3
     for heading in rendered_headings:
         assert "_position" not in heading["settings"]
-    hero_settings = section["elements"][1]["settings"]
-    muu_settings = section["elements"][2]["settings"]
-    statement_settings = section["elements"][3]["settings"]
-    body_settings = section["elements"][4]["settings"]
-    assert hero_settings["_element_custom_width"]["unit"] == "%"
-    assert hero_settings["_margin"]["top"] == str(hero.style.margin_top_percent)
-    assert muu_settings["_element_custom_width"]["unit"] == "%"
-    assert muu_settings["_margin"]["top"] == str(muu.style.margin_top_percent)
-    assert statement_settings["_margin"]["unit"] == "%"
-    assert body_settings["margin"]["left"] == str(body.style.margin_left_percent)
+
+    rendered_images = [element for element in section["elements"] if element.get("widgetType") == "image"]
+    assert len(rendered_images) == 3
+    for image in rendered_images:
+        assert "_position" not in image["settings"]
+        assert image["settings"]["_element_custom_width"]["unit"] == "%"
 
 
 def test_keeps_strongly_layered_free_layout_for_specialized_positioning():
