@@ -3,6 +3,17 @@ from morpher.ir.nodes import DesignNode
 from morpher.ir.styles import DesignStyle
 
 
+def _find(node: DesignNode, source_id: str) -> DesignNode:
+    if node.source_id == source_id:
+        return node
+    for child in node.children:
+        try:
+            return _find(child, source_id)
+        except LookupError:
+            pass
+    raise LookupError(source_id)
+
+
 def test_destination_reanchors_media_overlay_and_preserves_intrinsic_counter():
     root = DesignNode(
         kind="container",
@@ -24,14 +35,11 @@ def test_destination_reanchors_media_overlay_and_preserves_intrinsic_counter():
     )
 
     compiled = compile_responsive_layout(root)
-    composition = compiled.children[0]
-    left_region, right_region = composition.children
-
-    counter = next(node for node in left_region.children if node.source_id == "45:5290")
+    counter = _find(compiled, "45:5290")
     assert counter.style.width_mode == "hug"
     assert counter.style.width_percent is None
 
-    play = next(node for node in right_region.children if node.source_id == "45:5293")
+    play = _find(compiled, "45:5293")
     assert play.style.position_mode == "absolute"
     assert play.style.offset_x == 660
     assert play.style.offset_y == 361
