@@ -8,6 +8,7 @@ from pathlib import Path
 from morpher.assets import semantic_asset_names
 from morpher.compiler.layout import compile_responsive_layout
 from morpher.compiler.normalizer import normalize
+from morpher.compiler.overlays import resolve_inferred_region_overlays
 from morpher.inputs.figma_json import FigmaJsonAdapter
 from morpher.ir.nodes import DesignNode
 from morpher.renderers.css import render_css
@@ -78,6 +79,7 @@ def render_path(path: Path) -> tuple[Path, Path, Path, int]:
     # Figma viewport width as compiler metadata for fluid typography math.
     design_viewport = document.root.style.width
     elementor_root = compile_responsive_layout(document.root)
+    elementor_root = resolve_inferred_region_overlays(elementor_root, design_viewport)
     elementor_root.style.width = design_viewport
     elementor_root.style.design_viewport_width = design_viewport
     elementor = render_elementor(elementor_root, asset_sources=elementor_asset_sources)
