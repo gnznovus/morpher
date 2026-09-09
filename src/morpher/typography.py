@@ -46,19 +46,15 @@ def fluid_font_size(
     The desktop Figma font size and viewport are inputs, not hard-coded design
     assumptions. Morpher supplies only a generic mobile anchor and readability
     policy. The fixed terms are emitted in rem while the interpolation remains
-    viewport-relative through vw.
+    viewport-relative through vw. Type that should not shrink stays on the
+    renderer's fixed-size path instead of receiving a meaningless clamp.
     """
     if desktop_font_size <= 0 or desktop_viewport <= mobile_viewport or root_font_size <= 0:
         return None
 
     mobile_font_size = minimum_font_size(desktop_font_size)
     if mobile_font_size == desktop_font_size:
-        return FluidTypeScale(
-            minimum_rem=desktop_font_size / root_font_size,
-            intercept_rem=desktop_font_size / root_font_size,
-            slope_vw=0.0,
-            maximum_rem=desktop_font_size / root_font_size,
-        )
+        return None
 
     slope_px_per_viewport_px = (desktop_font_size - mobile_font_size) / (desktop_viewport - mobile_viewport)
     intercept_px = mobile_font_size - slope_px_per_viewport_px * mobile_viewport
