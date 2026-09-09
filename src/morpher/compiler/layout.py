@@ -63,11 +63,22 @@ def _overlap_area(
     return width * height
 
 
+def _is_semantic_collision_node(node: DesignNode) -> bool:
+    """Return True only for nodes whose overlap should block flow compilation.
+
+    Transparent wrappers can contain both semantic copy and large decorative
+    visuals. Their union bounds are structural rather than a real semantic box,
+    so treating the wrapper itself as a collision node makes decorative assets
+    incorrectly force the whole section back to absolute positioning.
+    """
+    return node.kind in {"text", "shape"} or (node.kind == "container" and bool(node.style.background))
+
+
 def _has_real_overlap(
     children: list[DesignNode],
     boxes: dict[int, tuple[float, float, float, float]],
 ) -> bool:
-    semantic_children = [child for child in children if not _is_visual(child)]
+    semantic_children = [child for child in children if _is_semantic_collision_node(child)]
     for index, child in enumerate(semantic_children):
         box = boxes[id(child)]
         area = max(0.0, box[2] - box[0]) * max(0.0, box[3] - box[1])
