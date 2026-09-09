@@ -136,10 +136,10 @@ def test_authored_break_is_preserved_without_overriding_bounded_width():
     )
     heading = render_elementor(root)["content"][0]["elements"][0]
     assert heading["settings"]["title"] == "WELCOME TO MUU<br>THIS SECOND LINE IS STILL ALLOWED TO WRAP NATURALLY"
-    assert heading["settings"]["_element_custom_width"] == {"unit": "%", "size": 42.5, "sizes": []}
+    assert heading["settings"]["_element_custom_width"] == {"unit": "vw", "size": 42.5, "sizes": []}
 
 
-def test_authored_break_does_not_imply_full_width():
+def test_compiled_width_is_viewport_relative_and_independent_of_authored_breaks():
     bounded = DesignNode(
         kind="container",
         source_id="break:bounded",
@@ -155,4 +155,4 @@ def test_authored_break_does_not_imply_full_width():
     bounded_settings = render_elementor(bounded)["content"][0]["elements"][0]["settings"]
     natural_settings = render_elementor(natural)["content"][0]["elements"][0]["settings"]
     assert bounded_settings["_element_custom_width"] == natural_settings["_element_custom_width"]
-    assert bounded_settings["_element_custom_width"]["size"] == 38.125
+    assert bounded_settings["_element_custom_width"] == {"unit": "vw", "size": 38.125, "sizes": []}
