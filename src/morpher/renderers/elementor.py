@@ -150,9 +150,14 @@ def _container_settings(style: DesignStyle, parent_style: DesignStyle | None = N
     return settings
 
 
+def _elementor_text(value: str | None) -> str:
+    """Preserve authored Figma line breaks in Elementor text fields."""
+    return (value or "").replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
+
+
 def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None) -> dict:
     style = node.style
-    settings: dict = {"title": node.text or ""}
+    settings: dict = {"title": _elementor_text(node.text)}
     has_typography = any(value is not None for value in (style.font_family, style.font_weight, style.font_size, style.line_height, style.letter_spacing))
     if has_typography:
         settings["header_size"] = "div"
