@@ -133,6 +133,48 @@ def test_discovery_visuals_join_flow_without_forcing_text_absolute():
     assert backdrop_json["settings"]["_offset_y"]["size"] == -533
 
 
+def test_nested_wrapper_is_compiled_before_parent_flow_erases_geometry():
+    inner = DesignNode(
+        kind="container",
+        name="Destination",
+        source_id="45:5282",
+        style=DesignStyle(x=0, y=1920, width=1920, height=960),
+        children=[
+            DesignNode(kind="text", source_id="45:5284", text="Destination.", style=DesignStyle(x=179, y=2091, width=184, height=36)),
+            DesignNode(kind="text", source_id="45:5285", text="Heading", style=DesignStyle(x=179, y=2148, width=716, height=120)),
+            DesignNode(kind="text", source_id="45:5286", text="Intro", style=DesignStyle(x=179, y=2289, width=701, height=86)),
+            DesignNode(kind="text", source_id="45:5287", text="Body", style=DesignStyle(x=179, y=2413, width=768, height=246)),
+            DesignNode(kind="icon", source_id="45:5288", style=DesignStyle(x=179, y=2800, width=156.86, height=18.44)),
+            DesignNode(kind="icon", source_id="45:5289", style=DesignStyle(x=726, y=2800, width=156.86, height=18.44)),
+            DesignNode(kind="text", source_id="45:5290", text="01 / 02", style=DesignStyle(x=492, y=2791, width=79, height=36)),
+            DesignNode(kind="image", source_id="45:5291", style=DesignStyle(x=1129, y=2014, width=486, height=865)),
+            DesignNode(kind="image", source_id="45:5292", style=DesignStyle(x=1618, y=2014, width=486, height=865)),
+            DesignNode(kind="icon", source_id="45:5293", style=DesignStyle(x=1789, y=2375, width=144, height=144)),
+        ],
+    )
+    root = DesignNode(
+        kind="container",
+        name="Destination root",
+        source_id="45:5281",
+        style=DesignStyle(x=0, y=1920, width=1920, height=960),
+        children=[inner],
+    )
+
+    compiled = compile_responsive_layout(root)
+    assert compiled.style.layout_direction == "vertical"
+    assert len(compiled.children) == 1
+
+    compiled_inner = compiled.children[0]
+    assert compiled_inner.style.layout_direction == "vertical"
+    assert len(compiled_inner.children) >= 1
+    composition = compiled_inner.children[0]
+    assert composition.kind == "container"
+    assert composition.style.layout_direction == "horizontal"
+    assert len(composition.children) == 2
+    assert composition.children[0].style.layout_direction == "vertical"
+    assert composition.children[1].style.layout_direction == "vertical"
+
+
 def test_keeps_strongly_layered_free_layout_for_specialized_positioning():
     root = DesignNode(kind="container", source_id="20:1", style=DesignStyle(x=0, y=0, width=800, height=600), children=[
         DesignNode(kind="shape", source_id="20:2", style=DesignStyle(x=0, y=0, width=800, height=600)),
