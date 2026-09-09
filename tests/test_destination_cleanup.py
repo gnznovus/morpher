@@ -1,4 +1,5 @@
 from morpher.compiler.layout import compile_responsive_layout
+from morpher.compiler.overlays import resolve_inferred_region_overlays
 from morpher.ir.nodes import DesignNode
 from morpher.ir.styles import DesignStyle
 
@@ -35,12 +36,17 @@ def test_destination_reanchors_media_overlay_and_preserves_intrinsic_counter():
     )
 
     compiled = compile_responsive_layout(root)
+    compiled = resolve_inferred_region_overlays(compiled, 1920)
+
     counter = _find(compiled, "45:5290")
     assert counter.style.width_mode == "hug"
     assert counter.style.width_percent is None
 
     play = _find(compiled, "45:5293")
-    assert play.style.position_mode == "absolute"
-    assert play.style.offset_x == 660
-    assert play.style.offset_y == 361
-    assert all(node.source_id != "45:5293" for node in compiled.children[1:])
+    assert play.style.position_mode is None
+    assert play.style.offset_x is None
+    assert play.style.offset_y is None
+    assert round(play.style.width_percent or 0, 3) == 7.5
+    assert round(play.style.margin_left_percent or 0, 3) == 67.692
+    assert round(play.style.margin_top_percent or 0, 3) == -51.692
+    assert round(play.style.margin_bottom_percent or 0, 3) == 36.923
