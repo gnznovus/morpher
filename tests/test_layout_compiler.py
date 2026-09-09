@@ -79,20 +79,14 @@ def test_discovery_visuals_join_flow_without_forcing_text_absolute():
     assert section["settings"]["flex_direction"] == "column"
     assert section["settings"]["padding"]["top"] == "99"
 
-    assert len(compiled.children) == 5
-    label, hero, muu, body_statement_row, play = compiled.children
+    assert len(compiled.children) == 6
+    label, hero, muu, statement, body, play = compiled.children
     assert label.kind == "text"
     assert hero.source_id == "45:5272"
     assert muu.source_id == "45:5277"
-    assert body_statement_row.kind == "container"
-    assert body_statement_row.source_id == "45:5267::row-4"
-    assert body_statement_row.style.layout_direction == "horizontal"
-    assert play.source_id == "45:5273"
-
-    assert len(body_statement_row.children) == 2
-    body, statement = body_statement_row.children
-    assert body.source_id == "45:5269"
     assert statement.source_id == "45:5276"
+    assert body.source_id == "45:5269"
+    assert play.source_id == "45:5273"
 
     assert round(label.style.width_percent or 0, 3) == 8.333
     assert round(label.style.margin_left_percent or 0, 3) == 9.323
@@ -102,6 +96,18 @@ def test_discovery_visuals_join_flow_without_forcing_text_absolute():
     assert round(muu.style.width_percent or 0, 3) == 30.720
     assert round(muu.style.margin_left_percent or 0, 3) == 50.625
     assert round(muu.style.margin_top_percent or 0, 3) == -31.875
+
+    assert play.style.position_mode == "absolute"
+    assert play.style.offset_x == 510
+    assert play.style.offset_y == 406
+
+    backdrop = body.children[0]
+    body_copy = body.children[1]
+    assert backdrop.source_id == "45:5270"
+    assert backdrop.style.position_mode == "absolute"
+    assert backdrop.style.offset_x == -54
+    assert backdrop.style.offset_y == -533
+    assert body_copy.source_id == "45:5271"
 
     rendered_headings = []
     stack = list(section["elements"])
@@ -114,17 +120,18 @@ def test_discovery_visuals_join_flow_without_forcing_text_absolute():
     for heading in rendered_headings:
         assert "_position" not in heading["settings"]
 
-    row_json = section["elements"][3]
-    assert row_json["settings"]["flex_direction"] == "row"
-    assert "position" not in row_json["settings"]
-    assert row_json["elements"][0]["elType"] == "container"
-    assert row_json["elements"][1]["widgetType"] == "heading"
-    assert "position" not in row_json["elements"][0]["settings"]
-    assert "_position" not in row_json["elements"][1]["settings"]
-
-    play_json = section["elements"][4]
+    play_json = section["elements"][5]
     assert play_json["widgetType"] == "image"
-    assert "_position" not in play_json["settings"]
+    assert play_json["settings"]["_position"] == "absolute"
+    assert play_json["settings"]["_offset_x"]["size"] == 510
+    assert play_json["settings"]["_offset_y"]["size"] == 406
+
+    body_json = section["elements"][4]
+    backdrop_json = body_json["elements"][0]
+    assert backdrop_json["widgetType"] == "image"
+    assert backdrop_json["settings"]["_position"] == "absolute"
+    assert backdrop_json["settings"]["_offset_x"]["size"] == -54
+    assert backdrop_json["settings"]["_offset_y"]["size"] == -533
 
 
 def test_keeps_strongly_layered_free_layout_for_specialized_positioning():
