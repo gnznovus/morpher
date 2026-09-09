@@ -2,7 +2,7 @@ import hashlib
 
 from morpher.ir.nodes import DesignNode
 from morpher.ir.styles import DesignStyle
-from morpher.typography import fluid_font_size
+from morpher.typography import fluid_font_size, relative_typography_value
 
 
 def _element_id(node: DesignNode, path: str) -> str:
@@ -168,9 +168,11 @@ def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None,
             fluid = fluid_font_size(style.font_size, design_viewport) if design_viewport is not None else None
             settings["typography_font_size"] = _size("custom", fluid.css()) if fluid is not None else _size("px", style.font_size)
         if style.line_height is not None:
-            settings["typography_line_height"] = _size("px", style.line_height)
+            relative = relative_typography_value(style.line_height, style.font_size) if style.font_size is not None else None
+            settings["typography_line_height"] = _size("em", relative) if relative is not None else _size("px", style.line_height)
         if style.letter_spacing is not None:
-            settings["typography_letter_spacing"] = _size("px", style.letter_spacing)
+            relative = relative_typography_value(style.letter_spacing, style.font_size) if style.font_size is not None else None
+            settings["typography_letter_spacing"] = _size("em", relative) if relative is not None else _size("px", style.letter_spacing)
     if style.text_color:
         settings["title_color"] = style.text_color
     text_align = {"LEFT": "left", "CENTER": "center", "RIGHT": "right", "JUSTIFIED": "justify"}.get(style.text_align_horizontal or "")
