@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,6 +26,20 @@ def _outputs_exist(source: Path, storage: StoragePaths) -> bool:
         and storage.css_output(source).exists()
         and storage.elementor_output(source).exists()
     )
+
+
+def clean_outputs(storage: StoragePaths | None = None) -> None:
+    """Delete generated output only; source/import/processed data is never touched."""
+    storage = storage or StoragePaths()
+    output_root = storage.root / "output"
+
+    if output_root.exists():
+        shutil.rmtree(output_root)
+
+    # Recreate the renderer-owned output structure so the workspace is ready
+    # for the next render without touching any source-side storage.
+    storage.output_html.mkdir(parents=True, exist_ok=True)
+    storage.output_elementor.mkdir(parents=True, exist_ok=True)
 
 
 def run_source(source: Path, storage: StoragePaths, *, force: bool = False) -> RunResult:
@@ -61,7 +76,17 @@ def main() -> None:
         action="store_true",
         help="Reprocess sources even when their required outputs already exist.",
     )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Delete generated storage/output content only, then exit.",
+    )
     args = parser.parse_args()
+
+    if args.clean:
+        clean_outputs()
+        print("CLEAN    storage/output")
+        return
 
     results = run_all(force=args.force)
     if not results:
