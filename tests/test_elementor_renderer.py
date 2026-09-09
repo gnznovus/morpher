@@ -118,3 +118,41 @@ def test_preserves_decorative_vector_inside_content_wrapper():
     wrapper_result = result["content"][0]["elements"][0]
     assert [element.get("widgetType") for element in wrapper_result["elements"]] == ["image", "heading"]
     assert wrapper_result["elements"][0]["settings"]["image"]["url"] == "assets/Discovery/discovery-vector.svg"
+
+
+def test_authored_break_is_preserved_without_overriding_bounded_width():
+    root = DesignNode(
+        kind="container",
+        source_id="break:root",
+        style=DesignStyle(layout_direction="vertical"),
+        children=[
+            DesignNode(
+                kind="text",
+                source_id="break:text",
+                text="WELCOME TO MUU\nTHIS SECOND LINE IS STILL ALLOWED TO WRAP NATURALLY",
+                style=DesignStyle(width_percent=42.5),
+            )
+        ],
+    )
+    heading = render_elementor(root)["content"][0]["elements"][0]
+    assert heading["settings"]["title"] == "WELCOME TO MUU<br>THIS SECOND LINE IS STILL ALLOWED TO WRAP NATURALLY"
+    assert heading["settings"]["_element_custom_width"] == {"unit": "%", "size": 42.5, "sizes": []}
+
+
+def test_authored_break_does_not_imply_full_width():
+    bounded = DesignNode(
+        kind="container",
+        source_id="break:bounded",
+        style=DesignStyle(layout_direction="vertical"),
+        children=[DesignNode(kind="text", source_id="break:child", text="FIRST\nSECOND", style=DesignStyle(width_percent=38.125))],
+    )
+    natural = DesignNode(
+        kind="container",
+        source_id="break:natural",
+        style=DesignStyle(layout_direction="vertical"),
+        children=[DesignNode(kind="text", source_id="break:child-natural", text="FIRST SECOND", style=DesignStyle(width_percent=38.125))],
+    )
+    bounded_settings = render_elementor(bounded)["content"][0]["elements"][0]["settings"]
+    natural_settings = render_elementor(natural)["content"][0]["elements"][0]["settings"]
+    assert bounded_settings["_element_custom_width"] == natural_settings["_element_custom_width"]
+    assert bounded_settings["_element_custom_width"]["size"] == 38.125
