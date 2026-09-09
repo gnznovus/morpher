@@ -36,31 +36,8 @@ def _participates_in_flow(node: DesignNode) -> bool:
     return False
 
 
-def _inside_parent(node: DesignNode, parent: DesignNode) -> bool:
-    if not _has_box(node) or not _has_box(parent):
-        return False
-    nx1, ny1, nx2, ny2 = _bounds(node)
-    px1, py1, px2, py2 = _bounds(parent)
-    return nx1 >= px1 and ny1 >= py1 and nx2 <= px2 and ny2 <= py2
-
-
-def _is_primary_visual(node: DesignNode, parent: DesignNode) -> bool:
-    """Return True for visual assets that should participate in desktop flow.
-
-    Raster/image nodes are primary content by default. Large in-bounds vector
-    assets can also anchor the composition. Small icons remain deferred so play
-    controls and similar overlays do not distort band inference.
-    """
-    if node.kind == "image":
-        return _has_box(node)
-    if node.kind != "icon" or not _inside_parent(node, parent):
-        return False
-
-    nx1, ny1, nx2, ny2 = _bounds(node)
-    px1, py1, px2, py2 = _bounds(parent)
-    parent_area = max(0.0, px2 - px1) * max(0.0, py2 - py1)
-    node_area = max(0.0, nx2 - nx1) * max(0.0, ny2 - ny1)
-    return parent_area > 0 and node_area / parent_area >= 0.03
+def _is_visual(node: DesignNode) -> bool:
+    return node.kind in {"image", "icon"} and _has_box(node)
 
 
 def _layout_bounds(node: DesignNode) -> tuple[float, float, float, float]:
@@ -68,7 +45,7 @@ def _layout_bounds(node: DesignNode) -> tuple[float, float, float, float]:
         descendant_boxes = [
             _layout_bounds(child)
             for child in node.children
-            if _participates_in_flow(child) and _has_box(child)
+            if (_participates_in_flow(child) or _is_visual(child)) and _has_box(child)
         ]
         if descendant_boxes:
             return _union_bounds(descendant_boxes)
@@ -90,12 +67,13 @@ def _has_real_overlap(
     children: list[DesignNode],
     boxes: dict[int, tuple[float, float, float, float]],
 ) -> bool:
-    for index, child in enumerate(children):
+    semantic_children = [child for child in children if not _is_visual(child)]
+    for index, child in enumerate(semantic_children):
         box = boxes[id(child)]
         area = max(0.0, box[2] - box[0]) * max(0.0, box[3] - box[1])
         if area <= 0:
             continue
-        for other in children[index + 1 :]:
+        for other in semantic_children[index + 1 :]:
             other_box = boxes[id(other)]
             other_area = max(0.0, other_box[2] - other_box[0]) * max(0.0, other_box[3] - other_box[1])
             if other_area <= 0:
@@ -120,9 +98,9 @@ def _same_band(
     b: DesignNode,
     boxes: dict[int, tuple[float, float, float, float]],
 ) -> bool:
-    # Visual assets keep their own flow block so source overlap becomes negative
-    # margin instead of an artificial side-by-side row.
-    if a.kind in {"image", "icon"} or b.kind in {"image", "icon"}:
+    # Visual assets keep independent flow blocks. Their source overlap is then
+    # represented by negative margins instead of an artificial flex row.
+    if _is_visual(a) or _is_visual(b):
         return False
     a_box = boxes[id(a)]
     b_box = boxes[id(b)]
@@ -215,8 +193,6 @@ def _flow_container_style(
     style.layout_direction = "vertical"
     style.width_mode = "fill"
     style.height_mode = "hug"
-    # Horizontal placement belongs to each child so desktop x/width geometry is
-    # retained without absolute positioning. The parent only owns vertical inset.
     style.padding_left = 0
     style.padding_right = 0
     style.padding_top = max(0.0, min_y - py)
@@ -233,7 +209,7 @@ def _compile_free_layout(node: DesignNode) -> DesignNode:
     flow_children = [
         child
         for child in children
-        if _has_box(child) and (_participates_in_flow(child) or _is_primary_visual(child, node))
+        if _has_box(child) and (_participates_in_flow(child) or _is_visual(child))
     ]
     if not flow_children:
         return node
@@ -318,7 +294,6 @@ def _compile_free_layout(node: DesignNode) -> DesignNode:
         compiled_children.append(row)
 
     compiled_style = _flow_container_style(node, original_child_bounds)
-
     flow_ids = {id(child) for child in flow_children}
     deferred_children = [child for child in children if id(child) not in flow_ids]
 
@@ -337,10 +312,9 @@ def _compile_node(node: DesignNode) -> DesignNode:
 def compile_responsive_layout(root: DesignNode) -> DesignNode:
     """Compile desktop free-layout content into normal flow.
 
-    Auto Layout passes through unchanged. Free-layout semantic content and primary
-    visual assets keep their source desktop x/width and vertical relationships
-    through proportional widths and margins, including negative margins for
-    intentional overlap. Small overlay assets remain deferred for specialized
-    positioning rather than distorting the primary composition.
+    Auto Layout passes through unchanged. Free-layout semantic content and visual
+    assets keep their source desktop x/width and vertical relationships through
+    proportional widths and margins. Visual overlaps are preserved with negative
+    margins; semantic collisions can still fall back to specialized positioning.
     """
     return _compile_node(deepcopy(root))
