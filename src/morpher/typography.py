@@ -10,14 +10,13 @@ MIN_SCALE_RATIO = 0.5
 @dataclass(frozen=True)
 class FluidTypeScale:
     minimum_rem: float
-    intercept_rem: float
-    slope_vw: float
+    preferred_vw: float
     maximum_rem: float
 
     def css(self) -> str:
         return (
             f"clamp({_number(self.minimum_rem)}rem, "
-            f"calc({_number(self.intercept_rem)}rem + {_number(self.slope_vw)}vw), "
+            f"{_number(self.preferred_vw)}vw, "
             f"{_number(self.maximum_rem)}rem)"
         )
 
@@ -41,13 +40,11 @@ def fluid_font_size(
     mobile_viewport: float = DEFAULT_MOBILE_VIEWPORT,
     root_font_size: float = DEFAULT_ROOT_FONT_SIZE,
 ) -> FluidTypeScale | None:
-    """Derive a fluid type scale from Figma's desktop measurement.
+    """Derive a composition-relative type scale from Figma measurements.
 
-    The desktop Figma font size and viewport are inputs, not hard-coded design
-    assumptions. Morpher supplies only a generic mobile anchor and readability
-    policy. The fixed terms are emitted in rem while the interpolation remains
-    viewport-relative through vw. Type that should not shrink stays on the
-    renderer's fixed-size path instead of receiving a meaningless clamp.
+    Font size follows the source design proportion directly through vw. The
+    clamp only guards the lower and upper bounds; it does not alter the
+    responsive curve with an interpolation intercept.
     """
     if desktop_font_size <= 0 or desktop_viewport <= mobile_viewport or root_font_size <= 0:
         return None
@@ -56,12 +53,15 @@ def fluid_font_size(
     if mobile_font_size == desktop_font_size:
         return None
 
-    slope_px_per_viewport_px = (desktop_font_size - mobile_font_size) / (desktop_viewport - mobile_viewport)
-    intercept_px = mobile_font_size - slope_px_per_viewport_px * mobile_viewport
-
     return FluidTypeScale(
         minimum_rem=mobile_font_size / root_font_size,
-        intercept_rem=intercept_px / root_font_size,
-        slope_vw=slope_px_per_viewport_px * 100,
+        preferred_vw=(desktop_font_size / desktop_viewport) * 100,
         maximum_rem=desktop_font_size / root_font_size,
     )
+
+
+def relative_typography_value(value: float, font_size: float) -> float | None:
+    """Convert a resolved Figma typography measurement to an em ratio."""
+    if font_size <= 0:
+        return None
+    return value / font_size
