@@ -76,6 +76,103 @@ function collectTextAssets(node, assets = []) {
   return assets;
 }
 
+async function loadTextFonts(text) {
+  const fonts = text.getRangeAllFontNames(0, text.characters.length);
+  const unique = new Map();
+  for (const font of fonts) {
+    unique.set(`${font.family}\u0000${font.style}`, font);
+  }
+  await Promise.all([...unique.values()].map((font) => figma.loadFontAsync(font)));
+}
+
+function wordRanges(value) {
+  const ranges = [];
+  const pattern = /\S+/g;
+  let match;
+  while ((match = pattern.exec(value)) !== null) {
+    ranges.push({ start: match.index, end: match.index + match[0].length });
+  }
+  return ranges;
+}
+
+async function measurePrefixHeight(text, end) {
+  const probe = text.clone();
+  try {
+    figma.currentPage.appendChild(probe);
+    probe.x = -100000;
+    probe.y = -100000;
+    probe.resize(text.width, Math.max(1, text.height));
+    probe.textAutoResize = "HEIGHT";
+    if (end < probe.characters.length) {
+      probe.deleteCharacters(end, probe.characters.length);
+    }
+    return probe.height;
+  } finally {
+    probe.remove();
+  }
+}
+
+async function probeRenderedLines(text) {
+  const characters = text.characters;
+  if (!characters) return [];
+
+  const wrapStyle = typeof text.textWrapStyle === "string" ? text.textWrapStyle : "MIXED";
+  if (wrapStyle !== "AUTO") {
+    return null;
+  }
+
+  await loadTextFonts(text);
+  const words = wordRanges(characters);
+  if (!words.length) return [characters];
+
+  const lines = [];
+  let lineStart = words[0].start;
+  let previousWord = words[0];
+  let previousHeight = await measurePrefixHeight(text, previousWord.end);
+
+  for (let index = 1; index < words.length; index += 1) {
+    const word = words[index];
+    const height = await measurePrefixHeight(text, word.end);
+    if (height > previousHeight + 0.5) {
+      const line = characters.slice(lineStart, previousWord.end).trim();
+      if (line) lines.push(line);
+      lineStart = word.start;
+    }
+    previousHeight = height;
+    previousWord = word;
+  }
+
+  const finalLine = characters.slice(lineStart, previousWord.end).trim();
+  if (finalLine) lines.push(finalLine);
+  return lines;
+}
+
+async function exportTextLayout(text) {
+  try {
+    const renderedLines = await probeRenderedLines(text);
+    return {
+      sourceId: text.id,
+      characters: text.characters,
+      width: text.width,
+      height: text.height,
+      textAutoResize: text.textAutoResize,
+      textWrapStyle: typeof text.textWrapStyle === "string" ? text.textWrapStyle : "MIXED",
+      renderedLines,
+      probeStatus: renderedLines ? "measured" : "unsupported-wrap-style",
+    };
+  } catch (error) {
+    return {
+      sourceId: text.id,
+      characters: text.characters,
+      width: text.width,
+      height: text.height,
+      renderedLines: null,
+      probeStatus: "error",
+      probeError: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 async function exportImageAssets(node) {
   const assets = [];
   for (const imageRef of collectImageRefs(node)) {
@@ -112,6 +209,14 @@ async function exportTextAssets(node) {
   return assets;
 }
 
+async function exportTextLayouts(node) {
+  const layouts = [];
+  for (const text of collectTextAssets(node)) {
+    layouts.push(await exportTextLayout(text));
+  }
+  return layouts;
+}
+
 figma.ui.onmessage = async (message) => {
   if (message.type !== "send-to-morpher") return;
 
@@ -123,6 +228,7 @@ figma.ui.onmessage = async (message) => {
     const assets = await exportImageAssets(node);
     const vectorAssets = await exportVectorAssets(node);
     const textAssets = await exportTextAssets(node);
+    const textLayouts = await exportTextLayouts(node);
     const response = await fetch(MORPHER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -133,6 +239,7 @@ figma.ui.onmessage = async (message) => {
         assets,
         vectorAssets,
         textAssets,
+        textLayouts,
       }),
     });
 
