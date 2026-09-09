@@ -30,11 +30,14 @@ def _relative_offset(value: float | None, parent_value: float | None) -> float |
 
 def _apply_item_sizing(settings: dict, style: DesignStyle, *, container: bool) -> None:
     if style.width_percent is not None:
+        # Responsive-compiler widths are measured against the Figma design
+        # viewport, so preserve that coordinate system instead of rebasing the
+        # same numeric value against an arbitrary Elementor parent.
         if container:
-            settings["width"] = _size("%", style.width_percent)
+            settings["width"] = _size("vw", style.width_percent)
         else:
             settings["_element_width"] = "initial"
-            settings["_element_custom_width"] = _size("%", style.width_percent)
+            settings["_element_custom_width"] = _size("vw", style.width_percent)
     elif style.width_mode == "fill":
         if container:
             settings["width"] = _size("%", 100)
