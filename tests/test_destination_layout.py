@@ -28,9 +28,9 @@ def test_destination_infers_text_and_media_regions_without_special_casing():
 
     assert compiled.style.layout_direction == "vertical"
     assert compiled.style.padding_top == 94
-    assert len(compiled.children) == 3
+    assert len(compiled.children) == 2
 
-    composition, backdrop, play = compiled.children
+    composition, backdrop = compiled.children
     assert composition.style.layout_direction == "horizontal"
     assert round(composition.style.margin_left_percent or 0, 3) == 9.323
     assert round(composition.style.gap or 0, 3) == 182
@@ -51,5 +51,7 @@ def test_destination_infers_text_and_media_regions_without_special_casing():
 
     assert backdrop.source_id == "45:5283"
     assert backdrop.style.position_mode == "absolute"
-    assert play.source_id == "45:5293"
+    play = next(child for child in right.children if child.source_id == "45:5293")
     assert play.style.position_mode == "absolute"
+    assert play.style.offset_x == 660
+    assert play.style.offset_y == 361
