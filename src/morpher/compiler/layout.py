@@ -344,9 +344,16 @@ def _compile_free_layout(node: DesignNode, design_viewport_width: float) -> Desi
     if len(flow_children) == 1:
         child = flow_children[0]
         box = boxes[id(child)]
+        # A structural wrapper may itself contain the real free-layout composition.
+        # Compile that inner geometry before converting the wrapper into parent flow;
+        # otherwise setting it to a vertical container erases the chance to infer
+        # rows/regions from its original Figma coordinates.
+        if child.kind == "container" and child.style.layout_direction is None:
+            child = _compile_node(child, design_viewport_width)
+            flow_children[0] = child
         node.style = _flow_container_style(node, original_child_bounds)
         _make_child_flow(child, width_percent=_percent(box[2] - box[0], design_viewport_width), margin_left_percent=_percent(box[0] - px, parent_width))
-        node.children = [child, *[item for item in children if item is not child]]
+        node.children = [child, *[item for item in children if item is not flow_children[0] and item is not child]]
         return node
     if _has_real_overlap(flow_children, boxes):
         return node
