@@ -4,6 +4,7 @@ from typing import Literal
 
 LayoutDirection = Literal["horizontal", "vertical"]
 SizingMode = Literal["fixed", "hug", "fill"]
+PositionMode = Literal["absolute"]
 
 
 @dataclass
@@ -15,6 +16,9 @@ class DesignStyle:
     height: float | None = None
     x: float | None = None
     y: float | None = None
+    position_mode: PositionMode | None = None
+    offset_x: float | None = None
+    offset_y: float | None = None
     rotation: float | None = None
     gap: float | None = None
     padding_top: float | None = None
