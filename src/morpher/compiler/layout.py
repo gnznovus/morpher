@@ -116,8 +116,13 @@ def _mark_independent_visual_layers(node: DesignNode) -> None:
         return
     siblings = list(node.children)
     anchor_x, anchor_y, _, _ = _layer_anchor_bounds(node)
+    parent_x, parent_y, _, _ = _bounds(node)
     for child in siblings:
-        if _is_independent_visual(child, node, siblings):
+        if _is_background_visual(child, node):
+            child.style.position_mode = "absolute"
+            child.style.offset_x = (child.style.x or 0) - parent_x
+            child.style.offset_y = (child.style.y or 0) - parent_y
+        elif _is_independent_visual(child, node, siblings):
             child.style.position_mode = "absolute"
             child.style.offset_x = (child.style.x or 0) - anchor_x
             child.style.offset_y = (child.style.y or 0) - anchor_y
