@@ -85,6 +85,14 @@ function buildErrorLog(node, stage, error) {
     );
   }
 
+  if (error && typeof error === "object" && error.vectorDiagnostic) {
+    lines.push(
+      "",
+      "=== VECTOR ASSET DIAGNOSTIC ===",
+      JSON.stringify(error.vectorDiagnostic, null, 2)
+    );
+  }
+
   return lines.join("\n");
 }
 
@@ -310,10 +318,27 @@ async function exportImageAssets(node) {
 
 async function exportVectorAssets(node) {
   const assets = [];
-  for (const vector of collectVectorAssets(node)) {
-    const bytes = await vector.exportAsync({ format: "SVG" });
-    assets.push({ sourceId: vector.id, data: bytesToBase64(bytes) });
+  const vectors = collectVectorAssets(node);
+
+  for (let index = 0; index < vectors.length; index += 1) {
+    const vector = vectors[index];
+    try {
+      const bytes = await vector.exportAsync({ format: "SVG" });
+      assets.push({ sourceId: vector.id, data: bytesToBase64(bytes) });
+    } catch (error) {
+      const wrapped = new Error(
+        `Figma SVG export failed for ${vector.type} "${vector.name}" (${vector.id}) at vector ${index + 1}/${vectors.length}.`
+      );
+      wrapped.vectorDiagnostic = {
+        index: index + 1,
+        total: vectors.length,
+        node: describeNode(vector),
+        error: serializeError(error),
+      };
+      throw wrapped;
+    }
   }
+
   return assets;
 }
 
