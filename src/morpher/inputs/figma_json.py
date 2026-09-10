@@ -51,7 +51,7 @@ class FigmaJsonAdapter:
             children = [
                 self._normalize_node(child, warnings)
                 for child in node.get("children", [])
-                if isinstance(child, dict)
+                if isinstance(child, dict) and child.get("visible") is not False
             ]
 
         return DesignNode(
