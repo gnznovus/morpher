@@ -45,7 +45,7 @@ def _find_parent(node, target):
     return None
 
 
-def test_flat_happenings_pagination_remains_inside_inferred_right_region_after_full_pipeline():
+def test_flat_happenings_uses_root_composition_and_keeps_pagination_in_right_region():
     source = DesignNode(
         kind="container",
         name="Happennings",
@@ -76,14 +76,17 @@ def test_flat_happenings_pagination_remains_inside_inferred_right_region_after_f
     compiled = prune_empty_generated_wrappers(compiled)
 
     composition = _find(compiled, "happenings::composition-row")
+    left_region = _find(compiled, "happenings::region-1")
     right_region = _find(compiled, "happenings::region-2")
     pagination = _find(compiled, "happenings::bottom-controls")
 
-    assert composition is not None
+    assert composition is None
+    assert compiled.style.layout_direction == "horizontal"
+    assert left_region is not None
     assert right_region is not None
     assert pagination is not None
-    assert composition in compiled.children
-    assert right_region in composition.children
+    assert left_region in compiled.children
+    assert right_region in compiled.children
     assert pagination in right_region.children
     assert pagination not in compiled.children
     assert _find_parent(compiled, pagination) is right_region
