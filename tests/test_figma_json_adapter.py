@@ -84,6 +84,73 @@ def test_normalizes_realistic_figma_payload():
     assert not any("VECTOR" in warning and "45:5306" in warning for warning in result.warnings)
 
 
+def test_prunes_hidden_figma_subtrees():
+    payload = {
+        "document": {
+            "id": "1:1",
+            "name": "Root",
+            "type": "FRAME",
+            "children": [
+                {
+                    "id": "1:2",
+                    "name": "Visible",
+                    "type": "FRAME",
+                    "children": [],
+                },
+                {
+                    "id": "1:3",
+                    "name": "Hidden",
+                    "type": "FRAME",
+                    "visible": False,
+                    "children": [
+                        {
+                            "id": "1:4",
+                            "name": "Hidden Text",
+                            "type": "TEXT",
+                            "characters": "should not participate in layout",
+                        }
+                    ],
+                },
+            ],
+        }
+    }
+
+    result = FigmaJsonAdapter().from_data(payload)
+
+    assert [child.source_id for child in result.root.children] == ["1:2"]
+
+
+def test_prunes_hidden_children_from_auto_layout():
+    payload = {
+        "document": {
+            "id": "2:1",
+            "name": "Auto Layout",
+            "type": "FRAME",
+            "layoutMode": "HORIZONTAL",
+            "children": [
+                {
+                    "id": "2:2",
+                    "name": "Visible",
+                    "type": "TEXT",
+                    "characters": "VISIBLE",
+                },
+                {
+                    "id": "2:3",
+                    "name": "Hidden",
+                    "type": "TEXT",
+                    "visible": False,
+                    "characters": "HIDDEN",
+                },
+            ],
+        }
+    }
+
+    result = FigmaJsonAdapter().from_data(payload)
+
+    assert result.root.style.layout_direction == "horizontal"
+    assert [child.text for child in result.root.children] == ["VISIBLE"]
+
+
 def test_normalizes_auto_layout_fields_when_present():
     payload = {
         "document": {
