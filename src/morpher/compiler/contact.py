@@ -129,8 +129,11 @@ def resolve_contact_group_ownership(
         owner_box = _box(owner_source)
         if owner_box is not None:
             detached_group.style.margin_top_percent = max(0.0, contact_box[1] - owner_box[3]) / viewport * 100.0
-        detached_group.style.margin_left_percent = None
-        detached_group.style.margin_right_percent = None
+        # Horizontal placement belongs to the same semantic column as the
+        # owning text. If the owner itself carries a flow offset, inherit it;
+        # when the parent region already owns the column this remains None.
+        detached_group.style.margin_left_percent = owner.style.margin_left_percent
+        detached_group.style.margin_right_percent = owner.style.margin_right_percent
         detached_group.style.position_mode = None
         detached_group.style.offset_x = None
         detached_group.style.offset_y = None
@@ -158,7 +161,8 @@ def resolve_contact_group_ownership(
             following_box = _box(following_source)
             if following_box is not None:
                 following_node.style.margin_top_percent = max(0.0, following_box[1] - contact_visual_bottom) / viewport * 100.0
-            following_node.style.margin_left_percent = None
+            following_node.style.margin_left_percent = owner.style.margin_left_percent
+            following_node.style.margin_right_percent = owner.style.margin_right_percent
             owner_parent.children.insert(owner_index + 2, following_node)
 
     return compiled_root
