@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 from morpher.ir.nodes import DesignNode
 from morpher.ir.styles import DesignStyle
 
@@ -37,10 +39,10 @@ def _percent(value: float, reference: float) -> float:
 
 
 def _box(node: DesignNode) -> tuple[float, float, float, float] | None:
-    s = node.style
-    if any(value is None for value in (s.x, s.y, s.width, s.height)):
+    style = node.style
+    if any(value is None for value in (style.x, style.y, style.width, style.height)):
         return None
-    return s.x, s.y, s.x + s.width, s.y + s.height
+    return style.x, style.y, style.x + style.width, style.y + style.height
 
 
 def _overlap(a1: float, a2: float, b1: float, b2: float) -> float:
@@ -63,176 +65,249 @@ def _is_full_bleed_background(source: DesignNode, source_parent: DesignNode) -> 
     return sw / pw >= 0.8 and sh / ph >= 0.8
 
 
-def _restore_relative_background(
-    compiled: DesignNode,
-    source: DesignNode,
-    viewport: float,
-) -> None:
+def _remove_source_id(node: DesignNode, source_id: str) -> bool:
+    removed = False
+    kept: list[DesignNode] = []
+    for child in node.children:
+        if child.source_id == source_id:
+            removed = True
+            continue
+        if _remove_source_id(child, source_id):
+            removed = True
+        if child.children or child.kind != "container" or "::" not in (child.source_id or ""):
+            kept.append(child)
+    node.children = kept
+    return removed
+
+
+def _promote_full_bleed_backgrounds(compiled: DesignNode, source: DesignNode) -> None:
+    """Promote source-owned full-bleed images to container background metadata.
+
+    A full-bleed image that covers its owning source frame is not an overlapping
+    content element. Keeping it as an Elementor Image widget makes section
+    height depend on the asset and creates uncovered strips when content grows.
+    The compiled IR therefore stores it on the owning container and removes the
+    redundant image child from compiled flow.
+    """
     if compiled.kind != "container" or source.kind != "container":
         return
 
-    source_by_id = {child.source_id: child for child in source.children if child.source_id}
-    backgrounds = [
-        child
-        for child in compiled.children
-        if child.source_id in source_by_id
-        and _is_full_bleed_background(source_by_id[child.source_id], source)
-    ]
-    if not backgrounds:
-        return
+    source_children = {child.source_id: child for child in source.children if child.source_id}
+    backgrounds = [child for child in source.children if _is_full_bleed_background(child, source)]
+    for background in backgrounds[:1]:
+        if not background.source_id or not background.image_ref:
+            continue
+        if _remove_source_id(compiled, background.source_id):
+            compiled.style.background_image_ref = background.image_ref
+            compiled.style.background_image_opacity = background.style.image_opacity
 
-    background = backgrounds[0]
-    source_background = source_by_id[background.source_id]
-    background.style.position_mode = None
-    background.style.offset_x = None
-    background.style.offset_y = None
-    background.style.x = None
-    background.style.y = None
-    background.style.width_percent = None
-    background.style.width_mode = "fill"
-    background.style.margin_top_percent = None
-    background.style.margin_left_percent = None
-    background.style.margin_bottom_percent = None
-
-    others = [child for child in compiled.children if child is not background]
-    if others and source_background.style.height is not None:
-        first = others[0]
-        first.style.margin_top_percent = (first.style.margin_top_percent or 0.0) - _percent(
-            source_background.style.height,
-            viewport,
-        )
-    compiled.children = [background, *others]
+    compiled_by_id = {child.source_id: child for child in compiled.children if child.source_id}
+    for source_child in source.children:
+        compiled_child = compiled_by_id.get(source_child.source_id)
+        if compiled_child is not None and compiled_child.kind == "container":
+            _promote_full_bleed_backgrounds(compiled_child, source_child)
 
 
-def _raw_text_overlap(a: DesignNode, b: DesignNode) -> bool:
-    if a.kind != "text" or b.kind != "text":
-        return False
-    ab = _box(a)
-    bb = _box(b)
-    if ab is None or bb is None:
-        return False
-    horizontal = _overlap(ab[0], ab[2], bb[0], bb[2])
-    shorter_width = min(ab[2] - ab[0], bb[2] - bb[0])
-    top_delta = abs(ab[1] - bb[1])
-    return shorter_width > 0 and horizontal / shorter_width >= 0.25 and top_delta > 4
+def _find_node(node: DesignNode, source_id: str) -> DesignNode | None:
+    if node.source_id == source_id:
+        return node
+    for child in node.children:
+        found = _find_node(child, source_id)
+        if found is not None:
+            return found
+    return None
 
 
-def _resolve_overlapping_text_control_groups(
+def _find_parent(node: DesignNode, source_id: str) -> DesignNode | None:
+    if any(child.source_id == source_id for child in node.children):
+        return node
+    for child in node.children:
+        found = _find_parent(child, source_id)
+        if found is not None:
+            return found
+    return None
+
+
+def _detach_ids(node: DesignNode, source_ids: set[str]) -> None:
+    kept: list[DesignNode] = []
+    for child in node.children:
+        if child.source_id in source_ids:
+            continue
+        _detach_ids(child, source_ids)
+        if child.kind == "container" and "::" in (child.source_id or "") and not child.children:
+            continue
+        kept.append(child)
+    node.children = kept
+
+
+def _leading_space_count(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _split_contact_rows(
     compiled: DesignNode,
+    source: DesignNode,
     source_by_id: dict[str, DesignNode],
     viewport: float,
 ) -> None:
-    """Undo false horizontal rows caused by vertically overlapping text boxes.
+    """Infer icon + text rows from multiline text that reserves an icon gutter.
 
-    Figma text bounds may overlap vertically even when the elements form a
-    vertical content stack. When one of those text blocks also owns small icon
-    controls, keep the text stack vertical and express the icons as zero-net-flow
-    overlays rather than Elementor absolute positioning.
+    Figma designs sometimes encode a contact list as one multiline text node
+    whose lines begin with spaces, with one icon aligned to each line. That is
+    a row relationship, not three independent overlays. Rebuild it as a
+    vertical group of horizontal rows so Elementor can stay in normal flow.
     """
-    for child in list(compiled.children):
-        _resolve_overlapping_text_control_groups(child, source_by_id, viewport)
+    if source.kind != "container":
+        return
 
-    for index, row in enumerate(list(compiled.children)):
-        if row.kind != "container" or row.style.layout_direction != "horizontal":
+    for source_text in source.children:
+        if source_text.kind != "text" or not source_text.source_id or not source_text.text:
             continue
-        text_children = [child for child in row.children if child.kind == "text" and child.source_id in source_by_id]
-        if len(text_children) < 2:
+        lines = [line for line in source_text.text.replace("\r", "").split("\n") if line.strip()]
+        if len(lines) < 2 or not all(_leading_space_count(line) > 0 for line in lines):
             continue
-
-        overlapping_pair: tuple[DesignNode, DesignNode] | None = None
-        for i, left in enumerate(text_children):
-            for right in text_children[i + 1 :]:
-                if _raw_text_overlap(source_by_id[left.source_id], source_by_id[right.source_id]):
-                    overlapping_pair = (left, right)
-                    break
-            if overlapping_pair:
-                break
-        if not overlapping_pair:
+        text_box = _box(source_text)
+        compiled_text = _find_node(compiled, source_text.source_id)
+        if text_box is None or compiled_text is None:
             continue
 
-        ordered = sorted(
-            text_children,
-            key=lambda node: (
-                source_by_id[node.source_id].style.y or 0,
-                source_by_id[node.source_id].style.x or 0,
-            ),
-        )
-        owner = next((node for node in ordered if "\n" in (node.text or "")), ordered[0])
-        owner_source = source_by_id[owner.source_id]
-        owner_box = _box(owner_source)
-        if owner_box is None:
-            continue
-
-        owned_icons: list[DesignNode] = []
-        for sibling in compiled.children:
-            if sibling.kind != "icon" or sibling.source_id not in source_by_id:
+        icons: list[DesignNode] = []
+        for source_icon in source.children:
+            if source_icon.kind != "icon" or not source_icon.source_id:
                 continue
-            source_icon = source_by_id[sibling.source_id]
             icon_box = _box(source_icon)
             if icon_box is None:
                 continue
-            horizontal = _overlap(owner_box[0], owner_box[2], icon_box[0], icon_box[2])
-            vertical = _overlap(owner_box[1], owner_box[3], icon_box[1], icon_box[3])
-            if horizontal > 0 and vertical > 0:
-                owned_icons.append(sibling)
+            if _overlap(text_box[0], text_box[2], icon_box[0], icon_box[2]) <= 0:
+                continue
+            if _overlap(text_box[1], text_box[3], icon_box[1], icon_box[3]) <= 0:
+                continue
+            if _find_node(compiled, source_icon.source_id) is not None:
+                icons.append(source_icon)
+
+        if len(icons) != len(lines):
+            continue
+        icons.sort(key=lambda item: (_box(item) or (0, 0, 0, 0))[1])
+
+        compiled_parent = _find_parent(compiled, source_text.source_id) or compiled
+        inherited_margin_top = compiled_parent.style.margin_top_percent if compiled_parent is not compiled else compiled_text.style.margin_top_percent
+        inherited_margin_left = compiled_parent.style.margin_left_percent if compiled_parent is not compiled else compiled_text.style.margin_left_percent
+
+        row_nodes: list[DesignNode] = []
+        font_size = source_text.style.font_size or 16.0
+        for index, (line, source_icon) in enumerate(zip(lines, icons)):
+            compiled_icon = _find_node(compiled, source_icon.source_id)
+            icon_box = _box(source_icon)
+            if compiled_icon is None or icon_box is None:
+                row_nodes = []
+                break
+            indent_px = _leading_space_count(line) * font_size * 0.36
+            icon_width = icon_box[2] - icon_box[0]
+            gap = max(0.0, indent_px - icon_width)
+
+            text_style = deepcopy(compiled_text.style)
+            text_style.position_mode = None
+            text_style.offset_x = None
+            text_style.offset_y = None
+            text_style.x = None
+            text_style.y = None
+            text_style.width = None
+            text_style.width_percent = None
+            text_style.width_mode = "hug"
+            text_style.margin_top_percent = None
+            text_style.margin_left_percent = None
+            text_style.margin_bottom_percent = None
+
+            line_node = DesignNode(
+                kind="text",
+                name=source_text.name,
+                source_id=f"{source_text.source_id}::line-{index + 1}",
+                source_type=source_text.source_type,
+                text=line.strip(),
+                style=text_style,
+            )
+
+            compiled_icon.style.position_mode = None
+            compiled_icon.style.offset_x = None
+            compiled_icon.style.offset_y = None
+            compiled_icon.style.x = None
+            compiled_icon.style.y = None
+            compiled_icon.style.margin_top_percent = None
+            compiled_icon.style.margin_left_percent = None
+            compiled_icon.style.margin_bottom_percent = None
+            compiled_icon.style.width_mode = "hug"
+
+            row_nodes.append(
+                DesignNode(
+                    kind="container",
+                    name=f"{source_text.name or 'contact'} row {index + 1}",
+                    source_id=f"{source_text.source_id}::contact-row-{index + 1}",
+                    style=DesignStyle(
+                        layout_direction="horizontal",
+                        width_mode="fill",
+                        height_mode="hug",
+                        gap=gap,
+                        counter_axis_align="center",
+                    ),
+                    children=[compiled_icon, line_node],
+                )
+            )
+
+        if not row_nodes:
+            continue
+
+        source_ids = {source_text.source_id, *(icon.source_id for icon in icons if icon.source_id)}
+        _detach_ids(compiled, source_ids)
 
         group = DesignNode(
             kind="container",
-            name=f"{owner.name or 'text'} controls",
-            source_id=f"{owner.source_id or 'text'}::controls",
+            name=f"{source_text.name or 'contact'} group",
+            source_id=f"{source_text.source_id}::contact-group",
             style=DesignStyle(
                 layout_direction="vertical",
                 width_mode="fill",
                 height_mode="hug",
-                margin_top_percent=row.style.margin_top_percent,
-                margin_left_percent=row.style.margin_left_percent,
+                margin_top_percent=inherited_margin_top,
+                margin_left_percent=inherited_margin_left,
             ),
-            children=[owner],
+            children=row_nodes,
         )
-        owner.style.margin_top_percent = None
-        owner.style.margin_left_percent = None
 
-        for icon in sorted(owned_icons, key=lambda node: source_by_id[node.source_id].style.y or 0):
-            icon_source = source_by_id[icon.source_id]
-            icon_box = _box(icon_source)
-            if icon_box is None:
-                continue
-            icon.style.position_mode = None
-            icon.style.offset_x = None
-            icon.style.offset_y = None
-            icon.style.x = None
-            icon.style.y = None
-            icon.style.margin_left_percent = _percent(icon_box[0] - owner_box[0], viewport)
-            icon.style.margin_top_percent = _percent(icon_box[1] - owner_box[3], viewport)
-            icon.style.margin_bottom_percent = _percent(owner_box[3] - icon_box[1] - (icon_box[3] - icon_box[1]), viewport)
-            group.children.append(icon)
-
-        remaining_text = [node for node in ordered if node is not owner]
-        replacement: list[DesignNode] = [group]
-        previous_source = owner_source
-        for text in remaining_text:
-            text_source = source_by_id[text.source_id]
-            prev_box = _box(previous_source)
-            text_box = _box(text_source)
-            if prev_box is None or text_box is None:
-                continue
-            text.style.margin_left_percent = row.style.margin_left_percent
-            text.style.margin_top_percent = _percent(text_box[1] - prev_box[3], viewport)
-            replacement.append(text)
-            previous_source = text_source
-
-        removed = set(id(node) for node in [row, *owned_icons])
-        new_children: list[DesignNode] = []
+        # Insert before the first following source sibling that still survives in
+        # compiled flow, otherwise append. This keeps the contact list before a
+        # subsequent CTA such as an enquiry link without relying on text labels.
+        source_index = source.children.index(source_text)
         inserted = False
-        for sibling in compiled.children:
-            if id(sibling) in removed:
-                if sibling is row and not inserted:
-                    new_children.extend(replacement)
-                    inserted = True
+        for following in source.children[source_index + 1 :]:
+            if not following.source_id:
                 continue
-            new_children.append(sibling)
-        compiled.children = new_children
-        break
+            target = _find_node(compiled, following.source_id)
+            parent = _find_parent(compiled, following.source_id)
+            if target is not None and parent is not None:
+                position = parent.children.index(target)
+                parent.children.insert(position, group)
+                inserted = True
+                break
+        if not inserted:
+            compiled.children.append(group)
+
+        # Use the last icon's visual bottom as the spacing anchor for an
+        # overlapping next text box. Figma text bounding boxes can extend below
+        # the actual last contact row and otherwise create a false negative gap.
+        last_icon_box = _box(icons[-1])
+        if last_icon_box is not None:
+            for following in source.children[source_index + 1 :]:
+                if following.kind != "text" or not following.source_id:
+                    continue
+                following_box = _box(following)
+                following_node = _find_node(compiled, following.source_id)
+                if following_box is None or following_node is None:
+                    continue
+                following_node.style.margin_top_percent = _percent(
+                    max(0.0, following_box[1] - last_icon_box[3]),
+                    viewport,
+                )
+                break
 
 
 def resolve_compiled_spatial_relationships(
@@ -245,8 +320,8 @@ def resolve_compiled_spatial_relationships(
         return compiled_root
 
     source_by_id = _source_map(source_root)
-    _restore_relative_background(compiled_root, source_root, viewport)
-    _resolve_overlapping_text_control_groups(compiled_root, source_by_id, viewport)
+    _promote_full_bleed_backgrounds(compiled_root, source_root)
+    _split_contact_rows(compiled_root, source_root, source_by_id, viewport)
     return compiled_root
 
 
