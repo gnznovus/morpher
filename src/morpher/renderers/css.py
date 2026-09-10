@@ -186,6 +186,12 @@ def _declarations(
             declarations.append(f"border-top: {_px(weight)} solid {style.stroke_color}")
         else:
             declarations.append(f"border-left: {_px(weight)} solid {style.stroke_color}")
+    elif node.kind == "shape" and style.stroke_color:
+        weight = style.stroke_weight if style.stroke_weight is not None else 1.0
+        declarations.append(f"border: {_px(weight)} solid {style.stroke_color}")
+
+    if style.border_radius is not None:
+        declarations.append(f"border-radius: {_px(style.border_radius)}")
 
     if node.kind == "image":
         declarations.extend(("display: block", "object-fit: cover"))
