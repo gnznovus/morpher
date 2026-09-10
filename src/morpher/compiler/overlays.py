@@ -49,6 +49,16 @@ def _overlap(a1: float, a2: float, b1: float, b2: float) -> float:
     return max(0.0, min(a2, b2) - max(a1, b1))
 
 
+def _vertical_overlap_ratio(a: DesignNode, b: DesignNode) -> float:
+    ab = _box(a)
+    bb = _box(b)
+    if ab is None or bb is None:
+        return 0.0
+    overlap = _overlap(ab[1], ab[3], bb[1], bb[3])
+    shorter = min(ab[3] - ab[1], bb[3] - bb[1])
+    return overlap / shorter if shorter > 0 else 0.0
+
+
 def _is_full_bleed_background(source: DesignNode, source_parent: DesignNode) -> bool:
     if source.kind != "image":
         return False
@@ -81,18 +91,9 @@ def _remove_source_id(node: DesignNode, source_id: str) -> bool:
 
 
 def _promote_full_bleed_backgrounds(compiled: DesignNode, source: DesignNode) -> None:
-    """Promote source-owned full-bleed images to container background metadata.
-
-    A full-bleed image that covers its owning source frame is not an overlapping
-    content element. Keeping it as an Elementor Image widget makes section
-    height depend on the asset and creates uncovered strips when content grows.
-    The compiled IR therefore stores it on the owning container and removes the
-    redundant image child from compiled flow.
-    """
     if compiled.kind != "container" or source.kind != "container":
         return
 
-    source_children = {child.source_id: child for child in source.children if child.source_id}
     backgrounds = [child for child in source.children if _is_full_bleed_background(child, source)]
     for background in backgrounds[:1]:
         if not background.source_id or not background.image_ref:
@@ -144,19 +145,7 @@ def _leading_space_count(line: str) -> int:
     return len(line) - len(line.lstrip(" "))
 
 
-def _split_contact_rows(
-    compiled: DesignNode,
-    source: DesignNode,
-    source_by_id: dict[str, DesignNode],
-    viewport: float,
-) -> None:
-    """Infer icon + text rows from multiline text that reserves an icon gutter.
-
-    Figma designs sometimes encode a contact list as one multiline text node
-    whose lines begin with spaces, with one icon aligned to each line. That is
-    a row relationship, not three independent overlays. Rebuild it as a
-    vertical group of horizontal rows so Elementor can stay in normal flow.
-    """
+def _split_contact_rows(compiled: DesignNode, source: DesignNode, source_by_id: dict[str, DesignNode], viewport: float) -> None:
     if source.kind != "container":
         return
 
@@ -242,13 +231,7 @@ def _split_contact_rows(
                     kind="container",
                     name=f"{source_text.name or 'contact'} row {index + 1}",
                     source_id=f"{source_text.source_id}::contact-row-{index + 1}",
-                    style=DesignStyle(
-                        layout_direction="horizontal",
-                        width_mode="fill",
-                        height_mode="hug",
-                        gap=gap,
-                        counter_axis_align="center",
-                    ),
+                    style=DesignStyle(layout_direction="horizontal", width_mode="fill", height_mode="hug", gap=gap, counter_axis_align="center"),
                     children=[compiled_icon, line_node],
                 )
             )
@@ -263,19 +246,10 @@ def _split_contact_rows(
             kind="container",
             name=f"{source_text.name or 'contact'} group",
             source_id=f"{source_text.source_id}::contact-group",
-            style=DesignStyle(
-                layout_direction="vertical",
-                width_mode="fill",
-                height_mode="hug",
-                margin_top_percent=inherited_margin_top,
-                margin_left_percent=inherited_margin_left,
-            ),
+            style=DesignStyle(layout_direction="vertical", width_mode="fill", height_mode="hug", margin_top_percent=inherited_margin_top, margin_left_percent=inherited_margin_left),
             children=row_nodes,
         )
 
-        # Insert before the first following source sibling that still survives in
-        # compiled flow, otherwise append. This keeps the contact list before a
-        # subsequent CTA such as an enquiry link without relying on text labels.
         source_index = source.children.index(source_text)
         inserted = False
         for following in source.children[source_index + 1 :]:
@@ -291,9 +265,6 @@ def _split_contact_rows(
         if not inserted:
             compiled.children.append(group)
 
-        # Use the last icon's visual bottom as the spacing anchor for an
-        # overlapping next text box. Figma text bounding boxes can extend below
-        # the actual last contact row and otherwise create a false negative gap.
         last_icon_box = _box(icons[-1])
         if last_icon_box is not None:
             for following in source.children[source_index + 1 :]:
@@ -303,18 +274,98 @@ def _split_contact_rows(
                 following_node = _find_node(compiled, following.source_id)
                 if following_box is None or following_node is None:
                     continue
-                following_node.style.margin_top_percent = _percent(
-                    max(0.0, following_box[1] - last_icon_box[3]),
-                    viewport,
-                )
+                following_node.style.margin_top_percent = _percent(max(0.0, following_box[1] - last_icon_box[3]), viewport)
                 break
 
 
-def resolve_compiled_spatial_relationships(
-    compiled_root: DesignNode,
-    source_root: DesignNode,
-    design_viewport_width: float | None,
-) -> DesignNode:
+def _stabilize_bottom_control_row(compiled: DesignNode, source: DesignNode, viewport: float) -> None:
+    """Keep wide three-item bottom controls as a section-level row.
+
+    Pagination-like controls are spatially separate from nearby content even if
+    region inference temporarily nests them inside the same content container.
+    Detect the relationship from source geometry: two visual controls plus an
+    intrinsic text counter in one bottom band spanning a meaningful width.
+    """
+    source_box = _box(source)
+    if source.kind != "container" or source_box is None:
+        return
+    parent_width = source_box[2] - source_box[0]
+    parent_height = source_box[3] - source_box[1]
+    if parent_width <= 0 or parent_height <= 0:
+        return
+
+    direct = [child for child in source.children if child.source_id and _box(child) is not None]
+    texts = [child for child in direct if child.kind == "text" and (child.style.text_auto_resize or "").upper() == "WIDTH_AND_HEIGHT"]
+    visuals = [child for child in direct if child.kind == "icon"]
+
+    for text in texts:
+        text_box = _box(text)
+        if text_box is None or text_box[1] < source_box[1] + parent_height * 0.65:
+            continue
+        aligned = [icon for icon in visuals if _vertical_overlap_ratio(text, icon) >= 0.25]
+        if len(aligned) < 2:
+            continue
+        aligned.sort(key=lambda node: (_box(node) or (0, 0, 0, 0))[0])
+        left = next((node for node in reversed(aligned) if (_box(node) or (0, 0, 0, 0))[2] <= text_box[0]), None)
+        right = next((node for node in aligned if (_box(node) or (0, 0, 0, 0))[0] >= text_box[2]), None)
+        if left is None or right is None:
+            continue
+        trio = [left, text, right]
+        trio_boxes = [_box(node) for node in trio]
+        if any(box is None for box in trio_boxes):
+            continue
+        boxes = [box for box in trio_boxes if box is not None]
+        span_left = min(box[0] for box in boxes)
+        span_right = max(box[2] for box in boxes)
+        if (span_right - span_left) / parent_width < 0.25:
+            continue
+
+        compiled_nodes = [_find_node(compiled, node.source_id) for node in trio]
+        if any(node is None for node in compiled_nodes):
+            continue
+        nodes = [node for node in compiled_nodes if node is not None]
+        _detach_ids(compiled, {node.source_id for node in trio if node.source_id})
+        for node in nodes:
+            node.style.position_mode = None
+            node.style.offset_x = None
+            node.style.offset_y = None
+            node.style.x = None
+            node.style.y = None
+            node.style.margin_top_percent = None
+            node.style.margin_left_percent = None
+            node.style.margin_bottom_percent = None
+            if node.kind in {"text", "icon"}:
+                node.style.width_mode = "hug"
+                node.style.width_percent = None
+
+        preceding_bottom = source_box[1]
+        for candidate in direct:
+            if candidate in trio or _is_full_bleed_background(candidate, source):
+                continue
+            box = _box(candidate)
+            if box is not None and box[3] <= text_box[1]:
+                preceding_bottom = max(preceding_bottom, box[3])
+
+        row = DesignNode(
+            kind="container",
+            name="Bottom control row",
+            source_id=f"{source.source_id or 'section'}::bottom-controls",
+            style=DesignStyle(
+                layout_direction="horizontal",
+                width_percent=_percent(span_right - span_left, parent_width),
+                height_mode="hug",
+                margin_left_percent=_percent(span_left - source_box[0], parent_width),
+                margin_top_percent=_percent(max(0.0, text_box[1] - preceding_bottom), viewport),
+                primary_axis_align="space_between",
+                counter_axis_align="center",
+            ),
+            children=nodes,
+        )
+        compiled.children.append(row)
+        return
+
+
+def resolve_compiled_spatial_relationships(compiled_root: DesignNode, source_root: DesignNode, design_viewport_width: float | None) -> DesignNode:
     viewport = design_viewport_width or 0
     if viewport <= 0:
         return compiled_root
@@ -322,21 +373,11 @@ def resolve_compiled_spatial_relationships(
     source_by_id = _source_map(source_root)
     _promote_full_bleed_backgrounds(compiled_root, source_root)
     _split_contact_rows(compiled_root, source_root, source_by_id, viewport)
+    _stabilize_bottom_control_row(compiled_root, source_root, viewport)
     return compiled_root
 
 
-def resolve_inferred_region_overlays(
-    root: DesignNode,
-    design_viewport_width: float | None,
-) -> DesignNode:
-    """Convert region-owned absolute overlays into zero-net-flow overlays.
-
-    Once the responsive compiler has inferred a semantic region, small overlays
-    inside that region no longer need Elementor absolute positioning. A negative
-    top margin moves the item back over the preceding media row, a compensating
-    bottom margin keeps the region's flow height unchanged, and the horizontal
-    offset becomes a percentage margin relative to the inferred region.
-    """
+def resolve_inferred_region_overlays(root: DesignNode, design_viewport_width: float | None) -> DesignNode:
     viewport = design_viewport_width or 0
     if viewport <= 0:
         return root
