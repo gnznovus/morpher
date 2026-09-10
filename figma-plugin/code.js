@@ -1,4 +1,5 @@
 const MORPHER_URL = "http://localhost:8767/figma/import";
+const MORPHER_ERROR_LOG_URL = "http://localhost:8767/figma/error-log";
 
 figma.showUI(__html__, { width: 320, height: 180 });
 
@@ -18,6 +19,88 @@ function bytesToBase64(bytes) {
     binary += String.fromCharCode(...chunk);
   }
   return btoa(binary);
+}
+
+function describeNode(node) {
+  if (!node) return null;
+  const description = {
+    id: node.id,
+    name: node.name,
+    type: node.type,
+  };
+  if ("visible" in node) description.visible = node.visible;
+  if ("width" in node) description.width = node.width;
+  if ("height" in node) description.height = node.height;
+  if ("children" in node) description.childCount = node.children.length;
+  return description;
+}
+
+function serializeError(error) {
+  if (!error || typeof error !== "object") {
+    return { value: String(error) };
+  }
+
+  const details = {};
+  for (const key of Object.getOwnPropertyNames(error)) {
+    try {
+      const value = error[key];
+      if (value === null || value === undefined || ["string", "number", "boolean"].includes(typeof value)) {
+        details[key] = value;
+      } else {
+        details[key] = String(value);
+      }
+    } catch (_) {
+      details[key] = "<unreadable>";
+    }
+  }
+
+  return {
+    constructor: error.constructor && error.constructor.name ? error.constructor.name : null,
+    ...details,
+    message: typeof error.message === "string" ? error.message : String(error),
+    stack: typeof error.stack === "string" ? error.stack : null,
+  };
+}
+
+function buildErrorLog(node, stage, error) {
+  const lines = [
+    "MORPHER FIGMA EXPORT ERROR",
+    `CREATED: ${new Date().toISOString()}`,
+    `STAGE: ${stage}`,
+    `EDITOR: ${figma.editorType}`,
+    `PAGE: ${figma.currentPage.name} (${figma.currentPage.id})`,
+    "",
+    "=== SELECTED NODE ===",
+    JSON.stringify(describeNode(node), null, 2),
+    "",
+    "=== ERROR ===",
+    JSON.stringify(serializeError(error), null, 2),
+  ];
+
+  if (error && typeof error === "object" && error.exportDiagnostic) {
+    lines.push(
+      "",
+      "=== JSON_REST_V1 DIAGNOSTIC ===",
+      JSON.stringify(error.exportDiagnostic, null, 2)
+    );
+  }
+
+  return lines.join("\n");
+}
+
+async function persistErrorLog(node, stage, error) {
+  try {
+    const response = await fetch(MORPHER_ERROR_LOG_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ log: buildErrorLog(node, stage, error) }),
+    });
+    if (!response.ok) {
+      console.error("Could not persist Morpher exporter error log:", await response.text());
+    }
+  } catch (logError) {
+    console.error("Could not persist Morpher exporter error log:", logError);
+  }
 }
 
 function collectImageRefs(node, refs = new Set()) {
@@ -77,45 +160,36 @@ function collectTextAssets(node, assets = []) {
 }
 
 async function diagnoseJsonExportFailure(node, rootError) {
-  const rootMessage = rootError instanceof Error ? rootError.message : String(rootError);
-  if (!("children" in node) || node.children.length === 0) {
-    throw new Error(
-      `Figma JSON_REST_V1 export failed for ${node.type} "${node.name}" (${node.id}): ${rootMessage}`
-    );
-  }
+  const probes = [];
 
-  const failingChildren = [];
-  let successfulChildren = 0;
-
-  for (const child of node.children) {
-    try {
-      await child.exportAsync({ format: "JSON_REST_V1" });
-      successfulChildren += 1;
-    } catch (error) {
-      failingChildren.push({
-        id: child.id,
-        name: child.name,
-        type: child.type,
-        error: error instanceof Error ? error.message : String(error),
-      });
+  if ("children" in node) {
+    for (const child of node.children) {
+      try {
+        await child.exportAsync({ format: "JSON_REST_V1" });
+        probes.push({ node: describeNode(child), ok: true });
+      } catch (error) {
+        probes.push({ node: describeNode(child), ok: false, error: serializeError(error) });
+      }
     }
   }
 
-  if (failingChildren.length === 0) {
-    throw new Error(
-      `Figma JSON_REST_V1 root-only failure: ${node.type} "${node.name}" (${node.id}) failed, but all ${successfulChildren} direct children export successfully. Root error: ${rootMessage}`
-    );
+  const failingChildren = probes.filter((probe) => !probe.ok);
+  let summary;
+  if (!("children" in node) || node.children.length === 0) {
+    summary = `Figma JSON_REST_V1 export failed for ${node.type} "${node.name}" (${node.id}).`;
+  } else if (failingChildren.length === 0) {
+    summary = `Figma JSON_REST_V1 root-only failure for ${node.type} "${node.name}" (${node.id}); all ${probes.length} direct children export successfully.`;
+  } else {
+    summary = `Figma JSON_REST_V1 export failed for ${node.type} "${node.name}" (${node.id}); ${failingChildren.length}/${probes.length} direct children also fail.`;
   }
 
-  const details = failingChildren
-    .slice(0, 5)
-    .map((child) => `${child.type} "${child.name}" (${child.id}): ${child.error}`)
-    .join(" | ");
-  const extra = failingChildren.length > 5 ? ` | +${failingChildren.length - 5} more` : "";
-
-  throw new Error(
-    `Figma JSON_REST_V1 export failed for ${node.type} "${node.name}" (${node.id}). ${failingChildren.length}/${node.children.length} direct children also fail: ${details}${extra}. Root error: ${rootMessage}`
-  );
+  const wrapped = new Error(summary);
+  wrapped.exportDiagnostic = {
+    root: describeNode(node),
+    rootError: serializeError(rootError),
+    directChildProbes: probes,
+  };
+  throw wrapped;
 }
 
 async function exportJsonRest(node) {
@@ -246,9 +320,6 @@ async function exportVectorAssets(node) {
 async function exportTextAssets(node) {
   const assets = [];
   for (const text of collectTextAssets(node)) {
-    // Keep Figma's complete text-node canvas instead of cropping the SVG to
-    // visible glyph paths. This preserves intentional empty geometry such as
-    // leading spaces while still outlining the glyphs for font fidelity.
     const bytes = await text.exportAsync({
       format: "SVG",
       svgOutlineText: true,
@@ -270,15 +341,29 @@ async function exportTextLayouts(node) {
 figma.ui.onmessage = async (message) => {
   if (message.type !== "send-to-morpher") return;
 
+  let node = null;
+  let stage = "selection";
+
   try {
-    const node = selectedNode();
+    node = selectedNode();
     figma.ui.postMessage({ type: "status", state: "sending", text: `Exporting ${node.name}...` });
 
+    stage = "json-rest-v1";
     const payload = await exportJsonRest(node);
+
+    stage = "image-assets";
     const assets = await exportImageAssets(node);
+
+    stage = "vector-assets";
     const vectorAssets = await exportVectorAssets(node);
+
+    stage = "text-assets";
     const textAssets = await exportTextAssets(node);
+
+    stage = "text-layouts";
     const textLayouts = await exportTextLayouts(node);
+
+    stage = "send-to-morpher";
     const response = await fetch(MORPHER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -304,6 +389,7 @@ figma.ui.onmessage = async (message) => {
       text: `Saved as ${result.filename} (${result.assetsSaved || 0} images, ${result.vectorsSaved || 0} vectors, ${result.textsSaved || 0} outlined texts)`,
     });
   } catch (error) {
+    await persistErrorLog(node, stage, error);
     figma.ui.postMessage({
       type: "status",
       state: "error",
