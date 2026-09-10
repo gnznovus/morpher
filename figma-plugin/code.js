@@ -76,6 +76,56 @@ function collectTextAssets(node, assets = []) {
   return assets;
 }
 
+async function diagnoseJsonExportFailure(node, rootError) {
+  const rootMessage = rootError instanceof Error ? rootError.message : String(rootError);
+  if (!("children" in node) || node.children.length === 0) {
+    throw new Error(
+      `Figma JSON_REST_V1 export failed for ${node.type} "${node.name}" (${node.id}): ${rootMessage}`
+    );
+  }
+
+  const failingChildren = [];
+  let successfulChildren = 0;
+
+  for (const child of node.children) {
+    try {
+      await child.exportAsync({ format: "JSON_REST_V1" });
+      successfulChildren += 1;
+    } catch (error) {
+      failingChildren.push({
+        id: child.id,
+        name: child.name,
+        type: child.type,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (failingChildren.length === 0) {
+    throw new Error(
+      `Figma JSON_REST_V1 root-only failure: ${node.type} "${node.name}" (${node.id}) failed, but all ${successfulChildren} direct children export successfully. Root error: ${rootMessage}`
+    );
+  }
+
+  const details = failingChildren
+    .slice(0, 5)
+    .map((child) => `${child.type} "${child.name}" (${child.id}): ${child.error}`)
+    .join(" | ");
+  const extra = failingChildren.length > 5 ? ` | +${failingChildren.length - 5} more` : "";
+
+  throw new Error(
+    `Figma JSON_REST_V1 export failed for ${node.type} "${node.name}" (${node.id}). ${failingChildren.length}/${node.children.length} direct children also fail: ${details}${extra}. Root error: ${rootMessage}`
+  );
+}
+
+async function exportJsonRest(node) {
+  try {
+    return await node.exportAsync({ format: "JSON_REST_V1" });
+  } catch (error) {
+    return diagnoseJsonExportFailure(node, error);
+  }
+}
+
 async function loadTextFonts(text) {
   const fonts = text.getRangeAllFontNames(0, text.characters.length);
   const unique = new Map();
@@ -224,7 +274,7 @@ figma.ui.onmessage = async (message) => {
     const node = selectedNode();
     figma.ui.postMessage({ type: "status", state: "sending", text: `Exporting ${node.name}...` });
 
-    const payload = await node.exportAsync({ format: "JSON_REST_V1" });
+    const payload = await exportJsonRest(node);
     const assets = await exportImageAssets(node);
     const vectorAssets = await exportVectorAssets(node);
     const textAssets = await exportTextAssets(node);
