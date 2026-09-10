@@ -86,6 +86,13 @@ def _layer_anchor_bounds(node: DesignNode) -> tuple[float, float, float, float]:
     return parent_box
 
 
+def _is_background_visual(node: DesignNode, parent: DesignNode) -> bool:
+    if node.kind != "image" or not _has_box(node) or not _has_box(parent):
+        return False
+    parent_area = _area(_bounds(parent))
+    return parent_area > 0 and _area(_bounds(node)) / parent_area >= 0.8
+
+
 def _is_independent_visual(node: DesignNode, parent: DesignNode, siblings: list[DesignNode]) -> bool:
     if node.kind != "icon" or not _has_box(node) or not _has_box(parent):
         return False
@@ -95,7 +102,7 @@ def _is_independent_visual(node: DesignNode, parent: DesignNode, siblings: list[
     if parent_area > 0 and _area(node_box) / parent_area > 0.5:
         return True
     for sibling in siblings:
-        if sibling is node or not _is_visual(sibling):
+        if sibling is node or not _is_visual(sibling) or _is_background_visual(sibling, parent):
             continue
         if _contains(_bounds(sibling), node_box):
             return True
@@ -123,6 +130,12 @@ def _overlap_area(a: tuple[float, float, float, float], b: tuple[float, float, f
     width = max(0.0, min(ax2, bx2) - max(ax1, bx1))
     height = max(0.0, min(ay2, by2) - max(ay1, by1))
     return width * height
+
+
+def _horizontal_overlap(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
+    ax1, _, ax2, _ = a
+    bx1, _, bx2, _ = b
+    return max(0.0, min(ax2, bx2) - max(ax1, bx1))
 
 
 def _is_semantic_collision_node(node: DesignNode) -> bool:
@@ -158,6 +171,8 @@ def _same_band(a: DesignNode, b: DesignNode, boxes: dict[int, tuple[float, float
         return False
     a_box = boxes[id(a)]
     b_box = boxes[id(b)]
+    if {a.kind, b.kind} == {"icon", "text"} and _horizontal_overlap(a_box, b_box) > 0:
+        return False
     overlap = _vertical_overlap(a_box, b_box)
     shorter = min(a_box[3] - a_box[1], b_box[3] - b_box[1])
     return shorter > 0 and overlap / shorter >= 0.25
