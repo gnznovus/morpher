@@ -30,9 +30,6 @@ def _relative_offset(value: float | None, parent_value: float | None) -> float |
 
 def _apply_item_sizing(settings: dict, style: DesignStyle, *, container: bool) -> None:
     if style.width_percent is not None:
-        # Responsive-compiler widths are measured against the Figma design
-        # viewport, so preserve that coordinate system instead of rebasing the
-        # same numeric value against an arbitrary Elementor parent.
         if container:
             settings["width"] = _size("vw", style.width_percent)
         else:
@@ -196,12 +193,30 @@ def _render_shape(node: DesignNode, path: str, parent_style: DesignStyle | None 
     return {"id": _element_id(node, path), "settings": _container_settings(node.style, parent_style), "elements": [], "isInner": False, "elType": "container"}
 
 
+def _render_divider(node: DesignNode, path: str, parent_style: DesignStyle | None = None) -> dict:
+    style = node.style
+    settings: dict = {"style": "solid"}
+    if style.stroke_color:
+        settings["color"] = style.stroke_color
+    if style.stroke_weight is not None:
+        settings["weight"] = _size("px", style.stroke_weight)
+    _apply_item_sizing(settings, style, container=False)
+    _apply_flow_margin(settings, style, container=False)
+    _apply_free_layout_geometry(settings, style, parent_style, container=False)
+    _apply_child_alignment(settings, style, parent_style, container=False)
+    return {"id": _element_id(node, path), "settings": settings, "elements": [], "isInner": False, "widgetType": "divider", "elType": "widget"}
+
+
 def _render_asset_widget(node: DesignNode, path: str, parent_style: DesignStyle | None, asset_sources: dict[str, str]) -> dict | None:
     key = node.image_ref.replace(":", "-") if node.kind == "image" and node.image_ref else (node.source_id or "").replace(":", "-")
     source = asset_sources.get(key)
     if not source:
         return None
     settings: dict = {"image": {"url": source, "id": "", "size": ""}, "image_size": "full"}
+    if node.kind == "image" and node.style.image_opacity is not None:
+        settings["opacity"] = _size("px", node.style.image_opacity)
+        settings["css_filters_css_filter"] = "custom"
+        settings["css_filters_opacity"] = _size("px", node.style.image_opacity * 100)
     _apply_item_sizing(settings, node.style, container=False)
     _apply_flow_margin(settings, node.style, container=False)
     _apply_free_layout_geometry(settings, node.style, parent_style, container=False)
@@ -220,6 +235,8 @@ def _render_container(node: DesignNode, path: str, parent_style: DesignStyle | N
             elements.append(_render_heading(child, child_path, node.style, design_viewport=design_viewport))
         elif child.kind == "shape":
             elements.append(_render_shape(child, child_path, node.style))
+        elif child.kind == "divider":
+            elements.append(_render_divider(child, child_path, node.style))
         elif child.kind in {"image", "icon"}:
             asset = _render_asset_widget(child, child_path, node.style, asset_sources)
             if asset is not None:
