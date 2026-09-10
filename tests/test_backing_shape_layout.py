@@ -58,8 +58,8 @@ def test_large_backing_shape_defines_content_region_without_entering_flow():
     assert len(composition.children) == 2
 
     left_region, right_region = composition.children
-    assert left_region.style.width == 770
-    assert right_region.style.width == 1149
+    assert left_region.style.width_percent == 770 / 1920 * 100
+    assert right_region.style.width_percent == 1149 / 1920 * 100
     assert right_region.style.background == "rgba(230, 230, 230, 1)"
 
     left_ids = {node.source_id for node in _walk(left_region)}
