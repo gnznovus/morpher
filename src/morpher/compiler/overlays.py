@@ -59,6 +59,20 @@ def _vertical_overlap_ratio(a: DesignNode, b: DesignNode) -> float:
     return overlap / shorter if shorter > 0 else 0.0
 
 
+def _is_pagination_counter_text(node: DesignNode) -> bool:
+    if node.kind != "text":
+        return False
+    if (node.style.text_auto_resize or "").upper() == "WIDTH_AND_HEIGHT":
+        return True
+    text = (node.text or "").strip()
+    parts = [part.strip() for part in text.split("/")]
+    return (
+        len(text) <= 12
+        and len(parts) == 2
+        and all(part.isdigit() and 1 <= len(part) <= 3 for part in parts)
+    )
+
+
 def _is_full_bleed_background(source: DesignNode, source_parent: DesignNode) -> bool:
     if source.kind != "image":
         return False
@@ -344,10 +358,12 @@ def _stabilize_bottom_control_row(compiled: DesignNode, source: DesignNode, view
 
     Pagination-like controls are spatially separate from nearby content even if
     region inference temporarily nests them inside the same content container.
-    Detect the relationship from source geometry: two visual controls plus an
-    intrinsic text counter in one bottom band spanning a meaningful width.
-    When all three controls already belong to one inferred region, stabilize
-    them inside that region; otherwise preserve the existing section-level row.
+    Detect the relationship from source geometry: two visual controls plus a
+    compact counter in one bottom band spanning a meaningful width. Metadata is
+    accepted when present, but counter-like text can recover missing Figma
+    auto-resize metadata. When all three controls already belong to one inferred
+    region, stabilize them inside that region; otherwise preserve the existing
+    section-level row.
     """
     source_box = _box(source)
     if source.kind != "container" or source_box is None:
@@ -358,7 +374,7 @@ def _stabilize_bottom_control_row(compiled: DesignNode, source: DesignNode, view
         return
 
     direct = [child for child in source.children if child.source_id and _box(child) is not None]
-    texts = [child for child in direct if child.kind == "text" and (child.style.text_auto_resize or "").upper() == "WIDTH_AND_HEIGHT"]
+    texts = [child for child in direct if _is_pagination_counter_text(child)]
     visuals = [child for child in direct if child.kind == "icon"]
 
     for text in texts:
