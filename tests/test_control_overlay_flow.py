@@ -28,13 +28,27 @@ def test_full_bleed_background_does_not_make_controls_absolute():
     )
 
     compiled = compile_responsive_layout(root)
+    background = _find(compiled, "offers:bg")
+    counter = _find(compiled, "offers:counter")
     left = _find(compiled, "offers:left-arrow")
     right = _find(compiled, "offers:right-arrow")
 
-    assert left.style.position_mode is None
-    assert right.style.position_mode is None
-    assert left.style.x is None
-    assert right.style.x is None
+    assert background.style.position_mode == "absolute"
+    assert background.style.offset_x == 0
+    assert background.style.offset_y == 0
+    assert all(node.style.position_mode is None for node in (counter, left, right))
+    assert all(node.style.x is None for node in (counter, left, right))
+
+    pagination_rows = [
+        child
+        for child in compiled.children
+        if child.kind == "container"
+        and child.style.layout_direction == "horizontal"
+        and {item.source_id for item in child.children} == {"offers:left-arrow", "offers:counter", "offers:right-arrow"}
+    ]
+    assert len(pagination_rows) == 1
+    pagination = pagination_rows[0]
+    assert pagination.style.margin_top_percent is None or pagination.style.margin_top_percent >= 0
 
 
 def test_icon_overlapping_multiline_text_becomes_flow_overlay_not_same_row():
