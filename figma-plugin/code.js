@@ -331,8 +331,14 @@ async function probeVectorChildren(vector) {
   return probes;
 }
 
+function isNoVisibleLayersExportError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("may not have any visible layers");
+}
+
 async function exportVectorAssets(node) {
   const assets = [];
+  const skipped = [];
   const vectors = collectVectorAssets(node);
 
   for (let index = 0; index < vectors.length; index += 1) {
@@ -341,6 +347,16 @@ async function exportVectorAssets(node) {
       const bytes = await vector.exportAsync({ format: "SVG" });
       assets.push({ sourceId: vector.id, data: bytesToBase64(bytes) });
     } catch (error) {
+      if (isNoVisibleLayersExportError(error)) {
+        skipped.push({
+          index: index + 1,
+          total: vectors.length,
+          node: describeNode(vector),
+          error: serializeError(error),
+        });
+        continue;
+      }
+
       const wrapped = new Error(
         `Figma SVG export failed for ${vector.type} "${vector.name}" (${vector.id}) at vector ${index + 1}/${vectors.length}.`
       );
@@ -355,7 +371,8 @@ async function exportVectorAssets(node) {
       throw wrapped;
     }
   }
-  return assets;
+
+  return { assets, skipped };
 }
 
 async function exportTextAssets(node) {
@@ -396,7 +413,9 @@ figma.ui.onmessage = async (message) => {
     const assets = await exportImageAssets(node);
 
     stage = "vector-assets";
-    const vectorAssets = await exportVectorAssets(node);
+    const vectorExport = await exportVectorAssets(node);
+    const vectorAssets = vectorExport.assets;
+    const skippedVectorAssets = vectorExport.skipped;
 
     stage = "text-assets";
     const textAssets = await exportTextAssets(node);
@@ -414,6 +433,7 @@ figma.ui.onmessage = async (message) => {
         payload,
         assets,
         vectorAssets,
+        vectorAssetWarnings: skippedVectorAssets,
         textAssets,
         textLayouts,
       }),
@@ -424,10 +444,14 @@ figma.ui.onmessage = async (message) => {
       throw new Error(result.error || `Morpher returned HTTP ${response.status}`);
     }
 
+    const skippedNote = skippedVectorAssets.length
+      ? `, ${skippedVectorAssets.length} non-rendering vectors skipped`
+      : "";
+
     figma.ui.postMessage({
       type: "status",
       state: "success",
-      text: `Saved as ${result.filename} (${result.assetsSaved || 0} images, ${result.vectorsSaved || 0} vectors, ${result.textsSaved || 0} outlined texts)`,
+      text: `Saved as ${result.filename} (${result.assetsSaved || 0} images, ${result.vectorsSaved || 0} vectors, ${result.textsSaved || 0} outlined texts${skippedNote})`,
     });
   } catch (error) {
     await persistErrorLog(node, stage, error);
