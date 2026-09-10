@@ -109,6 +109,21 @@ def test_renders_image_and_icon_from_elementor_asset_package():
     assert icon["settings"]["image"]["url"] == "assets/Discovery/discovery-play-icon.svg"
 
 
+def test_renders_divider_and_image_opacity_for_elementor():
+    root = DesignNode(kind="container", name="Offers", source_id="45:5240", children=[
+        DesignNode(kind="divider", name="Line 1", source_id="45:5247", style=DesignStyle(width=1920, stroke_color="rgba(255, 255, 255, 0.5)", stroke_weight=1)),
+        DesignNode(kind="image", name="Offer Background", source_id="45:5241", image_ref="offer-bg", style=DesignStyle(image_opacity=0.5)),
+    ])
+    result = render_elementor(root, asset_sources={"offer-bg": "assets/Offers/offers-background.jpg"})
+    divider, image = result["content"][0]["elements"]
+    assert divider["widgetType"] == "divider"
+    assert divider["settings"]["style"] == "solid"
+    assert divider["settings"]["color"] == "rgba(255, 255, 255, 0.5)"
+    assert divider["settings"]["weight"] == {"unit": "px", "size": 1, "sizes": []}
+    assert image["settings"]["css_filters_css_filter"] == "custom"
+    assert image["settings"]["css_filters_opacity"] == {"unit": "px", "size": 50.0, "sizes": []}
+
+
 def test_preserves_decorative_vector_inside_content_wrapper():
     backdrop = DesignNode(kind="icon", name="Vector", source_id="45:5270", style=DesignStyle(width=1233, height=1412))
     body = DesignNode(kind="text", name="Body", source_id="45:5271", text="Hotel copy")
@@ -121,37 +136,15 @@ def test_preserves_decorative_vector_inside_content_wrapper():
 
 
 def test_authored_break_is_preserved_without_overriding_bounded_width():
-    root = DesignNode(
-        kind="container",
-        source_id="break:root",
-        style=DesignStyle(layout_direction="vertical"),
-        children=[
-            DesignNode(
-                kind="text",
-                source_id="break:text",
-                text="WELCOME TO MUU\nTHIS SECOND LINE IS STILL ALLOWED TO WRAP NATURALLY",
-                style=DesignStyle(width_percent=42.5),
-            )
-        ],
-    )
+    root = DesignNode(kind="container", source_id="break:root", style=DesignStyle(layout_direction="vertical"), children=[DesignNode(kind="text", source_id="break:text", text="WELCOME TO MUU\nTHIS SECOND LINE IS STILL ALLOWED TO WRAP NATURALLY", style=DesignStyle(width_percent=42.5))])
     heading = render_elementor(root)["content"][0]["elements"][0]
     assert heading["settings"]["title"] == "WELCOME TO MUU<br>THIS SECOND LINE IS STILL ALLOWED TO WRAP NATURALLY"
     assert heading["settings"]["_element_custom_width"] == {"unit": "vw", "size": 42.5, "sizes": []}
 
 
 def test_compiled_width_is_viewport_relative_and_independent_of_authored_breaks():
-    bounded = DesignNode(
-        kind="container",
-        source_id="break:bounded",
-        style=DesignStyle(layout_direction="vertical"),
-        children=[DesignNode(kind="text", source_id="break:child", text="FIRST\nSECOND", style=DesignStyle(width_percent=38.125))],
-    )
-    natural = DesignNode(
-        kind="container",
-        source_id="break:natural",
-        style=DesignStyle(layout_direction="vertical"),
-        children=[DesignNode(kind="text", source_id="break:child-natural", text="FIRST SECOND", style=DesignStyle(width_percent=38.125))],
-    )
+    bounded = DesignNode(kind="container", source_id="break:bounded", style=DesignStyle(layout_direction="vertical"), children=[DesignNode(kind="text", source_id="break:child", text="FIRST\nSECOND", style=DesignStyle(width_percent=38.125))])
+    natural = DesignNode(kind="container", source_id="break:natural", style=DesignStyle(layout_direction="vertical"), children=[DesignNode(kind="text", source_id="break:child-natural", text="FIRST SECOND", style=DesignStyle(width_percent=38.125))])
     bounded_settings = render_elementor(bounded)["content"][0]["elements"][0]["settings"]
     natural_settings = render_elementor(natural)["content"][0]["elements"][0]["settings"]
     assert bounded_settings["_element_custom_width"] == natural_settings["_element_custom_width"]
