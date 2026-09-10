@@ -14,6 +14,10 @@ def _class_name(node: DesignNode) -> str:
     return f"morpher-{source_id}"
 
 
+def _asset_key(value: str | None) -> str:
+    return (value or "").replace(":", "-")
+
+
 def _px(value: float) -> str:
     return f"{value:g}px"
 
@@ -85,7 +89,18 @@ def _absolute_geometry(node: DesignNode, parent: DesignNode) -> tuple[float | No
     return left, top, width, height, rotation_degrees
 
 
-def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
+def _uses_outlined_text_asset(node: DesignNode, asset_sources: dict[str, str]) -> bool:
+    if node.kind != "text":
+        return False
+    source = asset_sources.get(_asset_key(node.source_id))
+    return bool(source and source.lower().endswith(".svg"))
+
+
+def _declarations(
+    node: DesignNode,
+    parent: DesignNode | None,
+    asset_sources: dict[str, str],
+) -> list[str]:
     style = node.style
     is_root = parent is None
     is_absolute = _is_free_layout(parent)
@@ -99,7 +114,19 @@ def _declarations(node: DesignNode, parent: DesignNode | None) -> list[str]:
     elif is_absolute:
         declarations.append("position: absolute")
 
-        left, top, width, height, rotation_degrees = _absolute_geometry(node, parent)
+        if _uses_outlined_text_asset(node, asset_sources):
+            # Outlined Figma TEXT SVGs are exported with useAbsoluteBounds=true.
+            # Their SVG canvas already matches the final post-rotation Figma
+            # absoluteBoundingBox, so applying quarter-turn reconstruction again
+            # swaps the box and rotates the already-rotated artwork a second time.
+            left = _relative_offset(style.x, parent.style.x)
+            top = _relative_offset(style.y, parent.style.y)
+            width = style.width
+            height = style.height
+            rotation_degrees = None
+        else:
+            left, top, width, height, rotation_degrees = _absolute_geometry(node, parent)
+
         if left is not None:
             declarations.append(f"left: {_px(left)}")
         if top is not None:
@@ -202,8 +229,12 @@ def _walk(node: DesignNode, parent: DesignNode | None = None):
         yield from _walk(child, node)
 
 
-def render_css(root: DesignNode) -> str:
+def render_css(
+    root: DesignNode,
+    asset_sources: dict[str, str] | None = None,
+) -> str:
     """Render Design IR using flex for Auto Layout and absolute geometry for free layout."""
+    sources = asset_sources or {}
     blocks = [
         "html, body {",
         "  margin: 0;",
@@ -219,6 +250,6 @@ def render_css(root: DesignNode) -> str:
         if node.kind not in _RENDERABLE_KINDS:
             continue
         blocks.append(f".{_class_name(node)} {{")
-        blocks.extend(f"  {declaration};" for declaration in _declarations(node, parent))
+        blocks.extend(f"  {declaration};" for declaration in _declarations(node, parent, sources))
         blocks.extend(("}", ""))
     return "\n".join(blocks)
