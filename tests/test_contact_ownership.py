@@ -34,7 +34,7 @@ def test_contact_group_is_owned_by_nearby_content_and_cta_follows_it():
             _node("text", "enquiry", x=1129, y=3672, width=278, height=24, text="SPECIAL OFFER ENQUIRY"),
             _node("text", "contact", x=1131, y=3537, width=413, height=148, text="contact lines"),
             _node("icon", "mail", x=1130, y=3539, width=25, height=20),
-            _node("icon", "instagram", x=1130, y=3578, width=25, height=25),
+            _node("icon", "instagram", x=1130, y=3578, width=24, height=25),
             _node("icon", "phone", x=1134, y=3618, width=17, height=25),
         ],
     )
@@ -53,9 +53,9 @@ def test_contact_group_is_owned_by_nearby_content_and_cta_follows_it():
         source_id="contact::contact-group",
         style=DesignStyle(layout_direction="vertical", width_mode="fill", margin_left_percent=12.0),
         children=[
-            DesignNode(kind="container", source_id="contact::contact-row-1", children=[_node("icon", "mail")]),
-            DesignNode(kind="container", source_id="contact::contact-row-2", children=[_node("icon", "instagram")]),
-            DesignNode(kind="container", source_id="contact::contact-row-3", children=[_node("icon", "phone")]),
+            DesignNode(kind="container", source_id="contact::contact-row-1", children=[_node("icon", "mail", width=25)]),
+            DesignNode(kind="container", source_id="contact::contact-row-2", children=[_node("icon", "instagram", width=24)]),
+            DesignNode(kind="container", source_id="contact::contact-row-3", children=[_node("icon", "phone", width=17)]),
         ],
     )
     compiled = DesignNode(
@@ -84,3 +84,11 @@ def test_contact_group_is_owned_by_nearby_content_and_cta_follows_it():
     assert moved_enquiry.style.margin_left_percent == 58.8
     assert moved_enquiry.style.margin_top_percent is not None
     assert moved_enquiry.style.margin_top_percent > 0
+
+    peer_width_percent = 25 / 1920 * 100
+    for icon_id in ("mail", "instagram", "phone"):
+        icon = _find(result, icon_id)
+        assert icon is not None
+        assert icon.style.width == 25
+        assert icon.style.width_percent == peer_width_percent
+        assert icon.style.width_mode is None
