@@ -14,6 +14,7 @@ from morpher.compiler.overlays import (
     resolve_compiled_spatial_relationships,
     resolve_inferred_region_overlays,
 )
+from morpher.compiler.prune import prune_empty_generated_wrappers
 from morpher.inputs.figma_json import FigmaJsonAdapter
 from morpher.ir.nodes import DesignNode
 from morpher.renderers.css import render_css
@@ -100,6 +101,7 @@ def render_path(path: Path) -> tuple[Path, Path, Path, int]:
         design_viewport,
     )
     elementor_root = resolve_inferred_region_overlays(elementor_root, design_viewport)
+    elementor_root = prune_empty_generated_wrappers(elementor_root)
     elementor_root.style.width = design_viewport
     elementor_root.style.design_viewport_width = design_viewport
     elementor = render_elementor(elementor_root, asset_sources=elementor_asset_sources)
