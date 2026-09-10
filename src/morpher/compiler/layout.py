@@ -147,8 +147,46 @@ def _is_semantic_collision_node(node: DesignNode) -> bool:
     return node.kind in {"text", "shape"} or (node.kind == "container" and bool(node.style.background))
 
 
-def _has_real_overlap(children: list[DesignNode], boxes: dict[int, tuple[float, float, float, float]]) -> bool:
-    semantic_children = [child for child in children if _is_semantic_collision_node(child)]
+def _is_backing_shape(node: DesignNode, parent: DesignNode, siblings: list[DesignNode]) -> bool:
+    """Return true for a large shape acting as a visual surface behind content.
+
+    A backing surface should not make free-layout inference abort merely because
+    semantic children sit on top of it. Require both substantial parent area
+    and multiple contained semantic siblings so ordinary foreground shapes
+    retain the existing overlap safety behavior.
+    """
+    if node.kind != "shape" or not _has_box(node) or not _has_box(parent):
+        return False
+    parent_area = _area(_bounds(parent))
+    node_box = _bounds(node)
+    if parent_area <= 0 or _area(node_box) / parent_area < 0.25:
+        return False
+    contained = 0
+    for sibling in siblings:
+        if sibling is node or sibling.kind not in {"text", "divider"} or not _has_box(sibling):
+            continue
+        sibling_box = _bounds(sibling)
+        sibling_area = _area(sibling_box)
+        if sibling_area <= 0:
+            continue
+        if _overlap_area(node_box, sibling_box) / sibling_area >= 0.8:
+            contained += 1
+            if contained >= 2:
+                return True
+    return False
+
+
+def _has_real_overlap(
+    children: list[DesignNode],
+    boxes: dict[int, tuple[float, float, float, float]],
+    *,
+    parent: DesignNode,
+) -> bool:
+    semantic_children = [
+        child
+        for child in children
+        if _is_semantic_collision_node(child) and not _is_backing_shape(child, parent, children)
+    ]
     for index, child in enumerate(semantic_children):
         box = boxes[id(child)]
         area = _area(box)
@@ -332,11 +370,18 @@ def _compile_free_layout(node: DesignNode, design_viewport_width: float) -> Desi
     children = node.children
     if not children or not _has_box(node):
         return node
-    flow_children = [child for child in children if _has_box(child) and (_participates_in_flow(child) or _is_flow_visual(child))]
+    backing_shapes = [child for child in children if _is_backing_shape(child, node, children)]
+    flow_children = [
+        child
+        for child in children
+        if child not in backing_shapes
+        and _has_box(child)
+        and (_participates_in_flow(child) or _is_flow_visual(child))
+    ]
     if not flow_children:
         return node
     boxes = {id(child): _layout_bounds(child) for child in flow_children}
-    original_child_bounds = list(boxes.values())
+    original_child_bounds = [*boxes.values(), *[_bounds(shape) for shape in backing_shapes]]
     px, _, pr, _ = _bounds(node)
     parent_width = pr - px
     if len(flow_children) == 1:
@@ -349,11 +394,33 @@ def _compile_free_layout(node: DesignNode, design_viewport_width: float) -> Desi
         _make_child_flow(child, width_percent=_percent(box[2] - box[0], design_viewport_width), margin_left_percent=_percent(box[0] - px, parent_width))
         node.children = [child, *[item for item in children if item is not flow_children[0] and item is not child]]
         return node
-    if _has_real_overlap(flow_children, boxes):
+    if _has_real_overlap(flow_children, boxes, parent=node):
         return node
     regions = _horizontal_regions(flow_children, boxes, parent_width)
     if regions:
-        return _compile_horizontal_regions(node, regions, boxes, original_child_bounds, design_viewport_width)
+        compiled = _compile_horizontal_regions(node, regions, boxes, original_child_bounds, design_viewport_width)
+        if backing_shapes and compiled.children:
+            row = compiled.children[0]
+            if row.kind == "container":
+                for surface in backing_shapes:
+                    surface_box = _bounds(surface)
+                    for region in row.children:
+                        if region.kind != "container" or not _has_box(region):
+                            continue
+                        region_box = _bounds(region)
+                        region_area = _area(region_box)
+                        if region_area <= 0:
+                            continue
+                        if _overlap_area(surface_box, region_box) / region_area >= 0.8:
+                            if surface.style.background:
+                                region.style.background = surface.style.background
+                            break
+        compiled.children = [
+            child
+            for child in compiled.children
+            if child not in backing_shapes
+        ]
+        return compiled
     bands = _bands(flow_children, boxes)
     if not bands:
         return node
@@ -382,7 +449,7 @@ def _compile_free_layout(node: DesignNode, design_viewport_width: float) -> Desi
         compiled_children.append(row)
     compiled_style = _flow_container_style(node, original_child_bounds)
     flow_ids = {id(child) for child in flow_children}
-    deferred_children = [child for child in children if id(child) not in flow_ids]
+    deferred_children = [child for child in children if id(child) not in flow_ids and child not in backing_shapes]
     node.style = compiled_style
     node.children = [*compiled_children, *deferred_children]
     return node
