@@ -40,17 +40,18 @@ def test_contact_group_is_owned_by_nearby_content_and_cta_follows_it():
     )
 
     more = _node("text", "more", text="More about our offers")
+    more.style.margin_left_percent = 58.8
     enquiry = _node("text", "enquiry", text="SPECIAL OFFER ENQUIRY")
     content_region = DesignNode(
         kind="container",
         source_id="root::region-content",
-        style=DesignStyle(layout_direction="vertical", width_percent=40),
+        style=DesignStyle(layout_direction="vertical", width_percent=100),
         children=[more, enquiry],
     )
     contact_group = DesignNode(
         kind="container",
         source_id="contact::contact-group",
-        style=DesignStyle(layout_direction="vertical", width_mode="fill", margin_left_percent=58.8),
+        style=DesignStyle(layout_direction="vertical", width_mode="fill", margin_left_percent=12.0),
         children=[
             DesignNode(kind="container", source_id="contact::contact-row-1", children=[_node("icon", "mail")]),
             DesignNode(kind="container", source_id="contact::contact-row-2", children=[_node("icon", "instagram")]),
@@ -73,13 +74,13 @@ def test_contact_group_is_owned_by_nearby_content_and_cta_follows_it():
     ]
     moved_group = _find(result, "contact::contact-group")
     assert moved_group is not None
-    assert moved_group.style.margin_left_percent is None
+    assert moved_group.style.margin_left_percent == 58.8
     assert moved_group.style.position_mode is None
     assert moved_group.style.margin_top_percent is not None
     assert moved_group.style.margin_top_percent > 0
 
     moved_enquiry = _find(result, "enquiry")
     assert moved_enquiry is not None
-    assert moved_enquiry.style.margin_left_percent is None
+    assert moved_enquiry.style.margin_left_percent == 58.8
     assert moved_enquiry.style.margin_top_percent is not None
     assert moved_enquiry.style.margin_top_percent > 0
