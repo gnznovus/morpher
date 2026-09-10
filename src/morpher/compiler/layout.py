@@ -98,6 +98,17 @@ def _is_independent_visual(node: DesignNode, parent: DesignNode, siblings: list[
         return False
     node_box = _bounds(node)
     parent_box = _bounds(parent)
+    node_width = node_box[2] - node_box[0]
+    node_height = node_box[3] - node_box[1]
+    parent_width = parent_box[2] - parent_box[0]
+    parent_height = parent_box[3] - parent_box[1]
+    if (
+        parent_width > 0
+        and parent_height > 0
+        and node_width <= max(8.0, parent_width * 0.01)
+        and node_height / parent_height >= 0.25
+    ):
+        return True
     parent_area = _area(parent_box)
     if parent_area > 0 and _area(node_box) / parent_area > 0.5:
         return True
