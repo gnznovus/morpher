@@ -214,7 +214,9 @@ def _same_band(a: DesignNode, b: DesignNode, boxes: dict[int, tuple[float, float
         return False
     a_box = boxes[id(a)]
     b_box = boxes[id(b)]
-    if {a.kind, b.kind} == {"icon", "text"} and _horizontal_overlap(a_box, b_box) > 0:
+    horizontal_overlap = _horizontal_overlap(a_box, b_box)
+    shorter_width = min(a_box[2] - a_box[0], b_box[2] - b_box[0])
+    if shorter_width > 0 and horizontal_overlap / shorter_width > 0.25:
         return False
     overlap = _vertical_overlap(a_box, b_box)
     shorter = min(a_box[3] - a_box[1], b_box[3] - b_box[1])
