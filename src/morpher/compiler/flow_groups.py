@@ -43,6 +43,26 @@ def _source_map(root: DesignNode) -> dict[str, DesignNode]:
     return result
 
 
+def _is_inferred_region(node: DesignNode) -> bool:
+    return node.kind == "container" and "::region-" in (node.source_id or "")
+
+
+def _find_region_owner(
+    node: DesignNode,
+    target: DesignNode,
+    current_region: DesignNode | None = None,
+) -> DesignNode | None:
+    if _is_inferred_region(node):
+        current_region = node
+    if node is target:
+        return current_region
+    for child in node.children:
+        found = _find_region_owner(child, target, current_region)
+        if found is not None:
+            return found
+    return None
+
+
 def _normalize_contact_groups(root: DesignNode) -> None:
     def visit(node: DesignNode) -> None:
         for child in node.children:
@@ -123,23 +143,23 @@ def _stabilize_bottom_control_row(
         if row is None or row.kind != "container" or row.style.layout_direction != "horizontal":
             continue
 
+        row.style.primary_axis_align = "space_between"
+        row.style.gap = None
+
+        # Inferred regions are first-class ownership boundaries. Spatial
+        # stabilization must never promote a row out of the region that owns
+        # its controls. The overlay pass has already converted the row width
+        # and left offset to region-relative percentages, so preserve them.
+        region_owner = _find_region_owner(compiled_root, row)
+        if region_owner is not None:
+            break
+
         boxes = [_box(member) for member in members]
         left = min(box[0] for box in boxes)
         right = max(box[2] for box in boxes)
         row.style.width_percent = (right - left) / viewport * 100.0
         row.style.width_mode = None
         row.style.margin_left_percent = (left - px) / (pr - px) * 100.0
-        row.style.primary_axis_align = "space_between"
-        row.style.gap = None
-
-        # These controls are direct children of the source section, so keep
-        # their inferred row at section level too. This avoids a nested region
-        # adding another horizontal offset and sending pagination off-canvas.
-        if parent is not compiled_root:
-            owner = _find_parent(compiled_root, row)
-            if owner is not None:
-                owner.children = [child for child in owner.children if child is not row]
-                compiled_root.children.append(row)
         break
 
 
