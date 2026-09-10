@@ -77,6 +77,42 @@ def _generated_contact_groups(root: DesignNode) -> list[DesignNode]:
     return groups
 
 
+def _normalize_contact_icon_widths(
+    group: DesignNode,
+    source_by_id: dict[str, DesignNode],
+    viewport: float,
+) -> None:
+    """Give peer contact icons one shared widget width.
+
+    The contact compiler already knows these icons are siblings because it
+    rebuilt them as rows inside one generated contact group. Normalizing only
+    this peer set keeps narrow glyphs (for example a phone icon) centered on
+    the same visual column without introducing global icon rules or wrappers.
+    """
+    icons: list[tuple[DesignNode, float]] = []
+    for row in group.children:
+        for child in row.children:
+            if child.kind != "icon" or not child.source_id:
+                continue
+            source = source_by_id.get(child.source_id)
+            source_box = _box(source) if source is not None else None
+            if source_box is None:
+                continue
+            width = source_box[2] - source_box[0]
+            if width > 0:
+                icons.append((child, width))
+
+    if len(icons) < 2:
+        return
+
+    peer_width = max(width for _, width in icons)
+    peer_width_percent = peer_width / viewport * 100.0
+    for icon, _ in icons:
+        icon.style.width = peer_width
+        icon.style.width_percent = peer_width_percent
+        icon.style.width_mode = None
+
+
 def resolve_contact_group_ownership(
     compiled_root: DesignNode,
     source_root: DesignNode,
@@ -98,6 +134,8 @@ def resolve_contact_group_ownership(
     source_by_id = _source_map(source_root)
 
     for group in list(_generated_contact_groups(compiled_root)):
+        _normalize_contact_icon_widths(group, source_by_id, viewport)
+
         group_id = group.source_id or ""
         contact_id = group_id.removesuffix("::contact-group")
         source_contact = source_by_id.get(contact_id)
