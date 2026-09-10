@@ -129,6 +129,67 @@ def _find_parent(node: DesignNode, source_id: str) -> DesignNode | None:
     return None
 
 
+def _find_parent_node(node: DesignNode, target: DesignNode) -> DesignNode | None:
+    if any(child is target for child in node.children):
+        return node
+    for child in node.children:
+        found = _find_parent_node(child, target)
+        if found is not None:
+            return found
+    return None
+
+
+def _find_inferred_region_owner(
+    node: DesignNode,
+    source_id: str,
+    current_region: DesignNode | None = None,
+) -> DesignNode | None:
+    if _is_inferred_region(node):
+        current_region = node
+    if node.source_id == source_id:
+        return current_region
+    for child in node.children:
+        found = _find_inferred_region_owner(child, source_id, current_region)
+        if found is not None:
+            return found
+    return None
+
+
+def _inferred_region_horizontal_geometry(
+    compiled: DesignNode,
+    region: DesignNode,
+    source_box: tuple[float, float, float, float],
+    viewport: float,
+) -> tuple[float, float] | None:
+    if not region.style.width_percent or viewport <= 0:
+        return None
+    parent = _find_parent_node(compiled, region)
+    if parent is None or parent.style.layout_direction != "horizontal":
+        return None
+
+    source_width = source_box[2] - source_box[0]
+    if source_width <= 0:
+        return None
+
+    left = source_box[0] + source_width * (parent.style.margin_left_percent or 0.0) / 100.0
+    gap = parent.style.gap or 0.0
+    found_region = False
+    for sibling in parent.children:
+        if sibling is region:
+            found_region = True
+            break
+        if sibling.style.width_percent is not None:
+            left += viewport * sibling.style.width_percent / 100.0
+        elif sibling.style.width is not None:
+            left += sibling.style.width
+        left += gap
+    if not found_region:
+        return None
+
+    width = viewport * region.style.width_percent / 100.0
+    return (left, width) if width > 0 else None
+
+
 def _detach_ids(node: DesignNode, source_ids: set[str]) -> None:
     kept: list[DesignNode] = []
     for child in node.children:
@@ -279,12 +340,14 @@ def _split_contact_rows(compiled: DesignNode, source: DesignNode, source_by_id: 
 
 
 def _stabilize_bottom_control_row(compiled: DesignNode, source: DesignNode, viewport: float) -> None:
-    """Keep wide three-item bottom controls as a section-level row.
+    """Keep wide three-item bottom controls together without losing region ownership.
 
     Pagination-like controls are spatially separate from nearby content even if
     region inference temporarily nests them inside the same content container.
     Detect the relationship from source geometry: two visual controls plus an
     intrinsic text counter in one bottom band spanning a meaningful width.
+    When all three controls already belong to one inferred region, stabilize
+    them inside that region; otherwise preserve the existing section-level row.
     """
     source_box = _box(source)
     if source.kind != "container" or source_box is None:
@@ -324,6 +387,25 @@ def _stabilize_bottom_control_row(compiled: DesignNode, source: DesignNode, view
         if any(node is None for node in compiled_nodes):
             continue
         nodes = [node for node in compiled_nodes if node is not None]
+
+        owners = [
+            _find_inferred_region_owner(compiled, node.source_id)
+            for node in trio
+            if node.source_id
+        ]
+        region_owner = None
+        if owners and owners[0] is not None and all(owner is owners[0] for owner in owners):
+            region_owner = owners[0]
+
+        placement_parent = compiled
+        width_reference = parent_width
+        left_origin = source_box[0]
+        if region_owner is not None:
+            geometry = _inferred_region_horizontal_geometry(compiled, region_owner, source_box, viewport)
+            if geometry is not None:
+                left_origin, width_reference = geometry
+                placement_parent = region_owner
+
         _detach_ids(compiled, {node.source_id for node in trio if node.source_id})
         for node in nodes:
             node.style.position_mode = None
@@ -352,16 +434,16 @@ def _stabilize_bottom_control_row(compiled: DesignNode, source: DesignNode, view
             source_id=f"{source.source_id or 'section'}::bottom-controls",
             style=DesignStyle(
                 layout_direction="horizontal",
-                width_percent=_percent(span_right - span_left, parent_width),
+                width_percent=_percent(span_right - span_left, width_reference),
                 height_mode="hug",
-                margin_left_percent=_percent(span_left - source_box[0], parent_width),
+                margin_left_percent=_percent(span_left - left_origin, width_reference),
                 margin_top_percent=_percent(max(0.0, text_box[1] - preceding_bottom), viewport),
                 primary_axis_align="space_between",
                 counter_axis_align="center",
             ),
             children=nodes,
         )
-        compiled.children.append(row)
+        placement_parent.children.append(row)
         return
 
 
