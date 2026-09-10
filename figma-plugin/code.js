@@ -93,6 +93,14 @@ function buildErrorLog(node, stage, error) {
     );
   }
 
+  if (error && typeof error === "object" && error.textDiagnostic) {
+    lines.push(
+      "",
+      "=== TEXT ASSET DIAGNOSTIC ===",
+      JSON.stringify(error.textDiagnostic, null, 2)
+    );
+  }
+
   return lines.join("\n");
 }
 
@@ -377,15 +385,45 @@ async function exportVectorAssets(node) {
 
 async function exportTextAssets(node) {
   const assets = [];
-  for (const text of collectTextAssets(node)) {
-    const bytes = await text.exportAsync({
-      format: "SVG",
-      svgOutlineText: true,
-      useAbsoluteBounds: true,
-    });
-    assets.push({ sourceId: text.id, data: bytesToBase64(bytes) });
+  const skipped = [];
+  const texts = collectTextAssets(node);
+
+  for (let index = 0; index < texts.length; index += 1) {
+    const text = texts[index];
+    try {
+      const bytes = await text.exportAsync({
+        format: "SVG",
+        svgOutlineText: true,
+        useAbsoluteBounds: true,
+      });
+      assets.push({ sourceId: text.id, data: bytesToBase64(bytes) });
+    } catch (error) {
+      if (isNoVisibleLayersExportError(error)) {
+        skipped.push({
+          index: index + 1,
+          total: texts.length,
+          node: describeNode(text),
+          characters: text.characters,
+          error: serializeError(error),
+        });
+        continue;
+      }
+
+      const wrapped = new Error(
+        `Figma outlined-text SVG export failed for TEXT "${text.name}" (${text.id}) at text ${index + 1}/${texts.length}.`
+      );
+      wrapped.textDiagnostic = {
+        index: index + 1,
+        total: texts.length,
+        node: describeNode(text),
+        characters: text.characters,
+        error: serializeError(error),
+      };
+      throw wrapped;
+    }
   }
-  return assets;
+
+  return { assets, skipped };
 }
 
 async function exportTextLayouts(node) {
@@ -418,7 +456,9 @@ figma.ui.onmessage = async (message) => {
     const skippedVectorAssets = vectorExport.skipped;
 
     stage = "text-assets";
-    const textAssets = await exportTextAssets(node);
+    const textExport = await exportTextAssets(node);
+    const textAssets = textExport.assets;
+    const skippedTextAssets = textExport.skipped;
 
     stage = "text-layouts";
     const textLayouts = await exportTextLayouts(node);
@@ -435,6 +475,7 @@ figma.ui.onmessage = async (message) => {
         vectorAssets,
         vectorAssetWarnings: skippedVectorAssets,
         textAssets,
+        textAssetWarnings: skippedTextAssets,
         textLayouts,
       }),
     });
@@ -444,9 +485,14 @@ figma.ui.onmessage = async (message) => {
       throw new Error(result.error || `Morpher returned HTTP ${response.status}`);
     }
 
-    const skippedNote = skippedVectorAssets.length
-      ? `, ${skippedVectorAssets.length} non-rendering vectors skipped`
-      : "";
+    const skippedNotes = [];
+    if (skippedVectorAssets.length) {
+      skippedNotes.push(`${skippedVectorAssets.length} non-rendering vectors skipped`);
+    }
+    if (skippedTextAssets.length) {
+      skippedNotes.push(`${skippedTextAssets.length} non-rendering text outlines skipped`);
+    }
+    const skippedNote = skippedNotes.length ? `, ${skippedNotes.join(", ")}` : "";
 
     figma.ui.postMessage({
       type: "status",
