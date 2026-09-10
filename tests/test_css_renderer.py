@@ -53,6 +53,30 @@ def test_shape_fill_still_renders_as_css_background() -> None:
     assert "background: rgba(255, 0, 0, 1)" in shape_block
 
 
+def test_shape_stroke_renders_as_border() -> None:
+    root = DesignNode(
+        kind="container",
+        source_id="1:1",
+        children=[
+            DesignNode(
+                kind="shape",
+                source_id="2:5",
+                style=DesignStyle(
+                    stroke_color="rgba(255, 255, 255, 1)",
+                    stroke_weight=1,
+                    border_radius=4,
+                ),
+            )
+        ],
+    )
+
+    css = render_css(root)
+
+    shape_block = css.split(".morpher-2-5 {", 1)[1].split("}", 1)[0]
+    assert "border: 1px solid rgba(255, 255, 255, 1)" in shape_block
+    assert "border-radius: 4px" in shape_block
+
+
 def test_outlined_rotated_text_keeps_final_figma_bounds_without_second_rotation() -> None:
     root = DesignNode(
         kind="container",
