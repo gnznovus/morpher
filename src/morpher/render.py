@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 
 from morpher.assets import semantic_asset_names
+from morpher.compiler.flow_groups import stabilize_compiled_flow_groups
 from morpher.compiler.layout import compile_responsive_layout
 from morpher.compiler.normalizer import normalize
 from morpher.compiler.overlays import (
@@ -83,6 +84,11 @@ def render_path(path: Path) -> tuple[Path, Path, Path, int]:
     design_viewport = document.root.style.width
     elementor_root = compile_responsive_layout(document.root)
     elementor_root = resolve_compiled_spatial_relationships(
+        elementor_root,
+        document.root,
+        design_viewport,
+    )
+    elementor_root = stabilize_compiled_flow_groups(
         elementor_root,
         document.root,
         design_viewport,
