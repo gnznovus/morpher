@@ -1,4 +1,5 @@
 import hashlib
+import re
 
 from morpher.ir.nodes import DesignNode
 from morpher.ir.styles import DesignStyle
@@ -26,6 +27,24 @@ def _relative_offset(value: float | None, parent_value: float | None) -> float |
     if value is None or parent_value is None:
         return None
     return value - parent_value
+
+
+def _asset_key(image_ref: str) -> str:
+    return image_ref.replace(":", "-")
+
+
+def _overlay_color(background: str | None, alpha: float) -> str:
+    if background:
+        rgba = re.fullmatch(r"rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*,\s*[\d.]+)?\s*\)", background)
+        if rgba:
+            r, g, b = rgba.groups()
+            return f"rgba({r}, {g}, {b}, {alpha})"
+        if re.fullmatch(r"#[0-9a-fA-F]{6}", background):
+            r = int(background[1:3], 16)
+            g = int(background[3:5], 16)
+            b = int(background[5:7], 16)
+            return f"rgba({r}, {g}, {b}, {alpha})"
+    return f"rgba(0, 0, 0, {alpha})"
 
 
 def _apply_item_sizing(settings: dict, style: DesignStyle, *, container: bool) -> None:
@@ -120,7 +139,7 @@ def _apply_child_alignment(settings: dict, style: DesignStyle, parent_style: Des
     settings["align_self" if container else "align"] = "center"
 
 
-def _container_settings(style: DesignStyle, parent_style: DesignStyle | None = None) -> dict:
+def _container_settings(style: DesignStyle, parent_style: DesignStyle | None = None, asset_sources: dict[str, str] | None = None) -> dict:
     settings: dict = {"content_width": "full"}
     if style.layout_direction:
         settings["flex_direction"] = "row" if style.layout_direction == "horizontal" else "column"
@@ -144,6 +163,20 @@ def _container_settings(style: DesignStyle, parent_style: DesignStyle | None = N
     if style.background:
         settings["background_background"] = "classic"
         settings["background_color"] = style.background
+    if style.background_image_ref and asset_sources:
+        source = asset_sources.get(_asset_key(style.background_image_ref))
+        if source:
+            settings["background_background"] = "classic"
+            settings["background_image"] = {"url": source, "id": "", "size": ""}
+            settings["background_position"] = "center center"
+            settings["background_repeat"] = "no-repeat"
+            settings["background_size"] = "cover"
+            if style.background_image_opacity is not None and style.background_image_opacity < 1:
+                settings["background_overlay_background"] = "classic"
+                settings["background_overlay_color"] = _overlay_color(
+                    style.background,
+                    1.0 - style.background_image_opacity,
+                )
     if style.clips_content:
         settings["overflow"] = "hidden"
     return settings
@@ -189,8 +222,8 @@ def _render_heading(node: DesignNode, path: str, parent_style: DesignStyle | Non
     return {"id": _element_id(node, path), "settings": _heading_settings(node, parent_style, design_viewport=design_viewport), "elements": [], "isInner": False, "widgetType": "heading", "elType": "widget"}
 
 
-def _render_shape(node: DesignNode, path: str, parent_style: DesignStyle | None = None) -> dict:
-    return {"id": _element_id(node, path), "settings": _container_settings(node.style, parent_style), "elements": [], "isInner": False, "elType": "container"}
+def _render_shape(node: DesignNode, path: str, parent_style: DesignStyle | None = None, asset_sources: dict[str, str] | None = None) -> dict:
+    return {"id": _element_id(node, path), "settings": _container_settings(node.style, parent_style, asset_sources), "elements": [], "isInner": False, "elType": "container"}
 
 
 def _render_divider(node: DesignNode, path: str, parent_style: DesignStyle | None = None) -> dict:
@@ -208,7 +241,7 @@ def _render_divider(node: DesignNode, path: str, parent_style: DesignStyle | Non
 
 
 def _render_asset_widget(node: DesignNode, path: str, parent_style: DesignStyle | None, asset_sources: dict[str, str]) -> dict | None:
-    key = node.image_ref.replace(":", "-") if node.kind == "image" and node.image_ref else (node.source_id or "").replace(":", "-")
+    key = _asset_key(node.image_ref) if node.kind == "image" and node.image_ref else (node.source_id or "").replace(":", "-")
     source = asset_sources.get(key)
     if not source:
         return None
@@ -234,14 +267,14 @@ def _render_container(node: DesignNode, path: str, parent_style: DesignStyle | N
         elif child.kind == "text":
             elements.append(_render_heading(child, child_path, node.style, design_viewport=design_viewport))
         elif child.kind == "shape":
-            elements.append(_render_shape(child, child_path, node.style))
+            elements.append(_render_shape(child, child_path, node.style, asset_sources))
         elif child.kind == "divider":
             elements.append(_render_divider(child, child_path, node.style))
         elif child.kind in {"image", "icon"}:
             asset = _render_asset_widget(child, child_path, node.style, asset_sources)
             if asset is not None:
                 elements.append(asset)
-    return {"id": _element_id(node, path), "settings": _container_settings(node.style, parent_style), "elements": elements, "isInner": False, "elType": "container"}
+    return {"id": _element_id(node, path), "settings": _container_settings(node.style, parent_style, asset_sources), "elements": elements, "isInner": False, "elType": "container"}
 
 
 def render_elementor(root: DesignNode, asset_sources: dict[str, str] | None = None) -> dict:
