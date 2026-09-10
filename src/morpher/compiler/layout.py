@@ -33,7 +33,7 @@ def _area(box: tuple[float, float, float, float]) -> float:
 
 
 def _participates_in_flow(node: DesignNode) -> bool:
-    if node.kind in {"text", "shape"}:
+    if node.kind in {"text", "shape", "divider"}:
         return True
     if node.kind == "container":
         return any(_participates_in_flow(child) for child in node.children)
@@ -358,7 +358,7 @@ def _compile_free_layout(node: DesignNode, design_viewport_width: float) -> Desi
         for child, width in zip(band, widths):
             _make_child_flow(child, width_percent=_percent(width, design_viewport_width))
             row_children.append(child)
-        row = DesignNode(kind="container", name=f"{node.name or 'section'} row {band_index + 1}", source_id=f"{node.source_id or 'node'}::row-{band_index + 1}", style=DesignStyle(layout_direction="horizontal", width_mode="fill", height_mode="hug", gap=_positive_median(gaps), counter_axis_align="min", margin_top_percent=margin_top_percent, margin_left_percent=_percent(bx1 - px, parent_width)), children=row_children)
+        row = DesignNode(kind="container", name=f"{node.name or 'section'} row {band_index + 1}", source_id=f"{node.source_id or 'node'}::row-{band_index + 1", style=DesignStyle(layout_direction="horizontal", width_mode="fill", height_mode="hug", gap=_positive_median(gaps), counter_axis_align="min", margin_top_percent=margin_top_percent, margin_left_percent=_percent(bx1 - px, parent_width)), children=row_children)
         compiled_children.append(row)
     compiled_style = _flow_container_style(node, original_child_bounds)
     flow_ids = {id(child) for child in flow_children}
