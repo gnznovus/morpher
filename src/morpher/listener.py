@@ -13,6 +13,9 @@ from morpher.storage.paths import StoragePaths
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8767
 IMPORT_PATH = "/figma/import"
+ERROR_LOG_PATH = "/figma/error-log"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+FIGMA_ERROR_LOG = REPO_ROOT / "figma-plugin" / "log" / "err-log.txt"
 
 
 def safe_stem(value: str) -> str:
@@ -133,6 +136,18 @@ def save_figma_import(envelope: dict[str, Any], storage: StoragePaths) -> tuple[
     return target, replaced, assets_saved, vectors_saved, texts_saved
 
 
+def save_figma_error_log(envelope: dict[str, Any]) -> Path:
+    log = envelope.get("log")
+    if not isinstance(log, str) or not log.strip():
+        raise ValueError("Request must include a non-empty string 'log'.")
+
+    FIGMA_ERROR_LOG.parent.mkdir(parents=True, exist_ok=True)
+    temporary = FIGMA_ERROR_LOG.with_suffix(".txt.tmp")
+    temporary.write_text(log.rstrip() + "\n", encoding="utf-8")
+    temporary.replace(FIGMA_ERROR_LOG)
+    return FIGMA_ERROR_LOG
+
+
 class MorpherRequestHandler(BaseHTTPRequestHandler):
     storage = StoragePaths()
 
@@ -152,7 +167,7 @@ class MorpherRequestHandler(BaseHTTPRequestHandler):
         self._headers(204)
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path != IMPORT_PATH:
+        if self.path not in {IMPORT_PATH, ERROR_LOG_PATH}:
             self._json(404, {"error": "Not found."})
             return
 
@@ -163,6 +178,11 @@ class MorpherRequestHandler(BaseHTTPRequestHandler):
             envelope = json.loads(self.rfile.read(length))
             if not isinstance(envelope, dict):
                 raise ValueError("Request body must be a JSON object.")
+
+            if self.path == ERROR_LOG_PATH:
+                target = save_figma_error_log(envelope)
+                self._json(200, {"ok": True, "filename": target.name})
+                return
 
             target, replaced, assets_saved, vectors_saved, texts_saved = save_figma_import(envelope, self.storage)
             self._json(
@@ -179,7 +199,7 @@ class MorpherRequestHandler(BaseHTTPRequestHandler):
         except (ValueError, json.JSONDecodeError) as error:
             self._json(400, {"error": str(error)})
         except OSError as error:
-            self._json(500, {"error": f"Could not save import: {error}"})
+            self._json(500, {"error": f"Could not save request: {error}"})
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[morpher] {self.address_string()} - {format % args}")
@@ -193,6 +213,7 @@ def serve(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, storage_root: Path
     )
     server = ThreadingHTTPServer((host, port), handler)
     print(f"Morpher listener: http://{host}:{port}{IMPORT_PATH}")
+    print(f"Figma error log: {FIGMA_ERROR_LOG}")
     print(f"Figma imports: {storage_root / 'figma-import'}")
     try:
         server.serve_forever()
