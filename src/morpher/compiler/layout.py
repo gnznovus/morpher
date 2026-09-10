@@ -275,6 +275,85 @@ def _horizontal_regions(children: list[DesignNode], boxes: dict[int, tuple[float
     return regions
 
 
+def _surface_defined_regions(
+    parent: DesignNode,
+    flow_children: list[DesignNode],
+    backing_shapes: list[DesignNode],
+    boxes: dict[int, tuple[float, float, float, float]],
+) -> tuple[list[list[DesignNode]], list[tuple[float, float, float, float]], list[str | None]] | None:
+    """Infer adjacent layout regions from large visual surfaces.
+
+    Backing shapes are not semantic flow nodes, but their geometry can still be
+    strong evidence for a content region. Pair one substantial backing shape
+    with one substantial sibling image, then assign ordinary flow children to
+    whichever surface contains most of their area.
+    """
+    if len(backing_shapes) != 1 or not _has_box(parent):
+        return None
+    parent_box = _bounds(parent)
+    parent_area = _area(parent_box)
+    if parent_area <= 0:
+        return None
+    media = [
+        child
+        for child in flow_children
+        if child.kind == "image"
+        and _area(boxes[id(child)]) / parent_area >= 0.2
+    ]
+    if len(media) != 1:
+        return None
+
+    backing = backing_shapes[0]
+    surfaces: list[tuple[DesignNode, tuple[float, float, float, float], bool]] = [
+        (media[0], boxes[id(media[0])], False),
+        (backing, _bounds(backing), True),
+    ]
+    surfaces.sort(key=lambda item: item[1][0])
+    first_box = surfaces[0][1]
+    second_box = surfaces[1][1]
+    first_width = first_box[2] - first_box[0]
+    second_width = second_box[2] - second_box[0]
+    if first_width <= 0 or second_width <= 0:
+        return None
+    horizontal_overlap = _horizontal_overlap(first_box, second_box)
+    if horizontal_overlap / min(first_width, second_width) > 0.1:
+        return None
+    vertical_overlap = _vertical_overlap(first_box, second_box)
+    shorter_height = min(first_box[3] - first_box[1], second_box[3] - second_box[1])
+    if shorter_height <= 0 or vertical_overlap / shorter_height < 0.8:
+        return None
+    combined_span = max(first_box[2], second_box[2]) - min(first_box[0], second_box[0])
+    parent_width = parent_box[2] - parent_box[0]
+    if parent_width <= 0 or combined_span / parent_width < 0.75:
+        return None
+
+    regions: list[list[DesignNode]] = [[], []]
+    region_boxes = [first_box, second_box]
+    backgrounds: list[str | None] = [None, None]
+    for index, (surface, _, is_backing) in enumerate(surfaces):
+        if is_backing:
+            backgrounds[index] = surface.style.background
+        else:
+            regions[index].append(surface)
+
+    media_node = media[0]
+    for child in flow_children:
+        if child is media_node:
+            continue
+        child_box = boxes[id(child)]
+        child_area = _area(child_box)
+        if child_area <= 0:
+            continue
+        scores = [_overlap_area(child_box, region_box) / child_area for region_box in region_boxes]
+        best_index = 0 if scores[0] >= scores[1] else 1
+        if scores[best_index] >= 0.5:
+            regions[best_index].append(child)
+
+    if any(not region for region in regions):
+        return None
+    return regions, region_boxes, backgrounds
+
+
 def _positive_median(values: list[float]) -> float | None:
     positive = [value for value in values if value > 0]
     return float(median(positive)) if positive else None
@@ -331,16 +410,40 @@ def _flow_container_style(node: DesignNode, child_bounds: list[tuple[float, floa
     return style
 
 
-def _compile_horizontal_regions(node: DesignNode, regions: list[list[DesignNode]], boxes: dict[int, tuple[float, float, float, float]], original_child_bounds: list[tuple[float, float, float, float]], design_viewport_width: float) -> DesignNode:
+def _compile_horizontal_regions(
+    node: DesignNode,
+    regions: list[list[DesignNode]],
+    boxes: dict[int, tuple[float, float, float, float]],
+    original_child_bounds: list[tuple[float, float, float, float]],
+    design_viewport_width: float,
+    *,
+    region_boxes_override: list[tuple[float, float, float, float]] | None = None,
+    region_backgrounds: list[str | None] | None = None,
+) -> DesignNode:
     px, _, _, _ = _bounds(node)
     parent_width = _bounds(node)[2] - px
-    region_boxes = [_union_bounds([boxes[id(child)] for child in region]) for region in regions]
+    region_boxes = region_boxes_override or [_union_bounds([boxes[id(child)] for child in region]) for region in regions]
     row_left = min(box[0] for box in region_boxes)
     row_top = min(box[1] for box in region_boxes)
     row_children: list[DesignNode] = []
     for index, (region, box) in enumerate(zip(regions, region_boxes)):
         x1, y1, x2, y2 = box
-        region_node = DesignNode(kind="container", name=f"{node.name or 'section'} region {index + 1}", source_id=f"{node.source_id or 'node'}::region-{index + 1}", style=DesignStyle(x=x1, y=y1, width=x2 - x1, height=y2 - y1, width_percent=_percent(x2 - x1, design_viewport_width), margin_top_percent=_percent(y1 - row_top, parent_width)), children=region)
+        background = region_backgrounds[index] if region_backgrounds and index < len(region_backgrounds) else None
+        region_node = DesignNode(
+            kind="container",
+            name=f"{node.name or 'section'} region {index + 1}",
+            source_id=f"{node.source_id or 'node'}::region-{index + 1}",
+            style=DesignStyle(
+                x=x1,
+                y=y1,
+                width=x2 - x1,
+                height=y2 - y1,
+                width_percent=_percent(x2 - x1, design_viewport_width),
+                margin_top_percent=_percent(y1 - row_top, parent_width),
+                background=background,
+            ),
+            children=region,
+        )
         row_children.append(region_node)
     gap = region_boxes[1][0] - region_boxes[0][2]
     row = DesignNode(kind="container", name=f"{node.name or 'section'} composition row", source_id=f"{node.source_id or 'node'}::composition-row", style=DesignStyle(layout_direction="horizontal", width_mode="fill", height_mode="hug", gap=max(0.0, gap), counter_axis_align="min", margin_left_percent=_percent(row_left - px, parent_width)), children=row_children)
@@ -404,6 +507,22 @@ def _compile_free_layout(node: DesignNode, design_viewport_width: float) -> Desi
         return node
     if _has_real_overlap(flow_children, boxes, parent=node):
         return node
+
+    surface_regions = _surface_defined_regions(node, flow_children, backing_shapes, boxes)
+    if surface_regions is not None:
+        regions, surface_boxes, backgrounds = surface_regions
+        compiled = _compile_horizontal_regions(
+            node,
+            regions,
+            boxes,
+            original_child_bounds,
+            design_viewport_width,
+            region_boxes_override=surface_boxes,
+            region_backgrounds=backgrounds,
+        )
+        compiled.children = [child for child in compiled.children if child not in backing_shapes]
+        return compiled
+
     regions = _horizontal_regions(flow_children, boxes, parent_width)
     if regions:
         compiled = _compile_horizontal_regions(node, regions, boxes, original_child_bounds, design_viewport_width)
