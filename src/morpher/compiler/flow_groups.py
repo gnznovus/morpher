@@ -142,13 +142,16 @@ def _normalize_row_to_region(
 ) -> None:
     geometry = _region_horizontal_geometry(compiled_root, region, source_root, viewport)
     member_boxes = [_box(member) for member in members]
-    if geometry is None or any(box is None for box in member_boxes):
+    if geometry is None or any(box is None for box in member_boxes) or viewport <= 0:
         return
     region_left, region_width = geometry
     boxes = [box for box in member_boxes if box is not None]
     left = min(box[0] for box in boxes)
     right = max(box[2] for box in boxes)
-    row.style.width_percent = (right - left) / region_width * 100.0
+    # width_percent is viewport-relative throughout Design IR and renders as vw.
+    # Only the inset changes reference after rehoming: margin percentages are
+    # relative to the inferred region parent.
+    row.style.width_percent = (right - left) / viewport * 100.0
     row.style.width_mode = None
     row.style.margin_left_percent = (left - region_left) / region_width * 100.0
 
