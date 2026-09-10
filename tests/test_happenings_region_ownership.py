@@ -91,3 +91,5 @@ def test_flat_happenings_uses_root_composition_and_keeps_pagination_in_right_reg
     assert pagination not in compiled.children
     assert _find_parent(compiled, pagination) is right_region
     assert [child.source_id for child in pagination.children] == ["left-arrow", "counter", "right-arrow"]
+    assert abs(pagination.style.width_percent - ((1673.86 - 970) / 1920 * 100.0)) < 1e-9
+    assert abs(pagination.style.margin_left_percent - ((970 - 771) / 1149 * 100.0)) < 1e-9
