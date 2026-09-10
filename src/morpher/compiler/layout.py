@@ -256,8 +256,16 @@ def _horizontal_regions(children: list[DesignNode], boxes: dict[int, tuple[float
         current_right = right if current_right is None else max(current_right, right)
     if current:
         regions.append(current)
-    if len(regions) != 2 or any(len(region) < 2 for region in regions):
+    if len(regions) != 2:
         return []
+    singleton_regions = [region for region in regions if len(region) == 1]
+    if singleton_regions:
+        if len(singleton_regions) > 1:
+            return []
+        singleton = singleton_regions[0][0]
+        other = regions[1] if regions[0] is singleton_regions[0] else regions[0]
+        if singleton.kind != "image" or len(other) < 2:
+            return []
     first_box = _union_bounds([boxes[id(child)] for child in regions[0]])
     second_box = _union_bounds([boxes[id(child)] for child in regions[1]])
     overlap = _vertical_overlap(first_box, second_box)
