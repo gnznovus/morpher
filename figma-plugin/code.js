@@ -316,6 +316,21 @@ async function exportImageAssets(node) {
   return assets;
 }
 
+async function probeVectorChildren(vector) {
+  const probes = [];
+  if (!("children" in vector)) return probes;
+
+  for (const child of vector.children) {
+    try {
+      const bytes = await child.exportAsync({ format: "SVG" });
+      probes.push({ node: describeNode(child), ok: true, byteLength: bytes.length });
+    } catch (error) {
+      probes.push({ node: describeNode(child), ok: false, error: serializeError(error) });
+    }
+  }
+  return probes;
+}
+
 async function exportVectorAssets(node) {
   const assets = [];
   const vectors = collectVectorAssets(node);
@@ -333,12 +348,13 @@ async function exportVectorAssets(node) {
         index: index + 1,
         total: vectors.length,
         node: describeNode(vector),
+        isVectorComposite: isVectorComposite(vector),
         error: serializeError(error),
+        directChildSvgProbes: await probeVectorChildren(vector),
       };
       throw wrapped;
     }
   }
-
   return assets;
 }
 
