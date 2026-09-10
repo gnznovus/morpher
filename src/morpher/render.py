@@ -76,7 +76,7 @@ def render_path(path: Path) -> tuple[Path, Path, Path, int]:
         storage.output_elementor,
     )
 
-    css = render_css(document.root)
+    css = render_css(document.root, asset_sources=html_asset_sources)
     html = render_html(document.root, stylesheet=css_path.name, asset_sources=html_asset_sources)
 
     # Keep the HTML renderer on raw normalized geometry for fidelity/debugging.
