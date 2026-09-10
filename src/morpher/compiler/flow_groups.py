@@ -44,7 +44,9 @@ def _source_map(root: DesignNode) -> dict[str, DesignNode]:
 
 
 def _is_inferred_region(node: DesignNode) -> bool:
-    return node.kind == "container" and "::region-" in (node.source_id or "")
+    source_id = node.source_id or ""
+    final_segment = source_id.rsplit("::", 1)[-1]
+    return node.kind == "container" and final_segment.startswith("region-")
 
 
 def _find_region_owner(
@@ -61,6 +63,55 @@ def _find_region_owner(
         if found is not None:
             return found
     return None
+
+
+def _inferred_regions(root: DesignNode) -> list[DesignNode]:
+    regions: list[DesignNode] = []
+
+    def visit(node: DesignNode) -> None:
+        if _is_inferred_region(node):
+            regions.append(node)
+        for child in node.children:
+            visit(child)
+
+    visit(root)
+    return regions
+
+
+def _owns_source_members(region: DesignNode, members: list[DesignNode]) -> bool:
+    region_box = _box(region)
+    if region_box is None:
+        return False
+    rx1, ry1, rx2, ry2 = region_box
+    for member in members:
+        member_box = _box(member)
+        if member_box is None:
+            return False
+        center_x = (member_box[0] + member_box[2]) / 2.0
+        center_y = (member_box[1] + member_box[3]) / 2.0
+        if not (rx1 <= center_x <= rx2 and ry1 <= center_y <= ry2):
+            return False
+    return True
+
+
+def _normalize_row_to_region(
+    row: DesignNode,
+    region: DesignNode,
+    members: list[DesignNode],
+) -> None:
+    region_box = _box(region)
+    member_boxes = [_box(member) for member in members]
+    if region_box is None or any(box is None for box in member_boxes):
+        return
+    boxes = [box for box in member_boxes if box is not None]
+    region_width = region_box[2] - region_box[0]
+    if region_width <= 0:
+        return
+    left = min(box[0] for box in boxes)
+    right = max(box[2] for box in boxes)
+    row.style.width_percent = (right - left) / region_width * 100.0
+    row.style.width_mode = None
+    row.style.margin_left_percent = (left - region_box[0]) / region_width * 100.0
 
 
 def _normalize_contact_groups(root: DesignNode) -> None:
@@ -146,13 +197,36 @@ def _stabilize_bottom_control_row(
         row.style.primary_axis_align = "space_between"
         row.style.gap = None
 
-        # Inferred regions are first-class ownership boundaries. Spatial
-        # stabilization must never promote a row out of the region that owns
-        # its controls. The overlay pass has already converted the row width
-        # and left offset to region-relative percentages, so preserve them.
+        # A real inferred region is a first-class ownership boundary. Generated
+        # descendants may contain "::region-" in their inherited source IDs,
+        # so only final `region-*` wrapper segments count as region owners.
         region_owner = _find_region_owner(compiled_root, row)
-        if region_owner is not None:
+        if region_owner is not None and _owns_source_members(region_owner, members):
+            _normalize_row_to_region(row, region_owner, members)
             break
+
+        # The earlier spatial pass may have kept the row at section level when
+        # descendant wrappers obscured ownership. Recover the intended region
+        # directly from source geometry and move the row there.
+        geometric_owner = next(
+            (region for region in _inferred_regions(compiled_root) if _owns_source_members(region, members)),
+            None,
+        )
+        if geometric_owner is not None:
+            current_parent = _find_parent(compiled_root, row)
+            if current_parent is not None and current_parent is not geometric_owner:
+                current_parent.children = [child for child in current_parent.children if child is not row]
+                geometric_owner.children.append(row)
+            _normalize_row_to_region(row, geometric_owner, members)
+            break
+
+        # No meaningful inferred visual region owns the trio. Preserve the
+        # historical section-level fallback and root-relative geometry.
+        if parent is not compiled_root:
+            owner = _find_parent(compiled_root, row)
+            if owner is not None:
+                owner.children = [child for child in owner.children if child is not row]
+                compiled_root.children.append(row)
 
         boxes = [_box(member) for member in members]
         left = min(box[0] for box in boxes)
