@@ -74,7 +74,7 @@ def test_bottom_control_trio_is_detached_from_content_region():
     assert _find(content_region, "right") is None
 
 
-def test_bottom_control_trio_stays_inside_shared_inferred_region():
+def test_bottom_control_trio_stays_inside_shared_inferred_region_without_auto_resize_metadata():
     source = DesignNode(
         kind="container",
         source_id="section",
@@ -82,7 +82,7 @@ def test_bottom_control_trio_stays_inside_shared_inferred_region():
         children=[
             _node("text", "body", x=974, y=340, width=700, height=240, text="Body"),
             _node("icon", "left", x=970, y=850, width=156.86, height=18.44),
-            _node("text", "counter", x=1283, y=841, width=79, height=36, text="01 / 02", auto_resize="WIDTH_AND_HEIGHT"),
+            _node("text", "counter", x=1283, y=841, width=79, height=36, text="01 / 02"),
             _node("icon", "right", x=1517, y=850, width=156.86, height=18.44),
         ],
     )
