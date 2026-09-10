@@ -18,7 +18,13 @@ def _node(kind, source_id, *, x, y, width, height, text=None, background=None):
     )
 
 
-def test_large_backing_shape_does_not_abort_free_layout_compilation():
+def _walk(node):
+    yield node
+    for child in node.children:
+        yield from _walk(child)
+
+
+def test_large_backing_shape_defines_content_region_without_entering_flow():
     root = DesignNode(
         kind="container",
         name="Two Column Section",
@@ -35,6 +41,7 @@ def test_large_backing_shape_does_not_abort_free_layout_compilation():
                 height=960,
                 background="rgba(230, 230, 230, 1)",
             ),
+            _node("text", "food", x=177, y=78, width=74, height=29, text="FOOD"),
             _node("text", "label", x=974, y=72, width=185, height=36, text="Happenings."),
             _node("text", "title", x=974, y=129, width=619, height=180, text="Title"),
             _node("text", "body", x=974, y=341, width=674, height=80, text="Body"),
@@ -49,17 +56,20 @@ def test_large_backing_shape_does_not_abort_free_layout_compilation():
     composition = result.children[0]
     assert composition.style.layout_direction == "horizontal"
     assert len(composition.children) == 2
-    right_region = composition.children[1]
+
+    left_region, right_region = composition.children
+    assert left_region.style.width == 770
+    assert right_region.style.width == 1149
     assert right_region.style.background == "rgba(230, 230, 230, 1)"
-    assert all(child.source_id != "right-surface" for child in result.children)
 
-    def walk(node):
-        yield node
-        for child in node.children:
-            yield from walk(child)
+    left_ids = {node.source_id for node in _walk(left_region)}
+    right_ids = {node.source_id for node in _walk(right_region)}
+    assert {"photo", "food"}.issubset(left_ids)
+    assert {"label", "title", "body", "more"}.issubset(right_ids)
+    assert "right-surface" not in {node.source_id for node in _walk(result)}
 
-    semantic_ids = {"label", "title", "body", "more"}
-    for node in walk(result):
+    semantic_ids = {"food", "label", "title", "body", "more"}
+    for node in _walk(result):
         if node.source_id in semantic_ids:
             assert node.style.position_mode != "absolute"
 
