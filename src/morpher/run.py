@@ -5,6 +5,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from morpher.fonts import refresh_font_registry
 from morpher.inspect import inspect_path
 from morpher.render import render_path
 from morpher.storage.paths import StoragePaths
@@ -58,6 +59,10 @@ def run_source(source: Path, storage: StoragePaths, *, force: bool = False) -> R
 def run_all(*, force: bool = False, storage: StoragePaths | None = None) -> list[RunResult]:
     storage = storage or StoragePaths()
     storage.ensure()
+
+    # Font discovery is part of normal command execution so dropping files into
+    # storage/fonts never requires restarting Morpher.
+    refresh_font_registry(storage.fonts)
 
     # Preserved Figma imports have priority; generic input remains the second queue.
     sources = scan_sources(
