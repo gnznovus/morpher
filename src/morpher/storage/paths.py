@@ -46,6 +46,10 @@ class StoragePaths:
     def output_elementor(self) -> Path:
         return self.root / "output" / "elementor"
 
+    @property
+    def elementor_font_plugin(self) -> Path:
+        return self.output_elementor / "morpher-font-injector"
+
     def ensure(self) -> None:
         for path in (
             self.figma_import,
@@ -57,6 +61,7 @@ class StoragePaths:
             self.output_html_fidelity,
             self.output_html_native,
             self.output_elementor,
+            self.elementor_font_plugin,
         ):
             path.mkdir(parents=True, exist_ok=True)
 
