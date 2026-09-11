@@ -4,6 +4,7 @@ from typing import Any
 
 from morpher.ir.nodes import DesignDocument, DesignNode
 from morpher.ir.styles import DesignStyle
+from morpher.ir.typography import normalize_font_intent
 
 
 _CONTAINER_TYPES = {"FRAME", "GROUP", "SECTION", "COMPONENT", "INSTANCE"}
@@ -112,6 +113,10 @@ class FigmaJsonAdapter:
         layout_mode = node.get("layoutMode")
         source_type = node.get("type")
         solid_color = self._solid_color(node)
+        font_family = text_style.get("fontFamily")
+        font_postscript_name = text_style.get("fontPostScriptName")
+        font_style = text_style.get("fontStyle")
+        font_weight = self._integer(text_style.get("fontWeight"))
 
         return DesignStyle(
             width=self._geometry_number(box.get("width")),
@@ -141,10 +146,16 @@ class FigmaJsonAdapter:
             layout_grow=self._geometry_number(node.get("layoutGrow")),
             constraint_horizontal=constraints.get("horizontal"),
             constraint_vertical=constraints.get("vertical"),
-            font_family=text_style.get("fontFamily"),
-            font_postscript_name=text_style.get("fontPostScriptName"),
-            font_style=text_style.get("fontStyle"),
-            font_weight=self._integer(text_style.get("fontWeight")),
+            font=normalize_font_intent(
+                family=font_family,
+                weight=font_weight,
+                source_style=font_style,
+                postscript_name=font_postscript_name,
+            ),
+            font_family=font_family,
+            font_postscript_name=font_postscript_name,
+            font_style=font_style,
+            font_weight=font_weight,
             font_size=self._geometry_number(text_style.get("fontSize")),
             letter_spacing=self._geometry_number(text_style.get("letterSpacing")),
             line_height=self._geometry_number(text_style.get("lineHeightPx")),
