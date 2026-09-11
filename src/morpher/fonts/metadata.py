@@ -43,7 +43,10 @@ def _name_value(font: TTFont, *name_ids: int) -> str | None:
 
 
 def _normalize_words(value: str) -> list[str]:
-    return [word.casefold() for word in re.findall(r"[A-Za-z0-9]+", value)]
+    # Font packages often use compact names such as BoldLegacyItalic.
+    # Split lower→upper boundaries before tokenizing so variant words survive.
+    expanded = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", value)
+    return [word.casefold() for word in re.findall(r"[A-Za-z0-9]+", expanded)]
 
 
 def _infer_flavor(subfamily: str, path: Path) -> str | None:
@@ -56,7 +59,7 @@ def _infer_flavor(subfamily: str, path: Path) -> str | None:
     # internal subfamily name is identical. Preserve the known variant rather
     # than grouping it into the normal face accidentally.
     stem_words = _normalize_words(path.stem)
-    if "legacy" in stem_words or "legacy" in path.stem.casefold():
+    if "legacy" in stem_words:
         return "legacy"
     return None
 
