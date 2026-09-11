@@ -14,10 +14,10 @@ from morpher.ir.nodes import DesignNode
 def compile_for_responsive_render(root: DesignNode) -> DesignNode:
     """Compile source Design IR into target-neutral responsive Design IR.
 
-    The layout compiler deep-copies ``root`` before applying inference. Calling
-    this function separately for each renderer therefore gives Native and
-    Elementor independent compiled trees and keeps Fidelity on untouched source
-    geometry.
+    The layout compiler deep-copies ``root`` before applying inference, so callers
+    receive an independent compiled tree while the normalized source IR remains
+    untouched. Native currently uses this pipeline; Elementor renders directly from
+    normalized source IR and leaves structural breakpoint work to manual editing.
     """
     design_viewport = root.style.width
     compiled = compile_responsive_layout(root)
