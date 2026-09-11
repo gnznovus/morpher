@@ -40,9 +40,9 @@ def render_font_resolution_css(
     packaged_sources: dict[FontSource, Path] | None = None,
     css_dir: Path | None = None,
 ) -> str:
-    """Render one resolver result as @font-face CSS plus Morpher diagnostics."""
+    """Render one resolver result as @font-face CSS, warning only when unavailable."""
     if resolution.face is None:
-        return _missing_comment(resolution)
+        return f'/* MORPHER FONT: "{_escape(resolution.request.family)}" is unavailable */\n'
 
     face = resolution.face
     sources = []
@@ -61,45 +61,7 @@ def render_font_resolution_css(
         f"  font-weight: {face.weight};",
         f"  font-style: {face.style};",
         "}",
-        "",
-        _resolution_comment(resolution),
     ]
-    return "\n".join(lines) + "\n"
-
-
-def _resolution_comment(resolution: FontResolution) -> str:
-    request = resolution.request
-    requested = f"{request.family} / {request.weight} / {request.style}"
-    if request.flavor:
-        requested += f" / {request.flavor}"
-
-    if resolution.provenance == "cache_hit":
-        detail = "registry cache hit"
-    elif resolution.provenance == "resolved_after_refresh":
-        detail = "resolved after registry refresh"
-    elif resolution.provenance == "fallback_after_refresh":
-        face = resolution.face
-        assert face is not None
-        chosen = f"{face.family} / {face.weight} / {face.style}"
-        if face.flavor:
-            chosen += f" / {face.flavor}"
-        detail = f"fallback after registry refresh → {chosen}"
-    else:
-        detail = resolution.status
-    return f"/* MORPHER FONT: {requested} → {detail} */"
-
-
-def _missing_comment(resolution: FontResolution) -> str:
-    request = resolution.request
-    lines = [
-        "/* MORPHER WARNING: font not found after registry refresh",
-        f' * family: "{request.family}"',
-        f" * weight: {request.weight}",
-        f" * style: {request.style}",
-    ]
-    if request.flavor:
-        lines.append(f" * flavor: {request.flavor}")
-    lines.append(" */")
     return "\n".join(lines) + "\n"
 
 
