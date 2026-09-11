@@ -118,10 +118,6 @@ def _set_fluid_absolute_size(
         if container:
             width = _size("vw", width_vw)
             settings["width"] = width
-            # Elementor's Container width control intentionally does not inherit
-            # its desktop value at the mobile breakpoint; absent an explicit
-            # mobile value Elementor falls back to 100%. Repeat the same fluid
-            # composition width so absolute containers keep their authored size.
             settings["width_mobile"] = width
         else:
             settings["_element_width"] = "initial"
@@ -225,13 +221,7 @@ def _container_settings(
         settings["padding"] = _dimensions(top, right, bottom, left)
     _apply_item_sizing(settings, style, container=True)
     _apply_flow_margin(settings, style, container=True)
-    _apply_free_layout_geometry(
-        settings,
-        style,
-        parent_style,
-        container=True,
-        design_viewport=design_viewport,
-    )
+    _apply_free_layout_geometry(settings, style, parent_style, container=True, design_viewport=design_viewport)
     _apply_child_alignment(settings, style, parent_style, container=True)
     _apply_container_border(settings, style)
     if style.background:
@@ -257,12 +247,7 @@ def _elementor_text(value: str | None) -> str:
     return (value or "").replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
 
 
-def _heading_settings(
-    node: DesignNode,
-    parent_style: DesignStyle | None = None,
-    *,
-    design_viewport: float | None = None,
-) -> dict:
+def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None, *, design_viewport: float | None = None) -> dict:
     style = node.style
     settings: dict = {"title": _elementor_text(node.text)}
     has_typography = any(value is not None for value in (style.font_family, style.font_weight, style.font_size, style.line_height, style.letter_spacing))
@@ -292,13 +277,7 @@ def _heading_settings(
         settings["align"] = text_align
     _apply_item_sizing(settings, style, container=False)
     _apply_flow_margin(settings, style, container=False)
-    _apply_free_layout_geometry(
-        settings,
-        style,
-        parent_style,
-        container=False,
-        design_viewport=design_viewport,
-    )
+    _apply_free_layout_geometry(settings, style, parent_style, container=False, design_viewport=design_viewport)
     _apply_child_alignment(settings, style, parent_style, container=False)
     return settings
 
@@ -307,78 +286,28 @@ def _render_heading(node: DesignNode, path: str, parent_style: DesignStyle | Non
     return {"id": _element_id(node, path), "settings": _heading_settings(node, parent_style, design_viewport=design_viewport), "elements": [], "isInner": False, "widgetType": "heading", "elType": "widget"}
 
 
-def _render_shape(
-    node: DesignNode,
-    path: str,
-    parent_style: DesignStyle | None = None,
-    asset_sources: dict[str, str] | None = None,
-    *,
-    design_viewport: float | None = None,
-) -> dict:
+def _render_shape(node: DesignNode, path: str, parent_style: DesignStyle | None = None, asset_sources: dict[str, str] | None = None, *, design_viewport: float | None = None) -> dict:
     style = node.style
-
-    # A stroke-only Figma shape is decorative geometry, not a layout owner.
-    # Rendering it as an empty Elementor Container makes its height subject to
-    # the Container's min-height behavior, which can expand at mobile
-    # breakpoints. A Spacer gives us an exact responsive height while keeping
-    # the element editable in Elementor.
-    if style.stroke_color and not style.background and style.height is not None:
+    if style.stroke_color and not style.background and style.height is not None and style.border_radius is None:
         settings: dict = {}
         _apply_item_sizing(settings, style, container=False)
         _apply_flow_margin(settings, style, container=False)
-        _apply_free_layout_geometry(
-            settings,
-            style,
-            parent_style,
-            container=False,
-            design_viewport=design_viewport,
-        )
+        _apply_free_layout_geometry(settings, style, parent_style, container=False, design_viewport=design_viewport)
         _apply_child_alignment(settings, style, parent_style, container=False)
-
         height_vw = _composition_vw(style.height, design_viewport)
         if height_vw is not None:
             space = _size("custom", f"{height_vw:g}vw")
             settings["space"] = space
             settings["space_mobile"] = space
-
         weight = style.stroke_weight if style.stroke_weight is not None else 1.0
         settings["_border_border"] = "solid"
         settings["_border_color"] = style.stroke_color
         settings["_border_width"] = _dimensions(weight, weight, weight, weight)
-        if style.border_radius is not None:
-            radius = style.border_radius
-            settings["_border_radius"] = _dimensions(radius, radius, radius, radius)
-
-        return {
-            "id": _element_id(node, path),
-            "settings": settings,
-            "elements": [],
-            "isInner": False,
-            "widgetType": "spacer",
-            "elType": "widget",
-        }
-
-    return {
-        "id": _element_id(node, path),
-        "settings": _container_settings(
-            style,
-            parent_style,
-            asset_sources,
-            design_viewport=design_viewport,
-        ),
-        "elements": [],
-        "isInner": False,
-        "elType": "container",
-    }
+        return {"id": _element_id(node, path), "settings": settings, "elements": [], "isInner": False, "widgetType": "spacer", "elType": "widget"}
+    return {"id": _element_id(node, path), "settings": _container_settings(style, parent_style, asset_sources, design_viewport=design_viewport), "elements": [], "isInner": False, "elType": "container"}
 
 
-def _render_divider(
-    node: DesignNode,
-    path: str,
-    parent_style: DesignStyle | None = None,
-    *,
-    design_viewport: float | None = None,
-) -> dict:
+def _render_divider(node: DesignNode, path: str, parent_style: DesignStyle | None = None, *, design_viewport: float | None = None) -> dict:
     style = node.style
     settings: dict = {"style": "solid", "gap": _size("px", 0)}
     if style.stroke_color:
@@ -387,25 +316,12 @@ def _render_divider(
         settings["weight"] = _size("px", style.stroke_weight)
     _apply_item_sizing(settings, style, container=False)
     _apply_flow_margin(settings, style, container=False)
-    _apply_free_layout_geometry(
-        settings,
-        style,
-        parent_style,
-        container=False,
-        design_viewport=design_viewport,
-    )
+    _apply_free_layout_geometry(settings, style, parent_style, container=False, design_viewport=design_viewport)
     _apply_child_alignment(settings, style, parent_style, container=False)
     return {"id": _element_id(node, path), "settings": settings, "elements": [], "isInner": False, "widgetType": "divider", "elType": "widget"}
 
 
-def _render_asset_widget(
-    node: DesignNode,
-    path: str,
-    parent_style: DesignStyle | None,
-    asset_sources: dict[str, str],
-    *,
-    design_viewport: float | None = None,
-) -> dict | None:
+def _render_asset_widget(node: DesignNode, path: str, parent_style: DesignStyle | None, asset_sources: dict[str, str], *, design_viewport: float | None = None) -> dict | None:
     key = _asset_key(node.image_ref) if node.kind == "image" and node.image_ref else (node.source_id or "").replace(":", "-")
     source = asset_sources.get(key)
     if not source:
@@ -417,25 +333,12 @@ def _render_asset_widget(
         settings["css_filters_opacity"] = _size("px", node.style.image_opacity * 100)
     _apply_item_sizing(settings, node.style, container=False)
     _apply_flow_margin(settings, node.style, container=False)
-    _apply_free_layout_geometry(
-        settings,
-        node.style,
-        parent_style,
-        container=False,
-        design_viewport=design_viewport,
-    )
+    _apply_free_layout_geometry(settings, node.style, parent_style, container=False, design_viewport=design_viewport)
     _apply_child_alignment(settings, node.style, parent_style, container=False)
     return {"id": _element_id(node, path), "settings": settings, "elements": [], "isInner": False, "widgetType": "image", "elType": "widget"}
 
 
-def _render_container(
-    node: DesignNode,
-    path: str,
-    parent_style: DesignStyle | None = None,
-    asset_sources: dict[str, str] | None = None,
-    *,
-    design_viewport: float | None = None,
-) -> dict:
+def _render_container(node: DesignNode, path: str, parent_style: DesignStyle | None = None, asset_sources: dict[str, str] | None = None, *, design_viewport: float | None = None) -> dict:
     asset_sources = asset_sources or {}
     elements = []
     for index, child in enumerate(node.children):
