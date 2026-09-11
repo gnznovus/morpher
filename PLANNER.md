@@ -18,6 +18,7 @@
 - Failed ordinary inputs remain available for retry; successful ordinary inputs move to `processed/` only after required outputs succeed.
 - Fidelity HTML may use companion assets, but semantic source data remains canonical in the IR.
 - Outlined TEXT fidelity SVGs use `svgOutlineText: true` + `useAbsoluteBounds: true`.
+- Raw/vector fidelity SVG exports also use `useAbsoluteBounds: true` so SVG canvas geometry matches the Figma node bounding box used by the IR.
 - Do not force outlined text SVGs through a second semantic geometry interpretation.
 - SVG-backed graphics own their internal paint; CSS controls external layout geometry.
 - The CLI is a frontend to Morpher Core, not the permanent product boundary.
@@ -374,6 +375,7 @@ Changed diff entries should be clickable. A lightweight AJAX modal/popup can ope
 - [x] Quarter-turn geometry handling.
 - [x] Divider rendering.
 - [x] Shape stroke rendering.
+- [x] Raw/vector SVG exports preserve Figma absolute bounds.
 - [x] Inspect traces and regression tests for verified behavior.
 
 ### Responsive compiler / Elementor
@@ -391,48 +393,51 @@ Current responsive pipeline conceptually includes layout compilation, spatial re
 - [ ] Keep Elementor-only behavior isolated from shared compiler logic.
 - [ ] Continue validating generated output against real Elementor behavior.
 
-## Known Fidelity Work
+## Closed Fidelity Issues
 
-### Newsletter decorative vector `45:5219`
+### Newsletter decorative vector `45:5219` — CLOSED
 
-Current diagnosis:
+Confirmed cause:
 
-- Figma node bounding box is roughly `986 × 1129`.
-- Visible render bounds are roughly `987 × 398`.
-- IR/CSS correctly carries the Figma absolute bounding geometry.
-- Current plain vector SVG export likely crops its SVG canvas to visible artwork.
-- The renderer then places that cropped SVG into the much taller IR box using `object-fit: contain`, producing the wrong vertical placement.
+- Figma node `absoluteBoundingBox` was roughly `986 × 1129`.
+- Visible render bounds were only roughly `987 × 398`.
+- IR/CSS correctly used the full Figma bounding geometry.
+- Plain `exportAsync({ format: "SVG" })` cropped the exported SVG canvas to visible artwork.
+- The renderer then placed that cropped SVG inside the taller IR box using `object-fit: contain`, producing the wrong vertical placement.
 
-This is an exporter/renderer geometry-contract mismatch, not evidence that IR should switch to `absoluteRenderBounds`.
-
-Next experiment/fix:
+Confirmed fix:
 
 ```js
 vector.exportAsync({
   format: "SVG",
-  useAbsoluteBounds: true
+  useAbsoluteBounds: true,
 })
 ```
 
-Goal: SVG canvas == Figma `absoluteBoundingBox` == IR geometry.
+This restores the intended geometry contract:
 
-- [ ] Test `useAbsoluteBounds: true` on raw vector export.
-- [ ] Re-render Newsletter and visually verify `45:5219`.
-- [ ] Add regression coverage once verified.
-- [ ] Do not patch IR to render bounds unless evidence disproves the exporter contract.
+```text
+SVG canvas == Figma absoluteBoundingBox == IR geometry
+```
+
+Verified on the real Newsletter fixture: the orange decorative vector now renders in the correct position without changing IR geometry or adding a renderer workaround.
+
+- [x] Export raw/vector SVGs with `useAbsoluteBounds: true`.
+- [x] Re-render Newsletter and visually verify `45:5219`.
+- [x] Add regression coverage for the vector export contract.
+- [x] Keep IR on `absoluteBoundingBox`; no `absoluteRenderBounds` workaround required.
 
 ## Immediate Sequence
 
-Do not let the new product architecture interrupt the active compiler verification order.
+The Newsletter fidelity blocker is closed. The active sequence can now move forward:
 
-1. **Finish fidelity contracts** — first Newsletter decorative vector `45:5219`.
-2. **Continue responsive compiler** hardening against real fixtures.
-3. **Font gatherer/registry** under `storage/fonts/`.
-4. **Semantic HTML text** using registered exact fonts, with fidelity fallback retained.
-5. **Morpher Native renderer** and whole-page Morph output.
-6. **WordPress Visual Editor** with pinpoint editing and content overrides.
-7. **Version/backup/restore** integrated as core editor safety, including rendered A/B preview and technical diff.
-8. **Developer tools later** — structural editing, widgets, snapping, advanced responsive/CSS controls.
+1. **Continue responsive compiler** hardening against real fixtures.
+2. **Font gatherer/registry** under `storage/fonts/`.
+3. **Semantic HTML text** using registered exact fonts, with fidelity fallback retained.
+4. **Morpher Native renderer** and whole-page Morph output.
+5. **WordPress Visual Editor** with pinpoint editing and content overrides.
+6. **Version/backup/restore** integrated as core editor safety, including rendered A/B preview and technical diff.
+7. **Developer tools later** — structural editing, widgets, snapping, advanced responsive/CSS controls.
 
 ## Later / Optional Inputs
 
@@ -461,6 +466,6 @@ Do not let the new product architecture interrupt the active compiler verificati
 
 Morpher should currently be described as an **advanced prototype / early product foundation**.
 
-It is beyond the initial feasibility question: real Figma designs can be transported, normalized, inspected, rendered, and compiled through meaningful parts of the pipeline. It is not yet alpha/production-ready because important fidelity contracts are still being discovered, responsive compilation is incomplete, and Morpher Native / font registry / WordPress editing are not implemented yet.
+It is beyond the initial feasibility question: real Figma designs can be transported, normalized, inspected, rendered, and compiled through meaningful parts of the pipeline. It is not yet alpha/production-ready because responsive compilation is incomplete and Morpher Native / font registry / WordPress editing are not implemented yet.
 
 The fidelity HTML path remains the diagnostic/reference path and should not be destabilized while the Native/editor architecture is introduced.
