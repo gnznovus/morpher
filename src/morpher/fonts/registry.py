@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from morpher.fonts.cache import load_font_registry_cache, save_font_registry_cache
 from morpher.fonts.metadata import read_font_metadata
 from morpher.fonts.model import FontFace, FontMetadata, FontSource, UnresolvedFontSource
 
@@ -38,6 +39,21 @@ class FontRegistry:
 
     def families(self) -> tuple[str, ...]:
         return tuple(sorted({face.family for face in self.faces}, key=str.casefold))
+
+    def find_face(
+        self,
+        family: str,
+        weight: int,
+        style: str,
+        flavor: str | None = None,
+    ) -> FontFace | None:
+        key = (
+            family.casefold(),
+            weight,
+            style.casefold(),
+            flavor.casefold() if flavor else None,
+        )
+        return next((face for face in self.faces if face.key == key), None)
 
 
 _CURRENT_REGISTRY = FontRegistry()
@@ -112,14 +128,64 @@ def gather_fonts(
     return FontRegistry(faces=tuple(faces), unresolved_sources=tuple(unresolved))
 
 
+def set_current_font_registry(registry: FontRegistry) -> FontRegistry:
+    global _CURRENT_REGISTRY
+    _CURRENT_REGISTRY = registry
+    return registry
+
+
+def load_cached_font_registry(cache_path: Path) -> FontRegistry | None:
+    registry = load_font_registry_cache(cache_path)
+    if registry is None:
+        return None
+    return set_current_font_registry(registry)
+
+
 def refresh_font_registry(
     root: Path,
     *,
     metadata_reader: MetadataReader = read_font_metadata,
+    cache_path: Path | None = None,
 ) -> FontRegistry:
-    global _CURRENT_REGISTRY
-    _CURRENT_REGISTRY = gather_fonts(root, metadata_reader=metadata_reader)
-    return _CURRENT_REGISTRY
+    registry = gather_fonts(root, metadata_reader=metadata_reader)
+    set_current_font_registry(registry)
+    if cache_path is not None:
+        save_font_registry_cache(cache_path, registry)
+    return registry
+
+
+def ensure_font_face(
+    root: Path,
+    cache_path: Path,
+    *,
+    family: str,
+    weight: int,
+    style: str,
+    flavor: str | None = None,
+    metadata_reader: MetadataReader = read_font_metadata,
+) -> tuple[FontFace | None, bool]:
+    """Resolve an exact face, refreshing the registry once only on a cache miss.
+
+    Returns ``(face, refreshed)``. ``refreshed`` is true only when the gatherer
+    had to run because the current/persistent registry did not contain the face.
+    """
+    registry = current_font_registry()
+    face = registry.find_face(family, weight, style, flavor)
+    if face is not None:
+        return face, False
+
+    cached = load_cached_font_registry(cache_path)
+    if cached is not None:
+        face = cached.find_face(family, weight, style, flavor)
+        if face is not None:
+            return face, False
+
+    refreshed = refresh_font_registry(
+        root,
+        metadata_reader=metadata_reader,
+        cache_path=cache_path,
+    )
+    return refreshed.find_face(family, weight, style, flavor), True
 
 
 def current_font_registry() -> FontRegistry:
