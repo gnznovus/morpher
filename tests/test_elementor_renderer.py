@@ -62,26 +62,86 @@ def test_nested_hug_container_uses_figma_width_and_full_content_width():
     assert button_container["settings"]["content_width"] == "full"
 
 
-def test_free_layout_uses_absolute_figma_geometry():
+def test_free_layout_uses_fluid_owner_relative_geometry():
     root = DesignNode(kind="container", name="Free Layout", source_id="45:1", style=DesignStyle(x=100, y=200, width=600, height=400), children=[DesignNode(kind="text", source_id="45:2", text="OFFERS", style=DesignStyle(x=132, y=224, width=69, height=19)), DesignNode(kind="shape", source_id="45:3", style=DesignStyle(x=300, y=260, width=120, height=80, background="rgba(0, 0, 0, 1)"))])
     result = render_elementor(root)
     container = result["content"][0]
     root_settings = container["settings"]
-    assert root_settings["width"] == {"unit": "px", "size": 600, "sizes": []}
-    assert root_settings["min_height"] == {"unit": "px", "size": 400, "sizes": []}
+    assert root_settings["width"] == {"unit": "%", "size": 100, "sizes": []}
+    assert root_settings["min_height"] == {"unit": "vw", "size": 66.66666666666666, "sizes": []}
     heading_settings = container["elements"][0]["settings"]
     assert heading_settings["_position"] == "absolute"
     assert heading_settings["_offset_orientation_h"] == "start"
     assert heading_settings["_offset_orientation_v"] == "start"
-    assert heading_settings["_offset_x"] == {"unit": "px", "size": 32, "sizes": []}
-    assert heading_settings["_offset_y"] == {"unit": "px", "size": 24, "sizes": []}
-    assert heading_settings["_element_custom_width"] == {"unit": "px", "size": 69, "sizes": []}
+    assert heading_settings["_offset_x"] == {"unit": "%", "size": 5.333333333333334, "sizes": []}
+    assert heading_settings["_offset_y"] == {"unit": "%", "size": 6.0, "sizes": []}
+    assert heading_settings["_element_custom_width"] == {"unit": "%", "size": 11.5, "sizes": []}
     shape_settings = container["elements"][1]["settings"]
     assert shape_settings["position"] == "absolute"
-    assert shape_settings["_offset_x"] == {"unit": "px", "size": 200, "sizes": []}
-    assert shape_settings["_offset_y"] == {"unit": "px", "size": 60, "sizes": []}
-    assert shape_settings["width"] == {"unit": "px", "size": 120, "sizes": []}
-    assert shape_settings["min_height"] == {"unit": "px", "size": 80, "sizes": []}
+    assert shape_settings["_offset_x"] == {"unit": "%", "size": 33.33333333333333, "sizes": []}
+    assert shape_settings["_offset_y"] == {"unit": "%", "size": 15.0, "sizes": []}
+    assert shape_settings["width"] == {"unit": "%", "size": 20.0, "sizes": []}
+    assert shape_settings["min_height"] == {"unit": "%", "size": 20.0, "sizes": []}
+
+
+def test_auto_sized_absolute_text_stays_natural_width():
+    root = DesignNode(
+        kind="container",
+        source_id="1:1",
+        style=DesignStyle(x=0, y=0, width=1200, height=600),
+        children=[
+            DesignNode(
+                kind="text",
+                source_id="1:2",
+                text="STAY TUNE - SUBSCRIBE TO OUR NEWSLETTER",
+                style=DesignStyle(
+                    x=360,
+                    y=120,
+                    width=420,
+                    height=32,
+                    text_auto_resize="WIDTH_AND_HEIGHT",
+                ),
+            )
+        ],
+    )
+
+    settings = render_elementor(root)["content"][0]["elements"][0]["settings"]
+
+    assert settings["_position"] == "absolute"
+    assert settings["_offset_x"] == {"unit": "%", "size": 30.0, "sizes": []}
+    assert settings["_offset_y"] == {"unit": "%", "size": 20.0, "sizes": []}
+    assert settings["_element_width"] == "auto"
+    assert "_element_custom_width" not in settings
+
+
+def test_shape_stroke_and_radius_render_as_elementor_border():
+    root = DesignNode(
+        kind="container",
+        source_id="1:1",
+        style=DesignStyle(x=0, y=0, width=1200, height=600),
+        children=[
+            DesignNode(
+                kind="shape",
+                source_id="1:2",
+                style=DesignStyle(
+                    x=800,
+                    y=300,
+                    width=160,
+                    height=56,
+                    stroke_color="rgba(255, 255, 255, 1)",
+                    stroke_weight=1,
+                    border_radius=4,
+                ),
+            )
+        ],
+    )
+
+    settings = render_elementor(root)["content"][0]["elements"][0]["settings"]
+
+    assert settings["border_border"] == "solid"
+    assert settings["border_color"] == "rgba(255, 255, 255, 1)"
+    assert settings["border_width"] == {"unit": "px", "top": "1", "right": "1", "bottom": "1", "left": "1", "isLinked": True}
+    assert settings["border_radius"] == {"unit": "px", "top": "4", "right": "4", "bottom": "4", "left": "4", "isLinked": True}
 
 
 def test_elementor_ids_are_deterministic_and_valid_length():
