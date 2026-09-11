@@ -1,3 +1,5 @@
+import json
+import re
 from pathlib import Path
 
 from morpher.fonts.cache import load_font_registry_cache
@@ -8,6 +10,7 @@ from morpher.fonts.registry import (
     refresh_font_registry,
     set_current_font_registry,
 )
+from morpher.storage.paths import StoragePaths
 
 
 def _touch(root: Path, name: str) -> Path:
@@ -26,6 +29,12 @@ def _metadata(path: Path) -> FontMetadata:
     )
 
 
+def test_font_registry_cache_lives_with_fonts(tmp_path: Path) -> None:
+    storage = StoragePaths(root=tmp_path / "storage")
+
+    assert storage.font_registry_cache == storage.fonts / "font-registry.json"
+
+
 def test_refresh_persists_registry_cache(tmp_path: Path) -> None:
     fonts = tmp_path / "fonts"
     cache = tmp_path / "font-registry.json"
@@ -37,8 +46,10 @@ def test_refresh_persists_registry_cache(tmp_path: Path) -> None:
         cache_path=cache,
     )
     loaded = load_font_registry_cache(cache)
+    payload = json.loads(cache.read_text(encoding="utf-8"))
 
     assert loaded is not None
+    assert re.fullmatch(r"\d{8}:\d{4}", payload["cache_version"])
     assert loaded.families() == ("HK Grotesk",)
     assert loaded.faces[0].sources[0].path == source
     assert loaded.source_count == registry.source_count
