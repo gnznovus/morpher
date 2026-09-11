@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Literal
 
+from .typography import FontIntent
+
 
 LayoutDirection = Literal["horizontal", "vertical"]
 SizingMode = Literal["fixed", "hug", "fill"]
@@ -49,6 +51,7 @@ class DesignStyle:
     layout_grow: float | None = None
     constraint_horizontal: str | None = None
     constraint_vertical: str | None = None
+    font: FontIntent | None = None
     font_family: str | None = None
     font_postscript_name: str | None = None
     font_style: str | None = None
