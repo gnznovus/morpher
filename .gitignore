@@ -38,6 +38,12 @@ mysql/
 mysql-data/
 db-data/
 
+# Morpher WordPress plugin runtime font assets
+wp-content/plugins/morpher-plugin/assets/fonts.css
+wp-content/plugins/morpher-plugin/assets/fonts.json
+wp-content/plugins/morpher-plugin/assets/fonts/*
+!wp-content/plugins/morpher-plugin/assets/fonts/.gitkeep
+
 # Local Elementor fidelity fixtures
 # Font binaries stay local; Morpher only mounts them into the testbed.
 testbed/fonts/*.woff
