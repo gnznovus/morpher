@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from morpher.inspect import inspect_path
-from morpher.render import render_path
+from morpher.render import RenderOutputs, render_path
 from morpher.storage.paths import StoragePaths
 from morpher.storage.scanner import scan_sources
 
@@ -17,6 +17,7 @@ class RunResult:
     status: str
     warnings: int = 0
     error: str | None = None
+    outputs: RenderOutputs | None = None
 
 
 def _outputs_exist(source: Path, storage: StoragePaths) -> bool:
@@ -28,6 +29,29 @@ def _outputs_exist(source: Path, storage: StoragePaths) -> bool:
         and storage.native_css_output(source).exists()
         and storage.elementor_output(source).exists()
     )
+
+
+def _existing_outputs(source: Path, storage: StoragePaths) -> RenderOutputs:
+    return RenderOutputs(
+        fidelity_html=storage.fidelity_html_output(source),
+        fidelity_css=storage.fidelity_css_output(source),
+        native_html=storage.native_html_output(source),
+        native_css=storage.native_css_output(source),
+        elementor=storage.elementor_output(source),
+        warning_count=0,
+    )
+
+
+def _print_outputs(outputs: RenderOutputs) -> None:
+    if outputs.fidelity_html is not None:
+        print(f"  Fidelity HTML: {outputs.fidelity_html}")
+    if outputs.fidelity_css is not None:
+        print(f"  Fidelity CSS:  {outputs.fidelity_css}")
+    if outputs.native_html is not None:
+        print(f"  Native HTML:   {outputs.native_html}")
+    if outputs.native_css is not None:
+        print(f"  Native CSS:    {outputs.native_css}")
+    print(f"  Elementor:     {outputs.elementor}")
 
 
 def clean_outputs(storage: StoragePaths | None = None) -> None:
@@ -47,13 +71,22 @@ def clean_outputs(storage: StoragePaths | None = None) -> None:
 
 def run_source(source: Path, storage: StoragePaths, *, force: bool = False) -> RunResult:
     if not force and _outputs_exist(source, storage):
-        return RunResult(source=source, status="skipped")
+        return RunResult(
+            source=source,
+            status="skipped",
+            outputs=_existing_outputs(source, storage),
+        )
 
     try:
         # Inspect exactly once so the rich diagnostic trace remains the canonical trace.
         inspect_path(source)
         outputs = render_path(source)
-        return RunResult(source=source, status="processed", warnings=outputs.warning_count)
+        return RunResult(
+            source=source,
+            status="processed",
+            warnings=outputs.warning_count,
+            outputs=outputs,
+        )
     except (OSError, ValueError) as exc:
         return RunResult(source=source, status="failed", error=str(exc))
 
@@ -102,8 +135,12 @@ def main() -> None:
     for result in results:
         if result.status == "processed":
             print(f"PROCESS  {result.source}  warnings={result.warnings}")
+            if result.outputs is not None:
+                _print_outputs(result.outputs)
         elif result.status == "skipped":
             print(f"SKIP     {result.source}  outputs already exist")
+            if result.outputs is not None:
+                _print_outputs(result.outputs)
         else:
             print(f"FAILED   {result.source}  {result.error}")
 
