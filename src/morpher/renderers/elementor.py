@@ -36,6 +36,12 @@ def _relative_percent(value: float | None, basis: float | None) -> float | None:
     return 0.0 if abs(percent) < 1e-9 else percent
 
 
+def _is_fluid_absolute(style: DesignStyle, parent_style: DesignStyle | None) -> bool:
+    return parent_style is not None and (
+        style.position_mode == "absolute" or parent_style.layout_direction is None
+    )
+
+
 def _asset_key(image_ref: str) -> str:
     return image_ref.replace(":", "-")
 
@@ -90,13 +96,7 @@ def _apply_flow_margin(settings: dict, style: DesignStyle, *, container: bool) -
     settings["margin" if container else "_margin"] = _dimensions(top, right, bottom, left, unit="%")
 
 
-def _set_fluid_absolute_size(
-    settings: dict,
-    style: DesignStyle,
-    parent_style: DesignStyle,
-    *,
-    container: bool,
-) -> None:
+def _set_fluid_absolute_size(settings: dict, style: DesignStyle, parent_style: DesignStyle, *, container: bool) -> None:
     if not container and style.text_auto_resize == "WIDTH_AND_HEIGHT":
         settings["_element_width"] = "auto"
         settings.pop("_element_custom_width", None)
@@ -123,12 +123,10 @@ def _apply_free_layout_geometry(settings: dict, style: DesignStyle, parent_style
                 settings["min_height"] = _size("vw", style.height / style.width * 100.0)
         return
 
-    explicit_absolute = style.position_mode == "absolute"
-    implicit_absolute = parent_style.layout_direction is None
-    if not explicit_absolute and not implicit_absolute:
+    if not _is_fluid_absolute(style, parent_style):
         return
 
-    if explicit_absolute:
+    if style.position_mode == "absolute":
         left = style.offset_x
         top = style.offset_y
     else:
@@ -205,10 +203,7 @@ def _container_settings(style: DesignStyle, parent_style: DesignStyle | None = N
             settings["background_size"] = "cover"
             if style.background_image_opacity is not None and style.background_image_opacity < 1:
                 settings["background_overlay_background"] = "classic"
-                settings["background_overlay_color"] = _overlay_color(
-                    style.background,
-                    1.0 - style.background_image_opacity,
-                )
+                settings["background_overlay_color"] = _overlay_color(style.background, 1.0 - style.background_image_opacity)
     if style.clips_content:
         settings["overflow"] = "hidden"
     return settings
@@ -230,7 +225,10 @@ def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None,
         if style.font_weight is not None:
             settings["typography_font_weight"] = str(style.font_weight)
         if style.font_size is not None:
-            fluid = fluid_font_size(style.font_size, design_viewport) if design_viewport is not None else None
+            fluid = None
+            if design_viewport is not None:
+                minimum_px = 0.0 if _is_fluid_absolute(style, parent_style) else None
+                fluid = fluid_font_size(style.font_size, design_viewport, minimum_px=minimum_px)
             settings["typography_font_size"] = _size("custom", fluid.css()) if fluid is not None else _size("px", style.font_size)
         if style.line_height is not None:
             relative = relative_typography_value(style.line_height, style.font_size) if style.font_size is not None else None
