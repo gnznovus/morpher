@@ -36,6 +36,11 @@ def _relative_percent(value: float | None, basis: float | None) -> float | None:
     return 0.0 if abs(percent) < 1e-9 else percent
 
 
+def _composition_vw(value: float | None, design_viewport: float | None) -> float | None:
+    """Express one authored spatial measurement on the page composition scale."""
+    return _relative_percent(value, design_viewport)
+
+
 def _is_fluid_absolute(style: DesignStyle, parent_style: DesignStyle | None) -> bool:
     return parent_style is not None and (
         style.position_mode == "absolute" or parent_style.layout_direction is None
@@ -96,31 +101,45 @@ def _apply_flow_margin(settings: dict, style: DesignStyle, *, container: bool) -
     settings["margin" if container else "_margin"] = _dimensions(top, right, bottom, left, unit="%")
 
 
-def _set_fluid_absolute_size(settings: dict, style: DesignStyle, parent_style: DesignStyle, *, container: bool) -> None:
+def _set_fluid_absolute_size(
+    settings: dict,
+    style: DesignStyle,
+    *,
+    container: bool,
+    design_viewport: float | None,
+) -> None:
     if not container and style.text_auto_resize == "WIDTH_AND_HEIGHT":
         settings["_element_width"] = "auto"
         settings.pop("_element_custom_width", None)
         return
 
-    width_percent = _relative_percent(style.width, parent_style.width)
-    if width_percent is not None:
+    width_vw = _composition_vw(style.width, design_viewport)
+    if width_vw is not None:
         if container:
-            settings["width"] = _size("%", width_percent)
+            settings["width"] = _size("vw", width_vw)
         else:
             settings["_element_width"] = "initial"
-            settings["_element_custom_width"] = _size("%", width_percent)
+            settings["_element_custom_width"] = _size("vw", width_vw)
 
-    height_percent = _relative_percent(style.height, parent_style.height)
-    if container and height_percent is not None:
-        settings["min_height"] = _size("%", height_percent)
+    height_vw = _composition_vw(style.height, design_viewport)
+    if container and height_vw is not None:
+        settings["min_height"] = _size("vw", height_vw)
 
 
-def _apply_free_layout_geometry(settings: dict, style: DesignStyle, parent_style: DesignStyle | None, *, container: bool) -> None:
+def _apply_free_layout_geometry(
+    settings: dict,
+    style: DesignStyle,
+    parent_style: DesignStyle | None,
+    *,
+    container: bool,
+    design_viewport: float | None,
+) -> None:
     if parent_style is None:
         if style.layout_direction is None:
             settings["width"] = _size("%", 100)
-            if container and style.width not in (None, 0) and style.height is not None:
-                settings["min_height"] = _size("vw", style.height / style.width * 100.0)
+            root_height_vw = _composition_vw(style.height, design_viewport)
+            if container and root_height_vw is not None:
+                settings["min_height"] = _size("vw", root_height_vw)
         return
 
     if not _is_fluid_absolute(style, parent_style):
@@ -139,14 +158,19 @@ def _apply_free_layout_geometry(settings: dict, style: DesignStyle, parent_style
     settings["_offset_orientation_h"] = "start"
     settings["_offset_orientation_v"] = "start"
 
-    left_percent = _relative_percent(left, parent_style.width)
-    top_percent = _relative_percent(top, parent_style.height)
-    if left_percent is not None:
-        settings["_offset_x"] = _size("%", left_percent)
-    if top_percent is not None:
-        settings["_offset_y"] = _size("%", top_percent)
+    left_vw = _composition_vw(left, design_viewport)
+    top_vw = _composition_vw(top, design_viewport)
+    if left_vw is not None:
+        settings["_offset_x"] = _size("vw", left_vw)
+    if top_vw is not None:
+        settings["_offset_y"] = _size("vw", top_vw)
 
-    _set_fluid_absolute_size(settings, style, parent_style, container=container)
+    _set_fluid_absolute_size(
+        settings,
+        style,
+        container=container,
+        design_viewport=design_viewport,
+    )
 
 
 def _apply_child_alignment(settings: dict, style: DesignStyle, parent_style: DesignStyle | None, *, container: bool) -> None:
@@ -168,7 +192,13 @@ def _apply_container_border(settings: dict, style: DesignStyle) -> None:
         settings["border_radius"] = _dimensions(radius, radius, radius, radius)
 
 
-def _container_settings(style: DesignStyle, parent_style: DesignStyle | None = None, asset_sources: dict[str, str] | None = None) -> dict:
+def _container_settings(
+    style: DesignStyle,
+    parent_style: DesignStyle | None = None,
+    asset_sources: dict[str, str] | None = None,
+    *,
+    design_viewport: float | None = None,
+) -> dict:
     settings: dict = {"content_width": "full"}
     if style.layout_direction:
         settings["flex_direction"] = "row" if style.layout_direction == "horizontal" else "column"
@@ -187,7 +217,13 @@ def _container_settings(style: DesignStyle, parent_style: DesignStyle | None = N
         settings["padding"] = _dimensions(top, right, bottom, left)
     _apply_item_sizing(settings, style, container=True)
     _apply_flow_margin(settings, style, container=True)
-    _apply_free_layout_geometry(settings, style, parent_style, container=True)
+    _apply_free_layout_geometry(
+        settings,
+        style,
+        parent_style,
+        container=True,
+        design_viewport=design_viewport,
+    )
     _apply_child_alignment(settings, style, parent_style, container=True)
     _apply_container_border(settings, style)
     if style.background:
@@ -213,7 +249,12 @@ def _elementor_text(value: str | None) -> str:
     return (value or "").replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
 
 
-def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None, *, design_viewport: float | None = None) -> dict:
+def _heading_settings(
+    node: DesignNode,
+    parent_style: DesignStyle | None = None,
+    *,
+    design_viewport: float | None = None,
+) -> dict:
     style = node.style
     settings: dict = {"title": _elementor_text(node.text)}
     has_typography = any(value is not None for value in (style.font_family, style.font_weight, style.font_size, style.line_height, style.letter_spacing))
@@ -243,7 +284,13 @@ def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None,
         settings["align"] = text_align
     _apply_item_sizing(settings, style, container=False)
     _apply_flow_margin(settings, style, container=False)
-    _apply_free_layout_geometry(settings, style, parent_style, container=False)
+    _apply_free_layout_geometry(
+        settings,
+        style,
+        parent_style,
+        container=False,
+        design_viewport=design_viewport,
+    )
     _apply_child_alignment(settings, style, parent_style, container=False)
     return settings
 
@@ -252,25 +299,51 @@ def _render_heading(node: DesignNode, path: str, parent_style: DesignStyle | Non
     return {"id": _element_id(node, path), "settings": _heading_settings(node, parent_style, design_viewport=design_viewport), "elements": [], "isInner": False, "widgetType": "heading", "elType": "widget"}
 
 
-def _render_shape(node: DesignNode, path: str, parent_style: DesignStyle | None = None, asset_sources: dict[str, str] | None = None) -> dict:
-    return {"id": _element_id(node, path), "settings": _container_settings(node.style, parent_style, asset_sources), "elements": [], "isInner": False, "elType": "container"}
+def _render_shape(
+    node: DesignNode,
+    path: str,
+    parent_style: DesignStyle | None = None,
+    asset_sources: dict[str, str] | None = None,
+    *,
+    design_viewport: float | None = None,
+) -> dict:
+    return {"id": _element_id(node, path), "settings": _container_settings(node.style, parent_style, asset_sources, design_viewport=design_viewport), "elements": [], "isInner": False, "elType": "container"}
 
 
-def _render_divider(node: DesignNode, path: str, parent_style: DesignStyle | None = None) -> dict:
+def _render_divider(
+    node: DesignNode,
+    path: str,
+    parent_style: DesignStyle | None = None,
+    *,
+    design_viewport: float | None = None,
+) -> dict:
     style = node.style
-    settings: dict = {"style": "solid"}
+    settings: dict = {"style": "solid", "gap": _size("px", 0)}
     if style.stroke_color:
         settings["color"] = style.stroke_color
     if style.stroke_weight is not None:
         settings["weight"] = _size("px", style.stroke_weight)
     _apply_item_sizing(settings, style, container=False)
     _apply_flow_margin(settings, style, container=False)
-    _apply_free_layout_geometry(settings, style, parent_style, container=False)
+    _apply_free_layout_geometry(
+        settings,
+        style,
+        parent_style,
+        container=False,
+        design_viewport=design_viewport,
+    )
     _apply_child_alignment(settings, style, parent_style, container=False)
     return {"id": _element_id(node, path), "settings": settings, "elements": [], "isInner": False, "widgetType": "divider", "elType": "widget"}
 
 
-def _render_asset_widget(node: DesignNode, path: str, parent_style: DesignStyle | None, asset_sources: dict[str, str]) -> dict | None:
+def _render_asset_widget(
+    node: DesignNode,
+    path: str,
+    parent_style: DesignStyle | None,
+    asset_sources: dict[str, str],
+    *,
+    design_viewport: float | None = None,
+) -> dict | None:
     key = _asset_key(node.image_ref) if node.kind == "image" and node.image_ref else (node.source_id or "").replace(":", "-")
     source = asset_sources.get(key)
     if not source:
@@ -282,12 +355,25 @@ def _render_asset_widget(node: DesignNode, path: str, parent_style: DesignStyle 
         settings["css_filters_opacity"] = _size("px", node.style.image_opacity * 100)
     _apply_item_sizing(settings, node.style, container=False)
     _apply_flow_margin(settings, node.style, container=False)
-    _apply_free_layout_geometry(settings, node.style, parent_style, container=False)
+    _apply_free_layout_geometry(
+        settings,
+        node.style,
+        parent_style,
+        container=False,
+        design_viewport=design_viewport,
+    )
     _apply_child_alignment(settings, node.style, parent_style, container=False)
     return {"id": _element_id(node, path), "settings": settings, "elements": [], "isInner": False, "widgetType": "image", "elType": "widget"}
 
 
-def _render_container(node: DesignNode, path: str, parent_style: DesignStyle | None = None, asset_sources: dict[str, str] | None = None, *, design_viewport: float | None = None) -> dict:
+def _render_container(
+    node: DesignNode,
+    path: str,
+    parent_style: DesignStyle | None = None,
+    asset_sources: dict[str, str] | None = None,
+    *,
+    design_viewport: float | None = None,
+) -> dict:
     asset_sources = asset_sources or {}
     elements = []
     for index, child in enumerate(node.children):
@@ -297,14 +383,14 @@ def _render_container(node: DesignNode, path: str, parent_style: DesignStyle | N
         elif child.kind == "text":
             elements.append(_render_heading(child, child_path, node.style, design_viewport=design_viewport))
         elif child.kind == "shape":
-            elements.append(_render_shape(child, child_path, node.style, asset_sources))
+            elements.append(_render_shape(child, child_path, node.style, asset_sources, design_viewport=design_viewport))
         elif child.kind == "divider":
-            elements.append(_render_divider(child, child_path, node.style))
+            elements.append(_render_divider(child, child_path, node.style, design_viewport=design_viewport))
         elif child.kind in {"image", "icon"}:
-            asset = _render_asset_widget(child, child_path, node.style, asset_sources)
+            asset = _render_asset_widget(child, child_path, node.style, asset_sources, design_viewport=design_viewport)
             if asset is not None:
                 elements.append(asset)
-    return {"id": _element_id(node, path), "settings": _container_settings(node.style, parent_style, asset_sources), "elements": elements, "isInner": False, "elType": "container"}
+    return {"id": _element_id(node, path), "settings": _container_settings(node.style, parent_style, asset_sources, design_viewport=design_viewport), "elements": elements, "isInner": False, "elType": "container"}
 
 
 def render_elementor(root: DesignNode, asset_sources: dict[str, str] | None = None) -> dict:
