@@ -14,6 +14,7 @@ from morpher.inputs.figma_json import FigmaJsonAdapter
 from morpher.ir.nodes import DesignNode
 from morpher.renderers.css import render_css
 from morpher.renderers.elementor import render_elementor
+from morpher.renderers.elementor_font_plugin import render_elementor_font_plugin
 from morpher.renderers.html import render_html
 from morpher.renderers.native_css import render_native_css
 from morpher.renderers.native_html import render_native_html
@@ -28,6 +29,7 @@ class RenderOutputs:
     native_css: Path | None
     elementor: Path
     warning_count: int
+    elementor_font_plugin: Path | None = None
 
 
 def _copy_assets(
@@ -236,6 +238,13 @@ def render_path(
         encoding="utf-8",
     )
 
+    elementor_font_plugin = render_elementor_font_plugin(
+        document.root,
+        font_root=storage.fonts,
+        font_cache=storage.font_registry_cache,
+        output_dir=storage.elementor_font_plugin,
+    )
+
     return RenderOutputs(
         fidelity_html=fidelity_html_path,
         fidelity_css=fidelity_css_path,
@@ -243,6 +252,7 @@ def render_path(
         native_css=native_css_path,
         elementor=elementor_path,
         warning_count=len(document.warnings),
+        elementor_font_plugin=elementor_font_plugin,
     )
 
 
@@ -280,6 +290,8 @@ def main() -> None:
             print(f"Native HTML: {outputs.native_html}")
             print(f"Native CSS: {outputs.native_css}")
         print(f"Elementor: {outputs.elementor}")
+        if outputs.elementor_font_plugin is not None:
+            print(f"Elementor Font Plugin: {outputs.elementor_font_plugin}")
         print(f"Warnings: {outputs.warning_count}")
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
