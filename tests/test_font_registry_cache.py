@@ -2,7 +2,12 @@ from pathlib import Path
 
 from morpher.fonts.cache import load_font_registry_cache
 from morpher.fonts.model import FontMetadata
-from morpher.fonts.registry import ensure_font_face, refresh_font_registry, set_current_font_registry
+from morpher.fonts.registry import (
+    FontRegistry,
+    ensure_font_face,
+    refresh_font_registry,
+    set_current_font_registry,
+)
 
 
 def _touch(root: Path, name: str) -> Path:
@@ -49,7 +54,7 @@ def test_ensure_font_face_uses_cache_without_gathering(tmp_path: Path) -> None:
         metadata_reader=_metadata,
         cache_path=cache,
     )
-    set_current_font_registry(type(load_font_registry_cache(cache))())  # empty in-memory registry
+    set_current_font_registry(FontRegistry())
 
     calls = 0
 
@@ -77,7 +82,7 @@ def test_ensure_font_face_refreshes_once_after_cache_miss(tmp_path: Path) -> Non
     fonts = tmp_path / "fonts"
     cache = tmp_path / "font-registry.json"
     _touch(fonts, "HKGrotesk-Bold.woff2")
-    set_current_font_registry(type(load_font_registry_cache(cache) or refresh_font_registry(tmp_path / "empty"))())
+    set_current_font_registry(FontRegistry())
 
     calls = 0
 
@@ -105,7 +110,7 @@ def test_ensure_font_face_stops_after_refresh_when_face_still_missing(tmp_path: 
     fonts = tmp_path / "fonts"
     cache = tmp_path / "font-registry.json"
     _touch(fonts, "HKGrotesk-Bold.woff2")
-    set_current_font_registry(type(load_font_registry_cache(cache) or refresh_font_registry(tmp_path / "empty"))())
+    set_current_font_registry(FontRegistry())
 
     calls = 0
 
