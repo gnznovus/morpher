@@ -72,6 +72,13 @@ class StoragePaths:
     def native_css_output(self, source: Path) -> Path:
         return self.output_html_native / f"{source.stem}.css"
 
+    # Backward-compatible aliases: the old generic HTML target is Fidelity.
+    def html_output(self, source: Path) -> Path:
+        return self.fidelity_html_output(source)
+
+    def css_output(self, source: Path) -> Path:
+        return self.fidelity_css_output(source)
+
     def figma_asset_dir(self, source: Path) -> Path:
         return self.figma_import / "assets" / source.stem
 
@@ -83,6 +90,9 @@ class StoragePaths:
 
     def native_font_asset_dir(self) -> Path:
         return self.output_html_native / "assets" / "fonts"
+
+    def html_asset_dir(self, source: Path) -> Path:
+        return self.fidelity_asset_dir(source)
 
     def elementor_asset_dir(self, source: Path) -> Path:
         return self.output_elementor / "assets" / source.stem
