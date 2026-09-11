@@ -90,7 +90,12 @@ async function exportImageAssets(node) {
 async function exportVectorAssets(node) {
   const assets = [];
   for (const vector of collectVectorAssets(node)) {
-    const bytes = await vector.exportAsync({ format: "SVG" });
+    // Preserve the vector node's full Figma canvas so the exported SVG uses
+    // the same geometry contract as the Design IR absolute bounding box.
+    const bytes = await vector.exportAsync({
+      format: "SVG",
+      useAbsoluteBounds: true,
+    });
     assets.push({ sourceId: vector.id, data: bytesToBase64(bytes) });
   }
   return assets;
