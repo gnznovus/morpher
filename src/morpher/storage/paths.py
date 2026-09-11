@@ -24,7 +24,7 @@ class StoragePaths:
 
     @property
     def font_registry_cache(self) -> Path:
-        return self.root / "font-registry.json"
+        return self.fonts / "font-registry.json"
 
     @property
     def log(self) -> Path:
