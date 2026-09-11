@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -79,6 +80,72 @@ def _native_layout_asset_sources(
     return {key: value for key, value in asset_sources.items() if key not in text_keys}
 
 
+def _fluidize_fidelity_absolute_css(css: str, root: DesignNode) -> str:
+    """Temporary experiment: make raw Fidelity absolute geometry scale with its owner.
+
+    This deliberately leaves flow/flex declarations alone. For every child that is
+    already absolute in Fidelity, px left/top/width/height values are converted to
+    percentages of the child's immediate owner. The root becomes a responsive
+    aspect-ratio box so percentage-based vertical geometry has a stable reference.
+    """
+
+    def class_name(node: DesignNode) -> str:
+        return f"morpher-{(node.source_id or 'node').replace(':', '-')}"
+
+    def replace_px(block: str, prop: str, basis: float | None) -> str:
+        if not basis:
+            return block
+        pattern = rf"({prop}: )(-?\d+(?:\.\d+)?)px;"
+
+        def replacement(match: re.Match[str]) -> str:
+            value = float(match.group(2))
+            percent = value / basis * 100.0
+            if abs(percent) < 1e-9:
+                percent = 0.0
+            return f"{match.group(1)}{percent:.6f}%;"
+
+        return re.sub(pattern, replacement, block)
+
+    def walk(node: DesignNode) -> None:
+        nonlocal css
+        for child in node.children:
+            marker = f".{class_name(child)} {{"
+            start = css.find(marker)
+            if start >= 0:
+                end = css.find("}\n", start)
+                if end >= 0:
+                    end += 2
+                    block = css[start:end]
+                    if "position: absolute;" in block:
+                        block = replace_px(block, "left", node.style.width)
+                        block = replace_px(block, "width", node.style.width)
+                        block = replace_px(block, "top", node.style.height)
+                        block = replace_px(block, "height", node.style.height)
+                        css = css[:start] + block + css[end:]
+            walk(child)
+
+    walk(root)
+
+    if root.style.width and root.style.height:
+        marker = f".{class_name(root)} {{"
+        start = css.find(marker)
+        if start >= 0:
+            end = css.find("}\n", start)
+            if end >= 0:
+                end += 2
+                block = css[start:end]
+                block = re.sub(r"width: -?\d+(?:\.\d+)?px;", "width: 100%;", block, count=1)
+                block = re.sub(
+                    r"height: -?\d+(?:\.\d+)?px;",
+                    f"aspect-ratio: {root.style.width:g} / {root.style.height:g};\n  height: auto;",
+                    block,
+                    count=1,
+                )
+                css = css[:start] + block + css[end:]
+
+    return css
+
+
 def render_path(
     path: Path,
     *,
@@ -108,6 +175,9 @@ def render_path(
             storage.output_html_fidelity,
         )
         fidelity_css = render_css(document.root, asset_sources=fidelity_asset_sources)
+        # TEMPORARY EXPERIMENT: preserve Fidelity's raw absolute relationships but
+        # express their geometry relative to the owning container instead of px.
+        fidelity_css = _fluidize_fidelity_absolute_css(fidelity_css, document.root)
         fidelity_html = render_html(
             document.root,
             stylesheet=fidelity_css_path.name,
