@@ -40,6 +40,9 @@ class FontRegistry:
         return tuple(sorted({face.family for face in self.faces}, key=str.casefold))
 
 
+_CURRENT_REGISTRY = FontRegistry()
+
+
 def gather_fonts(
     root: Path,
     *,
@@ -66,7 +69,7 @@ def gather_fonts(
         source = _source(path)
         try:
             metadata = metadata_reader(path)
-        except (OSError, ValueError, KeyError, AssertionError) as exc:
+        except Exception as exc:  # One unreadable font must not abort the whole gather pass.
             failed.append((source, str(exc)))
             continue
 
@@ -107,3 +110,17 @@ def gather_fonts(
     )
     unresolved.sort(key=lambda item: str(item.source.path).casefold())
     return FontRegistry(faces=tuple(faces), unresolved_sources=tuple(unresolved))
+
+
+def refresh_font_registry(
+    root: Path,
+    *,
+    metadata_reader: MetadataReader = read_font_metadata,
+) -> FontRegistry:
+    global _CURRENT_REGISTRY
+    _CURRENT_REGISTRY = gather_fonts(root, metadata_reader=metadata_reader)
+    return _CURRENT_REGISTRY
+
+
+def current_font_registry() -> FontRegistry:
+    return _CURRENT_REGISTRY
