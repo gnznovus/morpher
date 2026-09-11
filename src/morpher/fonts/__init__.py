@@ -1,4 +1,5 @@
 from morpher.fonts.cache import load_font_registry_cache, save_font_registry_cache
+from morpher.fonts.css import package_font_face, render_font_resolution_css
 from morpher.fonts.model import FontFace, FontMetadata, FontSource, UnresolvedFontSource
 from morpher.fonts.registry import (
     FontRegistry,
@@ -32,7 +33,9 @@ __all__ = [
     "gather_fonts",
     "load_cached_font_registry",
     "load_font_registry_cache",
+    "package_font_face",
     "refresh_font_registry",
+    "render_font_resolution_css",
     "resolve_font",
     "resolve_font_intent",
     "resolve_font_with_cache",
