@@ -96,25 +96,52 @@ def _uses_outlined_text_asset(node: DesignNode, asset_sources: dict[str, str]) -
     return bool(source and source.lower().endswith(".svg"))
 
 
+def _flow_margins(node: DesignNode) -> list[str]:
+    style = node.style
+    margins = (
+        style.margin_top_percent,
+        style.margin_right_percent,
+        style.margin_bottom_percent,
+        style.margin_left_percent,
+    )
+    if not any(value is not None for value in margins):
+        return []
+    top, right, bottom, left = (value or 0 for value in margins)
+    return [f"margin: {top:g}% {right:g}% {bottom:g}% {left:g}%"]
+
+
 def _declarations(
     node: DesignNode,
     parent: DesignNode | None,
     asset_sources: dict[str, str],
+    *,
+    responsive: bool = False,
 ) -> list[str]:
     style = node.style
     is_root = parent is None
-    is_absolute = _is_free_layout(parent)
+    explicit_absolute = responsive and style.position_mode == "absolute"
+    is_absolute = explicit_absolute or _is_free_layout(parent)
     declarations = ["box-sizing: border-box"]
 
     if is_root:
-        if style.width is not None:
-            declarations.append(f"width: {_px(style.width)}")
-        if style.height is not None:
-            declarations.append(f"height: {_px(style.height)}")
+        if responsive:
+            declarations.append("width: 100%")
+        else:
+            if style.width is not None:
+                declarations.append(f"width: {_px(style.width)}")
+            if style.height is not None:
+                declarations.append(f"height: {_px(style.height)}")
     elif is_absolute:
         declarations.append("position: absolute")
 
-        if _uses_outlined_text_asset(node, asset_sources):
+        if explicit_absolute:
+            left = style.offset_x
+            top = style.offset_y
+            width = style.width
+            height = style.height
+            quarter = _quarter_turn(style.rotation)
+            rotation_degrees = quarter * 90.0 if quarter is not None and node.kind != "divider" else None
+        elif _uses_outlined_text_asset(node, asset_sources):
             # Outlined Figma TEXT SVGs are exported with useAbsoluteBounds=true.
             # Their SVG canvas already matches the final post-rotation Figma
             # absoluteBoundingBox, so applying quarter-turn reconstruction again
@@ -139,13 +166,18 @@ def _declarations(
             declarations.append(f"transform: rotate({rotation_degrees:g}deg)")
             declarations.append("transform-origin: center center")
     else:
-        if style.width_mode == "fixed" and style.width is not None:
+        if responsive and style.width_percent is not None:
+            declarations.append(f"width: {style.width_percent:g}vw")
+        elif style.width_mode == "fixed" and style.width is not None:
             declarations.append(f"width: {_px(style.width)}")
         elif style.width_mode == "fill":
             declarations.append("width: 100%")
 
         if style.height_mode == "fixed" and style.height is not None:
             declarations.append(f"height: {_px(style.height)}")
+
+        if responsive:
+            declarations.extend(_flow_margins(node))
 
     if node.kind == "container" and style.layout_direction is None and not is_absolute:
         declarations.append("position: relative")
@@ -238,8 +270,10 @@ def _walk(node: DesignNode, parent: DesignNode | None = None):
 def render_css(
     root: DesignNode,
     asset_sources: dict[str, str] | None = None,
+    *,
+    responsive: bool = False,
 ) -> str:
-    """Render Design IR using flex for Auto Layout and absolute geometry for free layout."""
+    """Render Design IR as raw geometry or compiled responsive CSS."""
     sources = asset_sources or {}
     blocks = [
         "html, body {",
@@ -256,6 +290,9 @@ def render_css(
         if node.kind not in _RENDERABLE_KINDS:
             continue
         blocks.append(f".{_class_name(node)} {{")
-        blocks.extend(f"  {declaration};" for declaration in _declarations(node, parent, sources))
+        blocks.extend(
+            f"  {declaration};"
+            for declaration in _declarations(node, parent, sources, responsive=responsive)
+        )
         blocks.extend(("}", ""))
     return "\n".join(blocks)
