@@ -7,15 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from morpher.assets import semantic_asset_names
-from morpher.compiler.contact import resolve_contact_group_ownership
-from morpher.compiler.flow_groups import stabilize_compiled_flow_groups
-from morpher.compiler.layout import compile_responsive_layout
 from morpher.compiler.normalizer import normalize
-from morpher.compiler.overlays import (
-    resolve_compiled_spatial_relationships,
-    resolve_inferred_region_overlays,
-)
-from morpher.compiler.prune import prune_empty_generated_wrappers
+from morpher.compiler.responsive import compile_for_responsive_render
 from morpher.inputs.figma_json import FigmaJsonAdapter
 from morpher.ir.nodes import DesignNode
 from morpher.renderers.css import render_css
@@ -124,6 +117,7 @@ def render_path(
         fidelity_css_path.write_text(fidelity_css, encoding="utf-8")
 
     if native:
+        native_root = compile_for_responsive_render(document.root)
         native_html_path = storage.native_html_output(path)
         native_css_path = storage.native_css_output(path)
         native_asset_sources = _copy_assets(
@@ -134,9 +128,13 @@ def render_path(
             storage.output_html_native,
         )
         native_layout_sources = _native_layout_asset_sources(document.root, native_asset_sources)
-        native_layout_css = render_css(document.root, asset_sources=native_layout_sources)
+        native_layout_css = render_css(
+            native_root,
+            asset_sources=native_layout_sources,
+            responsive=True,
+        )
         native_font_css = render_native_css(
-            document.root,
+            native_root,
             font_root=storage.fonts,
             font_cache=storage.font_registry_cache,
             font_asset_dir=storage.native_font_asset_dir(),
@@ -144,7 +142,7 @@ def render_path(
         )
         native_css = native_layout_css.rstrip() + "\n\n" + native_font_css
         native_html = render_native_html(
-            document.root,
+            native_root,
             stylesheet=native_css_path.name,
             asset_sources=native_asset_sources,
         )
@@ -159,30 +157,9 @@ def render_path(
         storage.output_elementor,
     )
 
-    # Elementor receives a compiled flow layout whenever the free-layout
-    # geometry can be represented safely without overlap. Preserve the source
-    # Figma viewport width as compiler metadata for fluid typography math.
-    design_viewport = document.root.style.width
-    elementor_root = compile_responsive_layout(document.root)
-    elementor_root = resolve_compiled_spatial_relationships(
-        elementor_root,
-        document.root,
-        design_viewport,
-    )
-    elementor_root = stabilize_compiled_flow_groups(
-        elementor_root,
-        document.root,
-        design_viewport,
-    )
-    elementor_root = resolve_contact_group_ownership(
-        elementor_root,
-        document.root,
-        design_viewport,
-    )
-    elementor_root = resolve_inferred_region_overlays(elementor_root, design_viewport)
-    elementor_root = prune_empty_generated_wrappers(elementor_root)
-    elementor_root.style.width = design_viewport
-    elementor_root.style.design_viewport_width = design_viewport
+    # Native and Elementor each receive an independent compiled tree. Fidelity
+    # stays on normalized source geometry so its diagnostic contract is unchanged.
+    elementor_root = compile_for_responsive_render(document.root)
     elementor = render_elementor(elementor_root, asset_sources=elementor_asset_sources)
     elementor_path.write_text(
         json.dumps(elementor, ensure_ascii=False, separators=(",", ":")),
