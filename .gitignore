@@ -23,6 +23,8 @@ Thumbs.db
 storage/input/*
 storage/processed/*
 storage/figma-import/*
+storage/fonts/*
+storage/font-registry.json
 storage/log/*
 storage/output/*
 
