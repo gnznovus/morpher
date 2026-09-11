@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from morpher.fonts.registry import FontRegistry, gather_fonts
+from morpher.fonts.registry import FontRegistry, refresh_font_registry
 from morpher.storage.paths import StoragePaths
 
 
@@ -42,7 +42,10 @@ def format_registry(registry: FontRegistry, *, root: Path) -> str:
 def main() -> None:
     storage = StoragePaths()
     storage.ensure()
-    registry = gather_fonts(storage.fonts)
+    registry = refresh_font_registry(
+        storage.fonts,
+        cache_path=storage.font_registry_cache,
+    )
     print(format_registry(registry, root=storage.fonts), end="")
 
 
