@@ -116,14 +116,22 @@ def _set_fluid_absolute_size(
     width_vw = _composition_vw(style.width, design_viewport)
     if width_vw is not None:
         if container:
-            settings["width"] = _size("vw", width_vw)
+            width = _size("vw", width_vw)
+            settings["width"] = width
+            # Elementor's Container width control intentionally does not inherit
+            # its desktop value at the mobile breakpoint; absent an explicit
+            # mobile value Elementor falls back to 100%. Repeat the same fluid
+            # composition width so absolute containers keep their authored size.
+            settings["width_mobile"] = width
         else:
             settings["_element_width"] = "initial"
             settings["_element_custom_width"] = _size("vw", width_vw)
 
     height_vw = _composition_vw(style.height, design_viewport)
     if container and height_vw is not None:
-        settings["min_height"] = _size("vw", height_vw)
+        height = _size("vw", height_vw)
+        settings["min_height"] = height
+        settings["min_height_mobile"] = height
 
 
 def _apply_free_layout_geometry(
