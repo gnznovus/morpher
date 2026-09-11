@@ -1,16 +1,16 @@
 # Morpher
 
-Morpher is a modular **design compiler** that transforms Figma and other supported design inputs into reusable compiled structure with multiple output targets.
+Morpher is a modular **design compiler** that transforms Figma and other supported design inputs into editable production output while preserving the source design as closely as possible.
 
-The project is built around shared intermediate representations so input formats, layout/semantic compilation, and output targets can evolve independently. Elementor is an output target, not the architecture boundary.
+The project is built around shared intermediate representations so input formats, responsive interpretation, and output targets can evolve independently. Elementor is the primary WordPress production target, not the architecture boundary.
 
 > Design in. Structure out.
 
 ## Current Status
 
-Morpher is an **advanced prototype / early product foundation**. The project has moved beyond proving that design input can be converted, but it is not production-ready yet. Fidelity contracts, responsive behavior, semantic output, and production integrations are still being hardened.
+Morpher is an **advanced prototype / early product foundation**. The project has moved beyond proving that design input can be converted, but it is not production-ready yet. Fidelity contracts, responsive behavior, Elementor compilation, semantic output, and production integration are still being hardened.
 
-Current development path:
+The primary development and product path is:
 
 ```text
 Design input
@@ -19,14 +19,18 @@ Input adapter
     ↓
 Design IR
     ↓
-Fidelity / responsive interpretation
+Fidelity
     ↓
-Output targets
+Responsive evaluation
+    ↓
+Elementor
 ```
+
+Fidelity establishes the visual reference and helps determine the responsive treatment required before Morpher produces editable Elementor output.
 
 ## Product Direction
 
-Morpher is a design compiler with multiple output targets rather than a converter tied to one builder or framework.
+For WordPress, Morpher follows a **Fidelity → Elementor** approach.
 
 ```text
 Figma / supported input
@@ -35,16 +39,28 @@ Input adapter
         ↓
 Design IR
         ↓
-Responsive / semantic compilation
+Fidelity
+visual validation + responsive triage
         ↓
-Compiled output
-   ├─ Elementor
-   └─ Native HTML/CSS
+Responsive strategy
+        ↓
+Elementor
+editable WordPress production output
 ```
 
-The primary WordPress production path is **Elementor**. It provides an editable WordPress destination while Morpher remains responsible for understanding and preserving the design.
+Morpher is responsible for understanding the design, preserving its visual relationships, and determining where stronger responsive structure is required. Elementor provides the editable WordPress destination.
 
-**Native HTML/CSS** remains a framework-neutral semantic reference and export target. It is especially useful as a foundation for custom web development and framework-based applications.
+Native HTML/CSS remains available as a secondary, framework-neutral output:
+
+```text
+Design IR
+    ↓
+Native HTML/CSS
+    ↓
+Semantic reference / developer export
+```
+
+Native is valuable for raw web output, custom development, and framework-oriented work. It is not the primary WordPress product path and does not require a separate Morpher page builder.
 
 ## Responsive Layout Strategy
 
@@ -103,7 +119,7 @@ Visual validation
 Responsive triage
 ```
 
-Fidelity does not need to turn every composition into breakpoint-driven structural layout. It preserves what already works and helps identify what needs deeper responsive compilation.
+Fidelity does not need to turn every composition into breakpoint-driven structural layout. It preserves what already works and helps identify what needs deeper responsive compilation before Elementor output.
 
 ## Elementor
 
@@ -112,9 +128,9 @@ Elementor is Morpher's **primary WordPress production target**.
 Morpher prioritizes preserving the original visual composition while producing editable Elementor content. Sections that adapt well can retain their spatial character, while sections requiring structural responsive behavior can be transformed appropriately for different breakpoints.
 
 ```text
-Design IR
+Fidelity
     ↓
-Fidelity / responsive evaluation
+Responsive evaluation
     ↓
 Elementor
     ↓
@@ -137,7 +153,7 @@ Its role is:
 
 Native should favor meaningful web structure where the compiler has sufficient semantic information, including elements such as `header`, `nav`, `main`, `section`, `article`, and `footer`.
 
-Native is not required to compete with Elementor as the primary WordPress destination. Its value is portability and semantic structure outside a page-builder-specific environment.
+Native is not a replacement for Elementor in the WordPress workflow. Its value is portability and semantic structure outside a page-builder-specific environment.
 
 ## Page Structure
 
@@ -160,7 +176,7 @@ Header Sections, Body Sections, and Footer Sections can all combine structural r
 
 ## Semantic Identity
 
-Rendered elements should have deterministic identity so output targets, developer tooling, editing systems, diagnostics, and future versioning can refer to the same logical content reliably.
+Rendered elements should have deterministic identity so output targets, developer tooling, diagnostics, and future integrations can refer to the same logical content reliably.
 
 Source provenance and Morpher-owned compiled identity should remain conceptually separate. Generated nodes that do not originate directly from an input source may require their own deterministic Morpher identity.
 
@@ -176,7 +192,7 @@ storage/fonts/
 
 The registry preserves available font sources and resolves the appropriate face deterministically. Successful resolution remains silent in generated output; unavailable fonts produce a diagnostic warning.
 
-This allows semantic output to retain editable text while Fidelity can continue using the representation best suited to visual validation.
+This allows semantic output to retain real text while Fidelity can continue using the representation best suited to visual validation.
 
 ## Output Architecture
 
@@ -197,7 +213,8 @@ The target roles are intentionally distinct:
              │                     │
              ▼                     ▼
         Elementor                Native
-    WordPress production    Semantic web output
+    PRIMARY WORDPRESS       SECONDARY SEMANTIC
+    production target      reference / export
 ```
 
 ### Fidelity
@@ -210,7 +227,7 @@ Primary WordPress production target with editable content and responsive output.
 
 ### Native
 
-Semantic, framework-neutral reference/export target for developers and custom applications.
+Secondary semantic, framework-neutral reference/export target for developers and custom applications.
 
 ## Core Principles
 
@@ -222,7 +239,7 @@ Semantic, framework-neutral reference/export target for developers and custom ap
 
 > **Fidelity validates the design and helps determine responsive requirements.**
 
-> **Elementor is the primary WordPress production target, not the compiler architecture boundary.**
+> **Fidelity → Elementor is Morpher's primary WordPress production path.**
 
 > **Native remains a semantic and framework-neutral reference/export target.**
 
@@ -260,14 +277,14 @@ Source scan priority is `figma-import/` then `input/`. Preserved imports are rep
 
 ## Engineering Direction
 
-Near-term work focuses on strengthening the shared responsive architecture and production targets:
+Near-term work follows the primary Fidelity → Elementor path:
 
 1. harden Fidelity as the visual reference and responsive-triage path;
 2. classify and preserve source layout relationships reliably;
 3. promote sections to structural responsive behavior where required;
-4. compile editable Elementor output as the primary WordPress production path;
-5. continue Native as semantic/framework-neutral reference and export output;
-6. expand whole-page understanding across Header Section, Body, and Footer Section;
-7. continue deterministic identity, typography, assets, and output validation.
+4. compile editable Elementor output as the primary WordPress production target;
+5. expand whole-page understanding across Header Section, Body, and Footer Section;
+6. continue deterministic identity, typography, assets, and output validation;
+7. maintain Native as semantic/framework-neutral reference and export output.
 
 Morpher should remain conservative about design interpretation: preserve what already works, transform what genuinely requires responsive structure, and keep renderer-specific concerns outside the shared compiler.
