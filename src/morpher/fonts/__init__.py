@@ -9,11 +9,14 @@ from morpher.fonts.registry import (
     refresh_font_registry,
     set_current_font_registry,
 )
+from morpher.fonts.resolver import FontRequest, FontResolution, resolve_font
 
 __all__ = [
     "FontFace",
     "FontMetadata",
     "FontRegistry",
+    "FontRequest",
+    "FontResolution",
     "FontSource",
     "UnresolvedFontSource",
     "current_font_registry",
@@ -22,6 +25,7 @@ __all__ = [
     "load_cached_font_registry",
     "load_font_registry_cache",
     "refresh_font_registry",
+    "resolve_font",
     "save_font_registry_cache",
     "set_current_font_registry",
 ]
