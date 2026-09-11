@@ -35,6 +35,14 @@ class StoragePaths:
         return self.root / "output" / "html"
 
     @property
+    def output_html_fidelity(self) -> Path:
+        return self.output_html / "fidelity"
+
+    @property
+    def output_html_native(self) -> Path:
+        return self.output_html / "native"
+
+    @property
     def output_elementor(self) -> Path:
         return self.root / "output" / "elementor"
 
@@ -46,21 +54,35 @@ class StoragePaths:
             self.fonts,
             self.log,
             self.output_html,
+            self.output_html_fidelity,
+            self.output_html_native,
             self.output_elementor,
         ):
             path.mkdir(parents=True, exist_ok=True)
 
-    def html_output(self, source: Path) -> Path:
-        return self.output_html / f"{source.stem}.html"
+    def fidelity_html_output(self, source: Path) -> Path:
+        return self.output_html_fidelity / f"{source.stem}.html"
 
-    def css_output(self, source: Path) -> Path:
-        return self.output_html / f"{source.stem}.css"
+    def fidelity_css_output(self, source: Path) -> Path:
+        return self.output_html_fidelity / f"{source.stem}.css"
+
+    def native_html_output(self, source: Path) -> Path:
+        return self.output_html_native / f"{source.stem}.html"
+
+    def native_css_output(self, source: Path) -> Path:
+        return self.output_html_native / f"{source.stem}.css"
 
     def figma_asset_dir(self, source: Path) -> Path:
         return self.figma_import / "assets" / source.stem
 
-    def html_asset_dir(self, source: Path) -> Path:
-        return self.output_html / "assets" / source.stem
+    def fidelity_asset_dir(self, source: Path) -> Path:
+        return self.output_html_fidelity / "assets" / source.stem
+
+    def native_asset_dir(self, source: Path) -> Path:
+        return self.output_html_native / "assets" / source.stem
+
+    def native_font_asset_dir(self) -> Path:
+        return self.output_html_native / "assets" / "fonts"
 
     def elementor_asset_dir(self, source: Path) -> Path:
         return self.output_elementor / "assets" / source.stem
