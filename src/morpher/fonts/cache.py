@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 from morpher.fonts.model import FontFace, FontSource, UnresolvedFontSource
 
 
-CACHE_VERSION = 1
+def _cache_version() -> str:
+    return datetime.now().astimezone().strftime("%Y%m%d:%H%M")
 
 
 def save_font_registry_cache(path: Path, registry: "FontRegistry") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "cache_version": CACHE_VERSION,
+        "cache_version": _cache_version(),
         "faces": [
             {
                 "family": face.family,
@@ -49,7 +51,7 @@ def load_font_registry_cache(path: Path) -> "FontRegistry | None":
 
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-        if payload.get("cache_version") != CACHE_VERSION:
+        if not isinstance(payload.get("cache_version"), str):
             return None
 
         faces = tuple(
