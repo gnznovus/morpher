@@ -19,6 +19,10 @@ class StoragePaths:
         return self.root / "processed"
 
     @property
+    def fonts(self) -> Path:
+        return self.root / "fonts"
+
+    @property
     def log(self) -> Path:
         return self.root / "log"
 
@@ -35,6 +39,7 @@ class StoragePaths:
             self.figma_import,
             self.input,
             self.processed,
+            self.fonts,
             self.log,
             self.output_html,
             self.output_elementor,
