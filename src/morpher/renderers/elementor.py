@@ -29,6 +29,13 @@ def _relative_offset(value: float | None, parent_value: float | None) -> float |
     return value - parent_value
 
 
+def _relative_percent(value: float | None, basis: float | None) -> float | None:
+    if value is None or basis in (None, 0):
+        return None
+    percent = value / basis * 100.0
+    return 0.0 if abs(percent) < 1e-9 else percent
+
+
 def _asset_key(image_ref: str) -> str:
     return image_ref.replace(":", "-")
 
@@ -83,52 +90,65 @@ def _apply_flow_margin(settings: dict, style: DesignStyle, *, container: bool) -
     settings["margin" if container else "_margin"] = _dimensions(top, right, bottom, left, unit="%")
 
 
-def _apply_free_layout_geometry(settings: dict, style: DesignStyle, parent_style: DesignStyle | None, *, container: bool) -> None:
-    if style.position_mode == "absolute":
-        settings["position" if container else "_position"] = "absolute"
-        settings["_offset_orientation_h"] = "start"
-        settings["_offset_orientation_v"] = "start"
-        if style.offset_x is not None:
-            settings["_offset_x"] = _size("px", style.offset_x)
-        if style.offset_y is not None:
-            settings["_offset_y"] = _size("px", style.offset_y)
-        if style.width is not None:
-            if container:
-                settings["width"] = _size("px", style.width)
-            else:
-                settings["_element_width"] = "initial"
-                settings["_element_custom_width"] = _size("px", style.width)
-        if style.height is not None and container:
-            settings["min_height"] = _size("px", style.height)
+def _set_fluid_absolute_size(
+    settings: dict,
+    style: DesignStyle,
+    parent_style: DesignStyle,
+    *,
+    container: bool,
+) -> None:
+    if not container and style.text_auto_resize == "WIDTH_AND_HEIGHT":
+        settings["_element_width"] = "auto"
+        settings.pop("_element_custom_width", None)
         return
+
+    width_percent = _relative_percent(style.width, parent_style.width)
+    if width_percent is not None:
+        if container:
+            settings["width"] = _size("%", width_percent)
+        else:
+            settings["_element_width"] = "initial"
+            settings["_element_custom_width"] = _size("%", width_percent)
+
+    height_percent = _relative_percent(style.height, parent_style.height)
+    if container and height_percent is not None:
+        settings["min_height"] = _size("%", height_percent)
+
+
+def _apply_free_layout_geometry(settings: dict, style: DesignStyle, parent_style: DesignStyle | None, *, container: bool) -> None:
     if parent_style is None:
         if style.layout_direction is None:
-            if style.width is not None:
-                settings["width"] = _size("px", style.width)
-            if style.height is not None and container:
-                settings["min_height"] = _size("px", style.height)
+            settings["width"] = _size("%", 100)
+            if container and style.width not in (None, 0) and style.height is not None:
+                settings["min_height"] = _size("vw", style.height / style.width * 100.0)
         return
-    if parent_style.layout_direction is not None:
+
+    explicit_absolute = style.position_mode == "absolute"
+    implicit_absolute = parent_style.layout_direction is None
+    if not explicit_absolute and not implicit_absolute:
         return
-    if any(value is None for value in (style.x, style.y, parent_style.x, parent_style.y)):
-        return
-    left = _relative_offset(style.x, parent_style.x)
-    top = _relative_offset(style.y, parent_style.y)
+
+    if explicit_absolute:
+        left = style.offset_x
+        top = style.offset_y
+    else:
+        if any(value is None for value in (style.x, style.y, parent_style.x, parent_style.y)):
+            return
+        left = _relative_offset(style.x, parent_style.x)
+        top = _relative_offset(style.y, parent_style.y)
+
     settings["position" if container else "_position"] = "absolute"
     settings["_offset_orientation_h"] = "start"
     settings["_offset_orientation_v"] = "start"
-    if left is not None:
-        settings["_offset_x"] = _size("px", left)
-    if top is not None:
-        settings["_offset_y"] = _size("px", top)
-    if style.width is not None:
-        if container:
-            settings["width"] = _size("px", style.width)
-        else:
-            settings["_element_width"] = "initial"
-            settings["_element_custom_width"] = _size("px", style.width)
-    if style.height is not None and container:
-        settings["min_height"] = _size("px", style.height)
+
+    left_percent = _relative_percent(left, parent_style.width)
+    top_percent = _relative_percent(top, parent_style.height)
+    if left_percent is not None:
+        settings["_offset_x"] = _size("%", left_percent)
+    if top_percent is not None:
+        settings["_offset_y"] = _size("%", top_percent)
+
+    _set_fluid_absolute_size(settings, style, parent_style, container=container)
 
 
 def _apply_child_alignment(settings: dict, style: DesignStyle, parent_style: DesignStyle | None, *, container: bool) -> None:
@@ -137,6 +157,17 @@ def _apply_child_alignment(settings: dict, style: DesignStyle, parent_style: Des
     if (style.layout_align or "").lower() == "stretch" or style.width_mode == "fill":
         return
     settings["align_self" if container else "align"] = "center"
+
+
+def _apply_container_border(settings: dict, style: DesignStyle) -> None:
+    if style.stroke_color:
+        weight = style.stroke_weight if style.stroke_weight is not None else 1.0
+        settings["border_border"] = "solid"
+        settings["border_color"] = style.stroke_color
+        settings["border_width"] = _dimensions(weight, weight, weight, weight)
+    if style.border_radius is not None:
+        radius = style.border_radius
+        settings["border_radius"] = _dimensions(radius, radius, radius, radius)
 
 
 def _container_settings(style: DesignStyle, parent_style: DesignStyle | None = None, asset_sources: dict[str, str] | None = None) -> dict:
@@ -160,6 +191,7 @@ def _container_settings(style: DesignStyle, parent_style: DesignStyle | None = N
     _apply_flow_margin(settings, style, container=True)
     _apply_free_layout_geometry(settings, style, parent_style, container=True)
     _apply_child_alignment(settings, style, parent_style, container=True)
+    _apply_container_border(settings, style)
     if style.background:
         settings["background_background"] = "classic"
         settings["background_color"] = style.background
