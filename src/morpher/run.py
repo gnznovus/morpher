@@ -22,8 +22,10 @@ class RunResult:
 def _outputs_exist(source: Path, storage: StoragePaths) -> bool:
     """A source is processed only when all currently required outputs exist."""
     return (
-        storage.html_output(source).exists()
-        and storage.css_output(source).exists()
+        storage.fidelity_html_output(source).exists()
+        and storage.fidelity_css_output(source).exists()
+        and storage.native_html_output(source).exists()
+        and storage.native_css_output(source).exists()
         and storage.elementor_output(source).exists()
     )
 
@@ -38,7 +40,8 @@ def clean_outputs(storage: StoragePaths | None = None) -> None:
 
     # Recreate the renderer-owned output structure so the workspace is ready
     # for the next render without touching any source-side storage.
-    storage.output_html.mkdir(parents=True, exist_ok=True)
+    storage.output_html_fidelity.mkdir(parents=True, exist_ok=True)
+    storage.output_html_native.mkdir(parents=True, exist_ok=True)
     storage.output_elementor.mkdir(parents=True, exist_ok=True)
 
 
@@ -49,8 +52,8 @@ def run_source(source: Path, storage: StoragePaths, *, force: bool = False) -> R
     try:
         # Inspect exactly once so the rich diagnostic trace remains the canonical trace.
         inspect_path(source)
-        _, _, _, warning_count = render_path(source)
-        return RunResult(source=source, status="processed", warnings=warning_count)
+        outputs = render_path(source)
+        return RunResult(source=source, status="processed", warnings=outputs.warning_count)
     except (OSError, ValueError) as exc:
         return RunResult(source=source, status="failed", error=str(exc))
 
