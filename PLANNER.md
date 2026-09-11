@@ -3,29 +3,28 @@
 ## Locked Decisions
 
 - Project name: **Morpher**.
-- Morpher is a **design compiler**, not a Figma → Elementor converter.
+- Morpher is a **design compiler**, not a converter tied to one builder or framework.
 - Core architecture stays compiler-style: input adapter → Design IR → compiler → output renderer.
-- Design IR and compiler behavior must stay independent from Elementor, WordPress, and any single output target.
+- Design IR and compiler behavior stay independent from Elementor, WordPress, and any single output target.
 - Development rule: **small verified slice → real fixture → trace → render → compare → expand**.
-- Figma prototype entry path is local Figma plugin → local listener → `storage/figma-import/`.
-- The Figma plugin stays thin: select/export/send/status and fidelity-asset export only. Normalization and compilation stay in Morpher.
-- Local listener endpoint: `http://127.0.0.1:8767/figma/import`.
-- Re-sending the same Figma name replaces its preserved import snapshot; no numbered source duplicates.
-- Source scan priority: `storage/figma-import/` then `storage/input/`.
-- `storage/figma-import/` is a preserved source repository, not a queue.
-- `morpher` is the bulk-processing CLI; there is no `run` subcommand.
-- `morpher --force` replaces existing outputs in place.
-- Failed ordinary inputs remain available for retry; successful ordinary inputs move to `processed/` only after required outputs succeed.
-- Fidelity HTML may use companion assets, but semantic source data remains canonical in the IR.
-- Outlined TEXT fidelity SVGs use `svgOutlineText: true` + `useAbsoluteBounds: true`.
-- Raw/vector fidelity SVG exports also use `useAbsoluteBounds: true` so SVG canvas geometry matches the Figma node bounding box used by the IR.
-- Do not force outlined text SVGs through a second semantic geometry interpretation.
-- SVG-backed graphics own their internal paint; CSS controls external layout geometry.
+- The input integration stays thin; normalization and compilation belong to Morpher Core.
 - The CLI is a frontend to Morpher Core, not the permanent product boundary.
-- Elementor rendering, asset packaging, Morpher Native, and WordPress integration remain separable responsibilities.
-- Normal WordPress administrators edit **content**, not arbitrary layout/structure by default.
-- Backup/version/restore safety is a **core** Morpher Native requirement.
-- Restore is non-destructive: restoring an old snapshot creates a new current revision; later history remains available.
+- Output targets remain separable responsibilities.
+- Elementor is the primary WordPress production target.
+- Native HTML/CSS remains the semantic, framework-neutral reference/export target.
+- Fidelity is the visual reference and responsive-triage target.
+- Whole-page understanding includes **Header Section**, **Body**, and **Footer Section**.
+- A Header Section is not the same thing as Navigation; Navigation is a component within it.
+
+### Responsive principles
+
+> **If it flows, let it flow. If it’s absolute, make it fluid.**
+
+> **Preserve the source relationship first. Introduce structural responsive transformation when the composition requires it.**
+
+> **Structural and spatial responsive behavior can coexist within the same section.**
+
+Morpher should preserve compositions that already adapt well and apply deeper structural responsive treatment only where the design requires it.
 
 ## Product Architecture Direction
 
@@ -36,99 +35,127 @@ Input adapter
         ↓
 Design IR
         ↓
-Layout / semantic compiler
+Fidelity
+visual validation + responsive triage
         ↓
-Compiled IR
-   ├─ Morpher Native
-   ├─ Elementor
-   └─ Static HTML/CSS
+Responsive / semantic compilation
+        ↓
+┌─────────────────────┬─────────────────────┐
+│ Elementor           │ Native HTML/CSS     │
+│ WordPress production│ Semantic web output │
+└─────────────────────┴─────────────────────┘
 ```
 
-Morpher Native is the intended first-party output/runtime direction. Elementor remains an export/integration target and must not dictate compiler architecture.
+Renderer-specific behavior must not dictate shared compiler architecture.
 
-The intended editing philosophy is:
+## Target Roles
 
-> **Developers control the design. Editors control the content. Morpher makes it difficult to destroy either.**
+### Fidelity
 
-## Morpher 1.0 Vision
+Fidelity is Morpher's visual reference and responsive-triage target.
 
-Morpher 1.0 should be an application around reusable Morpher Core rather than a CLI-only product. Exact desktop/UI technology remains intentionally unlocked.
+It should:
 
-```text
-                 Morpher Core
-                     │
-       ┌─────────────┼─────────────┐
-       ↓             ↓             ↓
-      CLI        Morpher App    future API
-                     │
-          ┌──────────┴──────────┐
-          ↓                     ↓
-   Morpher Native         Elementor export
-          ↓
-   WordPress plugin
-```
+- preserve source relationships;
+- provide a trustworthy visual baseline;
+- adapt compositions across viewport sizes;
+- help determine whether simple responsive adaptation is sufficient;
+- expose sections that require structural responsive treatment.
 
-### Morph as the compilation unit
+Fidelity does not need to structurally reconstruct every composition.
+
+### Elementor
+
+Elementor is Morpher's primary WordPress production target.
+
+It should:
+
+- preserve visual composition where practical;
+- produce editable Elementor content;
+- support structural responsive transformations where required;
+- keep Elementor-specific representation outside shared compiler logic;
+- avoid unnecessary generated structure when simpler composition is sufficient.
+
+### Native HTML/CSS
+
+Native remains a first-class output, but its primary role is semantic and framework-neutral rather than WordPress production.
+
+It should:
+
+- provide meaningful semantic HTML where intent is known;
+- serve as a clean HTML/CSS reference;
+- support developer/debug workflows;
+- provide a foundation for custom applications and framework-oriented development;
+- remain independent from WordPress and Elementor.
+
+Potential semantic targets include `header`, `nav`, `main`, `section`, `article`, `aside`, `footer`, headings, paragraphs, links, and actions.
+
+## Whole-Page Structure
 
 A **Morph** represents one complete page/template compilation unit. Section-level fixtures are useful for development but must not become the permanent product boundary.
 
 ```text
-Project: MUU Hotel
-│
-├─ Morph: Homepage
-│  ├─ complete source/design
-│  ├─ compiled/semantic representation
-│  ├─ native output
-│  ├─ optional Elementor document
-│  ├─ one optimized page CSS bundle
-│  └─ required assets
-├─ Morph: Offers
-└─ Morph: Contact
+Page / Morph
+├─ Header Section
+│  ├─ Navigation Component
+│  ├─ Optional components
+│  └─ Header Content
+├─ Body
+│  └─ Sections...
+└─ Footer Section
 ```
 
-New compiler/rendering work must therefore avoid assumptions that only one isolated section exists.
+Header Sections, Body Sections, and Footer Sections may combine structural responsive behavior with preserved spatial composition.
 
-### Per-Morph CSS
+### Per-Morph output
 
-The target is one compiled/optimized stylesheet per Morph/page. Elementor Free does not need to be the only style-storage mechanism; generated classes and a page-owned stylesheet may preserve fidelity where Elementor controls are insufficient.
+The target is a coherent optimized output per Morph/page. Output targets may package their styles and assets differently, but shared design understanding belongs above the renderer layer.
 
-### Semantic structure
+## Responsive Compilation
 
-Semantic decisions belong above individual renderers so Native HTML and Elementor can consume the same intent where supported. Potential targets include `header`, `nav`, `main`, `section`, `article`, `aside`, `footer`, headings, paragraphs, and links/actions. Inference rules must be introduced through deterministic verified slices rather than broad guessing.
+Morpher distinguishes between compositions that can be preserved through simple responsive adaptation and layouts that require structural transformation.
 
-## Stable Identity Contract
-
-Current output already uses deterministic source-ID-based CSS classes. Morpher Native should extend this into a universal DOM identity contract.
-
-For Figma source `45:5221`:
-
-```html
-<h2
-  id="morpher-45-5221"
-  class="morpher-45-5221"
-  data-morpher-source-id="45:5221"
->
+```text
+Design composition
+        ↓
+Responsive evaluation
+        ↓
+┌─────────────────────┬─────────────────────┐
+│ Simple adaptation   │ Structural change   │
+│ is sufficient       │ is required         │
+└──────────┬──────────┴──────────┬──────────┘
+           │                     │
+           └──────────┬──────────┘
+                      ↓
+              Responsive output
 ```
 
-Responsibilities:
-
-- DOM `id` → direct JavaScript/editor lookup;
-- CSS `class` → rendering selector;
-- `data-morpher-source-id` → source/Figma provenance.
+A section may use both structural and spatial responsive behavior. For example, major content regions can change arrangement at a breakpoint while visual elements inside those regions retain their intended composition.
 
 ### Planned work
 
-- [ ] Emit a deterministic unique `id="morpher-{normalized-source-id}"` on every imported rendered node.
-- [ ] Make `data-morpher-source-id` universal rather than text-only.
-- [ ] Add renderer invariant/tests rejecting duplicate DOM IDs.
-- [ ] Define a Morpher-owned identity for generated nodes that have no Figma source.
-- [ ] Keep source identity and Morpher compiled-object identity conceptually separate.
+- [ ] Harden responsive classification against diverse real fixtures.
+- [ ] Preserve source relationships when simple adaptation is sufficient.
+- [ ] Promote layouts to structural responsive behavior where required.
+- [ ] Support hybrid sections without unnecessary reconstruction.
+- [ ] Keep responsive interpretation target-neutral until renderer-specific serialization.
 
-Stable identity will support pinpoint editing, JavaScript behaviors, debugging, content overrides, focused diff previews, and version tracking.
+## Stable Identity Contract
 
-## Font Gatherer / Registry
+Rendered elements should have deterministic identity so renderers, diagnostics, editing systems, and developer tooling can refer to the same logical content reliably.
 
-Production Morpher Native should prefer semantic HTML text when the exact source font is available.
+Source provenance and Morpher-owned compiled identity remain conceptually separate.
+
+### Planned work
+
+- [ ] Emit deterministic unique DOM identity where applicable.
+- [ ] Preserve source provenance independently from rendering selectors.
+- [ ] Add renderer invariants/tests rejecting duplicate identities.
+- [ ] Define deterministic Morpher identity for generated nodes without direct source identity.
+
+## Font Registry
+
+The font registry supports semantic text output using locally available font families and variants.
 
 Font source:
 
@@ -136,215 +163,17 @@ Font source:
 storage/fonts/
 ```
 
-The registry follows a plug-and-play gather/register model:
+The registry should preserve available font sources and resolve requested faces deterministically. Successful resolution remains silent in generated output; unavailable fonts produce a diagnostic warning.
 
-```text
-morpher ...
-   ↓
-font gatherer
-   ↓
-scan storage/fonts/
-   ↓
-refresh registry
-   ↓
-resolve Figma family/face/weight/style
-   ↓
-emit @font-face / semantic text
-   ↓
-execute command
-```
+### Current direction
 
-Dropping a font into `storage/fonts/` must not require a Morpher restart; the next normal command refreshes discovery. A future long-lived watch/dev mode may rescan on filesystem changes.
-
-Outlined SVG text remains useful for fidelity diagnostics/fallback during transition. SVG remains correct for graphics, logos, and intentionally decorative typography.
-
-### Planned work
-
-- [ ] Add `storage/fonts/` discovery.
-- [ ] Read enough font metadata to resolve family/face/weight/style deterministically.
-- [ ] Refresh the registry during normal Morpher command execution.
-- [ ] Emit `@font-face` declarations for resolved fonts.
-- [ ] Add semantic text rendering using resolved fonts.
-- [ ] Preserve an outline/fidelity fallback while Native text support matures.
-
-## Morpher Native WordPress Visual Editor
-
-The WordPress plugin is a safe visual **content editor**, not a mini Elementor.
-
-### Admin/editor V1
-
-- [ ] Render the actual Morpher Native page for visual editing.
-- [ ] Click/pinpoint an element using deterministic Morpher DOM identity.
-- [ ] Edit text.
-- [ ] Replace images.
-- [ ] Edit button/link labels and URLs.
-- [ ] Edit contact information.
-- [ ] Consider a safe visibility toggle.
-- [ ] Patch preview DOM immediately while editing.
-- [ ] Persist edits as content overrides rather than mutating the compiled template.
-- [ ] Separate normal admin permissions from developer/advanced controls.
-- [ ] Integrate version/backup/restore into the normal editing workflow.
-
-### Content override model
-
-```text
-Compiled Morpher Template
-        +
-WordPress Content Overrides
-        ↓
-Final Page
-```
-
-Example:
-
-```json
-{
-  "45:5221": {
-    "text": "JOIN OUR NEWSLETTER"
-  }
-}
-```
-
-- [ ] Define override schema keyed by stable Morpher/source identity.
-- [ ] Apply overrides without mutating compiled source output.
-- [ ] Preserve compatible overrides across recompilation when stable identity survives.
-- [ ] Provide a safe reset-to-original-design operation.
-
-### Responsive preview
-
-Editor viewport selector:
-
-```text
-[ Desktop ] [ Tablet ] [ Mobile ]
-```
-
-Preview widths must come from Morpher breakpoint/configuration data, not hardcoded sample widths. The preview canvas should exercise the real generated media queries.
-
-- [ ] Desktop preview.
-- [ ] Tablet preview.
-- [ ] Mobile preview.
-- [ ] Bind preview widths to compiler breakpoint configuration.
-- [ ] Reserve breakpoint-specific style editing for developer/advanced tooling.
-
-### Developer tooling — later
-
-These are useful for us/developers but are deliberately not normal admin V1 scope:
-
-- [ ] advanced responsive edits;
-- [ ] advanced CSS;
-- [ ] structural controls;
-- [ ] widget insertion;
-- [ ] drag/drop and snapping;
-- [ ] richer components such as carousel/navigation/side-menu tooling.
-
-## Backup / Version / Restore System
-
-This is a core safety layer. Semantics are inspired by Git but are **not literal Git** and must not require admins to understand or execute Git.
-
-Conceptual lifecycle:
-
-```text
-morpher init
-→ create protected baseline when design/page is first imported
-
-morpher add
-→ track current state of modified/untracked elements
-
-morpher commit
-→ record tracked changes with a custom change message
-
-morpher push
-→ create a new full page version under the same backup root
-```
-
-The exact CLI/UI mapping may evolve; the lifecycle semantics are what matter.
-
-Conceptual storage:
-
-```text
-backup/page-123/
-├─ baseline/
-├─ v042/
-├─ v043/
-└─ ...
-```
-
-### Retention rules
-
-- `baseline/init` is protected forever.
-- Normal full versions use rolling retention; exact threshold is not locked yet.
-- A version may be **Mark as Main** and is protected from automatic cleanup while marked.
-- Main versions have a hard small limit, likely 2–3; exact number remains unlocked.
-- If Main slots are full, the UI must force an explicit choice of which existing Main version to unmark/replace. Never silently unprotect one.
-- Version snapshots must include or restorably reference changed assets as well as content/style state.
-- Record author, timestamp, custom commit/change summary, and useful diff metadata.
-- Autosave/recovery remains separate from proper committed versions.
-
-### Restore behavior
-
-Restore must preserve history:
-
-```text
-select old version
-      ↓
-preview
-      ↓
-restore
-      ↓
-create NEW current revision from selected snapshot
-```
-
-No destructive rewind.
-
-### Restore preview UX
-
-Desktop/tablet:
-
-```text
-┌─────────────────────┬─────────────────────┐
-│ CURRENT             │ RESTORE CANDIDATE   │
-│ rendered page       │ rendered page       │
-└─────────────────────┴─────────────────────┘
-```
-
-Use synchronized scrolling where practical.
-
-Mobile:
-
-```text
-CURRENT
-   ↔ swipe ↔
-RESTORE CANDIDATE
-```
-
-One full preview at a time is preferred over squeezed columns.
-
-Below the rendered preview, preserve the conventional technical diff summary:
-
-```diff
-- old value
-+ new value
-```
-
-This gives normal admins visual comparison while keeping precise information for developers/experienced editors.
-
-Changed diff entries should be clickable. A lightweight AJAX modal/popup can open a focused A/B rendered comparison for that element. Deterministic DOM IDs let both revision previews jump directly to the same element.
-
-### Planned work
-
-- [ ] Define baseline/version snapshot model.
-- [ ] Define asset snapshot/reference behavior.
-- [ ] Define rolling retention policy and threshold.
-- [ ] Implement protected baseline.
-- [ ] Implement Mark as Main with hard slot limit and explicit replacement UX.
-- [ ] Record author/timestamp/change message/diff metadata.
-- [ ] Add full rendered A/B restore preview.
-- [ ] Add synchronized desktop/tablet comparison scrolling.
-- [ ] Add mobile swipe A/B comparison.
-- [ ] Preserve `- / +` summary below preview.
-- [ ] Make changed summary entries clickable.
-- [ ] Add focused AJAX A/B element modal.
-- [ ] Implement non-destructive restore as a new revision.
+- [x] Font source discovery foundation.
+- [x] Font metadata parsing foundation.
+- [x] Deterministic registry/grouping foundation.
+- [x] Cache-aware resolution foundation.
+- [x] Design IR font intent bridge.
+- [x] Native font CSS/packaging foundation.
+- [ ] Continue hardening packaging and edge cases against real font collections.
 
 ## Current Prototype Scope
 
@@ -353,91 +182,61 @@ Changed diff entries should be clickable. A lightweight AJAX modal/popup can ope
 - [x] Python package/project and storage foundation.
 - [x] Adapter registry and source scanner.
 - [x] Deterministic processing/output naming and force replacement.
-- [x] Local Figma plugin + listener.
-- [x] `JSON_REST_V1` import.
-- [x] Raster, vector, and outlined-text fidelity asset transport.
-- [x] Output-agnostic Design IR with preserved Figma source IDs.
-- [x] Free-layout and basic Auto Layout metadata.
-- [x] Basic style, clipping, rotation, image, stroke, and typography metadata used by verified fixtures.
-- [x] Hidden Figma subtrees pruned from IR.
+- [x] Local design-input transport foundation.
+- [x] Design JSON import foundation.
+- [x] Raster and vector asset transport.
+- [x] Output-agnostic Design IR with preserved source identity.
+- [x] Free-layout and Auto Layout foundations.
+- [x] Style, clipping, rotation, image, stroke, and typography metadata used by verified fixtures.
+- [x] Hidden source subtrees pruned from IR.
 
-### HTML/CSS fidelity renderer
+### Fidelity
 
 - [x] Standalone HTML + companion CSS.
-- [x] Deterministic source-ID classes.
-- [x] Free-layout absolute reconstruction.
-- [x] Flexbox foundations for Auto Layout.
-- [x] Raster fills and opacity.
-- [x] SVG icons/vectors and composite vector assets.
-- [x] Outlined TEXT fidelity assets with semantic text retained.
-- [x] Multiline/leading-whitespace handling.
+- [x] Deterministic source-based classes.
+- [x] Free-layout reconstruction foundation.
+- [x] Auto Layout foundations.
+- [x] Raster and vector rendering.
+- [x] Text fidelity representation with semantic source retained.
+- [x] Multiline text handling.
 - [x] Frame clipping.
-- [x] Quarter-turn geometry handling.
-- [x] Divider rendering.
-- [x] Shape stroke rendering.
-- [x] Raw/vector SVG exports preserve Figma absolute bounds.
-- [x] Inspect traces and regression tests for verified behavior.
+- [x] Rotation handling.
+- [x] Divider and shape-stroke rendering.
+- [x] Inspect traces and regression coverage for verified behavior.
+- [ ] Harden fluid responsive Fidelity as the normal visual-reference behavior.
+- [ ] Expand responsive triage across diverse section types.
 
 ### Responsive compiler / Elementor
 
-Responsive compilation is active work. Elementor is supported as an output target and its renderer should consume compiled layout rather than drive compiler architecture.
-
-Current responsive pipeline conceptually includes layout compilation, spatial relationship resolution, flow-group stabilization, ownership/overlay resolution, and generated-wrapper pruning before renderer-specific output.
+Responsive compilation is active work. Elementor consumes shared responsive understanding rather than driving compiler architecture.
 
 - [x] Responsive compiler foundations.
-- [x] Region/flow grouping foundations used by current fixtures.
+- [x] Region/flow grouping foundations.
 - [x] Generated-wrapper pruning foundation.
-- [x] Elementor renderer foundation exists on the active development path.
-- [ ] Continue real-fixture responsive compiler hardening.
-- [ ] Preserve semantic/editable Elementor mappings where practical.
-- [ ] Keep Elementor-only behavior isolated from shared compiler logic.
+- [x] Elementor renderer foundation.
+- [ ] Align responsive compilation with preserve-first classification.
+- [ ] Preserve editable Elementor mappings where practical.
+- [ ] Reduce unnecessary structural reconstruction.
 - [ ] Continue validating generated output against real Elementor behavior.
 
-## Closed Fidelity Issues
+### Native HTML/CSS
 
-### Newsletter decorative vector `45:5219` — CLOSED
-
-Confirmed cause:
-
-- Figma node `absoluteBoundingBox` was roughly `986 × 1129`.
-- Visible render bounds were only roughly `987 × 398`.
-- IR/CSS correctly used the full Figma bounding geometry.
-- Plain `exportAsync({ format: "SVG" })` cropped the exported SVG canvas to visible artwork.
-- The renderer then placed that cropped SVG inside the taller IR box using `object-fit: contain`, producing the wrong vertical placement.
-
-Confirmed fix:
-
-```js
-vector.exportAsync({
-  format: "SVG",
-  useAbsoluteBounds: true,
-})
-```
-
-This restores the intended geometry contract:
-
-```text
-SVG canvas == Figma absoluteBoundingBox == IR geometry
-```
-
-Verified on the real Newsletter fixture: the orange decorative vector now renders in the correct position without changing IR geometry or adding a renderer workaround.
-
-- [x] Export raw/vector SVGs with `useAbsoluteBounds: true`.
-- [x] Re-render Newsletter and visually verify `45:5219`.
-- [x] Add regression coverage for the vector export contract.
-- [x] Keep IR on `absoluteBoundingBox`; no `absoluteRenderBounds` workaround required.
+- [x] Native HTML renderer foundation.
+- [x] Native typography/font CSS foundation.
+- [x] Independent Native output directory and CLI target.
+- [ ] Expand semantic element selection.
+- [ ] Keep Native framework-neutral.
+- [ ] Use Native as a reference/export foundation for custom and framework-based applications.
 
 ## Immediate Sequence
 
-The Newsletter fidelity blocker is closed. The active sequence can now move forward:
-
-1. **Continue responsive compiler** hardening against real fixtures.
-2. **Font gatherer/registry** under `storage/fonts/`.
-3. **Semantic HTML text** using registered exact fonts, with fidelity fallback retained.
-4. **Morpher Native renderer** and whole-page Morph output.
-5. **WordPress Visual Editor** with pinpoint editing and content overrides.
-6. **Version/backup/restore** integrated as core editor safety, including rendered A/B preview and technical diff.
-7. **Developer tools later** — structural editing, widgets, snapping, advanced responsive/CSS controls.
+1. **Harden fluid Fidelity** as the visual reference and responsive-triage path.
+2. **Align responsive compilation** with preserve-first layout classification.
+3. **Compile Elementor** as the primary editable WordPress production path.
+4. **Validate hybrid sections** that combine structural responsive behavior with preserved spatial composition.
+5. **Expand whole-page understanding** across Header Section, Body, and Footer Section.
+6. **Continue Native semantics** as the framework-neutral reference/export target.
+7. **Harden identity, fonts, assets, and output validation** across targets.
 
 ## Later / Optional Inputs
 
@@ -445,20 +244,16 @@ The Newsletter fidelity blocker is closed. The active sequence can now move forw
 - [ ] PNG adapter.
 - [ ] JPG/JPEG adapter.
 - [ ] PDF adapter.
-- [ ] Figma REST adapter.
-- [ ] Published Figma plugin workflow.
+- [ ] Additional design-source adapters.
 
 ## Later / Optional Outputs / Integration
 
 - [ ] Morpher application/UI.
 - [ ] Whole-page Morph compilation as normal workflow.
 - [ ] Per-Morph CSS optimization/bundling.
-- [ ] Morpher Native output/runtime.
-- [ ] Morpher WordPress Visual Editor / bridge.
-- [ ] Automated Media Library integration.
 - [ ] Optional Elementor deployment/integration automation.
 - [ ] Gutenberg renderer.
-- [ ] React renderer.
+- [ ] React-oriented renderer or integration.
 - [ ] Tailwind renderer.
 - [ ] Other renderers through the same output-agnostic IR.
 
@@ -466,6 +261,8 @@ The Newsletter fidelity blocker is closed. The active sequence can now move forw
 
 Morpher should currently be described as an **advanced prototype / early product foundation**.
 
-It is beyond the initial feasibility question: real Figma designs can be transported, normalized, inspected, rendered, and compiled through meaningful parts of the pipeline. It is not yet alpha/production-ready because responsive compilation is incomplete and Morpher Native / font registry / WordPress editing are not implemented yet.
+The project can transport, normalize, inspect, render, and compile real design input through meaningful parts of the pipeline. It is not production-ready yet because responsive compilation, whole-page semantic understanding, and production-target hardening are still active work.
 
-The fidelity HTML path remains the diagnostic/reference path and should not be destabilized while the Native/editor architecture is introduced.
+The guiding compiler behavior is conservative:
+
+> **Preserve what already works. Transform what genuinely requires responsive structure.**
