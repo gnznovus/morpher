@@ -7,7 +7,16 @@ from morpher.ir.typography import FontIntent
 from morpher.renderers.elementor_font_plugin import render_elementor_font_plugin
 
 
-def test_elementor_font_plugin_packages_exact_face_and_enqueues_for_preview(tmp_path: Path) -> None:
+def _resolution(face: FontFace, intent: FontIntent) -> FontResolution:
+    return FontResolution(
+        status="exact",
+        request=FontRequest(intent.family, intent.weight, intent.style, intent.flavor),
+        face=face,
+        provenance="cache_hit",
+    )
+
+
+def test_morpher_plugin_packages_exact_face_and_enqueues_for_preview(tmp_path: Path) -> None:
     source = tmp_path / "fonts" / "HKGrotesk-BoldLegacy.woff2"
     source.parent.mkdir()
     source.write_bytes(b"font")
@@ -19,60 +28,85 @@ def test_elementor_font_plugin_packages_exact_face_and_enqueues_for_preview(tmp_
         flavor="legacy",
         sources=(FontSource(source, "woff2"),),
     )
-
+    intent = FontIntent("HK Grotesk", 700, "normal", "legacy")
     root = DesignNode(
         kind="container",
-        children=[
-            DesignNode(
-                kind="text",
-                text="Newsletter",
-                style=DesignStyle(font=FontIntent("HK Grotesk", 700, "normal", "legacy")),
-            )
-        ],
+        children=[DesignNode(kind="text", text="Newsletter", style=DesignStyle(font=intent))],
     )
 
     def resolver(*args):
-        intent = args[2]
-        return FontResolution(
-            status="exact",
-            request=FontRequest(intent.family, intent.weight, intent.style, intent.flavor),
-            face=face,
-            provenance="cache_hit",
-        )
+        return _resolution(face, args[2])
 
     plugin = render_elementor_font_plugin(
         root,
         font_root=tmp_path / "fonts",
         font_cache=tmp_path / "fonts" / "font-registry.json",
-        output_dir=tmp_path / "morpher-font-injector",
+        output_dir=tmp_path / "morpher-plugin",
         resolver=resolver,
     )
 
-    php = (plugin / "morpher-font-injector.php").read_text(encoding="utf-8")
+    php = (plugin / "morpher-plugin.php").read_text(encoding="utf-8")
     css = (plugin / "assets" / "fonts.css").read_text(encoding="utf-8")
 
-    assert "Plugin Name: Morpher Font Injector" in php
+    assert "Plugin Name: Morpher" in php
     assert "elementor/preview/enqueue_styles" in php
     assert "elementor/editor/after_enqueue_styles" in php
     assert (plugin / "assets" / "fonts" / source.name).exists()
+    assert (plugin / "assets" / "fonts.json").exists()
     assert '@font-face {' in css
     assert 'font-family: "HK Grotesk";' in css
     assert "font-weight: 700;" in css
     assert 'url("fonts/HKGrotesk-BoldLegacy.woff2") format("woff2")' in css
 
 
-def test_elementor_font_plugin_deduplicates_same_resolved_face(tmp_path: Path) -> None:
+def test_morpher_plugin_preserves_faces_from_previous_renders(tmp_path: Path) -> None:
+    font_root = tmp_path / "fonts"
+    font_root.mkdir()
+    bold_source = font_root / "HKGrotesk-BoldLegacy.woff2"
+    medium_source = font_root / "HKGrotesk-Medium.woff2"
+    bold_source.write_bytes(b"bold")
+    medium_source.write_bytes(b"medium")
+
+    bold = FontFace("HK Grotesk", 700, "normal", "legacy", (FontSource(bold_source, "woff2"),))
+    medium = FontFace("HK Grotesk", 500, "normal", None, (FontSource(medium_source, "woff2"),))
+    plugin_dir = tmp_path / "morpher-plugin"
+
+    bold_intent = FontIntent("HK Grotesk", 700, "normal", "legacy")
+    medium_intent = FontIntent("HK Grotesk", 500, "normal", None)
+
+    def resolver(*args):
+        intent = args[2]
+        face = bold if intent.weight == 700 else medium
+        return _resolution(face, intent)
+
+    render_elementor_font_plugin(
+        DesignNode(kind="container", children=[DesignNode(kind="text", style=DesignStyle(font=bold_intent))]),
+        font_root=font_root,
+        font_cache=font_root / "font-registry.json",
+        output_dir=plugin_dir,
+        resolver=resolver,
+    )
+    render_elementor_font_plugin(
+        DesignNode(kind="container", children=[DesignNode(kind="text", style=DesignStyle(font=medium_intent))]),
+        font_root=font_root,
+        font_cache=font_root / "font-registry.json",
+        output_dir=plugin_dir,
+        resolver=resolver,
+    )
+
+    css = (plugin_dir / "assets" / "fonts.css").read_text(encoding="utf-8")
+    assert css.count("@font-face") == 2
+    assert "font-weight: 700;" in css
+    assert "font-weight: 500;" in css
+    assert (plugin_dir / "assets" / "fonts" / bold_source.name).exists()
+    assert (plugin_dir / "assets" / "fonts" / medium_source.name).exists()
+
+
+def test_morpher_plugin_deduplicates_same_resolved_face(tmp_path: Path) -> None:
     source = tmp_path / "fonts" / "HKGrotesk-BoldLegacy.woff2"
     source.parent.mkdir()
     source.write_bytes(b"font")
-    face = FontFace(
-        family="HK Grotesk",
-        weight=700,
-        style="normal",
-        flavor="legacy",
-        sources=(FontSource(source, "woff2"),),
-    )
-
+    face = FontFace("HK Grotesk", 700, "normal", "legacy", (FontSource(source, "woff2"),))
     intent = FontIntent("HK Grotesk", 700, "normal", "legacy")
     root = DesignNode(
         kind="container",
@@ -83,12 +117,7 @@ def test_elementor_font_plugin_deduplicates_same_resolved_face(tmp_path: Path) -
     )
 
     def resolver(*args):
-        return FontResolution(
-            status="exact",
-            request=FontRequest("HK Grotesk", 700, "normal", "legacy"),
-            face=face,
-            provenance="cache_hit",
-        )
+        return _resolution(face, args[2])
 
     plugin = render_elementor_font_plugin(
         root,
