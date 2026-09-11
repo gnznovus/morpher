@@ -227,10 +227,10 @@ def render_path(
         storage.output_elementor,
     )
 
-    # Native and Elementor each receive an independent compiled tree. Fidelity
-    # stays on normalized source geometry so its diagnostic contract is unchanged.
-    elementor_root = compile_for_responsive_render(document.root)
-    elementor = render_elementor(elementor_root, asset_sources=elementor_asset_sources)
+    # Elementor now renders directly from normalized source IR. Responsive review
+    # happens against Fidelity, and any structural breakpoint work remains a manual
+    # Elementor task instead of automatic layout inference in Morpher.
+    elementor = render_elementor(document.root, asset_sources=elementor_asset_sources)
     elementor_path.write_text(
         json.dumps(elementor, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",
