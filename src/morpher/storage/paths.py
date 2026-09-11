@@ -5,6 +5,7 @@ from pathlib import Path
 @dataclass(frozen=True)
 class StoragePaths:
     root: Path = Path("storage")
+    project_root: Path = Path(".")
 
     @property
     def figma_import(self) -> Path:
@@ -48,7 +49,9 @@ class StoragePaths:
 
     @property
     def elementor_font_plugin(self) -> Path:
-        return self.output_elementor / "morpher-font-injector"
+        # Keep the plugin in the project tree so Docker and the future Morpher app
+        # can share one persistent WordPress integration target.
+        return self.project_root / "wp-content" / "plugins" / "morpher-plugin"
 
     def ensure(self) -> None:
         for path in (
