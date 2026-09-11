@@ -1,13 +1,28 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
+from morpher.fonts.metadata import read_font_metadata
 from morpher.fonts.model import FontFace
-from morpher.fonts.registry import FontRegistry
+from morpher.fonts.registry import (
+    FontRegistry,
+    MetadataReader,
+    current_font_registry,
+    load_cached_font_registry,
+    refresh_font_registry,
+)
+from morpher.ir.typography import FontIntent
 
 
 ResolutionStatus = Literal["exact", "fallback", "missing"]
+LookupProvenance = Literal[
+    "cache_hit",
+    "resolved_after_refresh",
+    "fallback_after_refresh",
+    "missing_after_refresh",
+]
 
 
 @dataclass(frozen=True)
@@ -24,6 +39,17 @@ class FontResolution:
     request: FontRequest
     face: FontFace | None = None
     reason: str | None = None
+    provenance: LookupProvenance | None = None
+
+
+def font_request_from_intent(intent: FontIntent) -> FontRequest:
+    """Convert output-agnostic Design IR font intent into a resolver request."""
+    return FontRequest(
+        family=intent.family,
+        weight=intent.weight,
+        style=intent.style,
+        flavor=intent.flavor,
+    )
 
 
 def resolve_font(registry: FontRegistry, request: FontRequest) -> FontResolution:
@@ -77,4 +103,77 @@ def resolve_font(registry: FontRegistry, request: FontRequest) -> FontResolution
             f"{face.weight} / {face.style}"
             + (f" / {face.flavor}" if face.flavor else "")
         ),
+    )
+
+
+def resolve_font_with_cache(
+    root: Path,
+    cache_path: Path,
+    request: FontRequest,
+    *,
+    metadata_reader: MetadataReader = read_font_metadata,
+) -> FontResolution:
+    """Resolve through the registry cache, refreshing exactly once on an exact-face miss.
+
+    A fallback is selected only after the refresh pass. This keeps cache lookup and
+    semantic fallback separate: a stale cache cannot silently turn a newly added exact
+    face into a fallback.
+    """
+    registry = current_font_registry()
+    if registry.find_face(request.family, request.weight, request.style, request.flavor) is not None:
+        result = resolve_font(registry, request)
+        return _with_provenance(result, "cache_hit")
+
+    cached = load_cached_font_registry(cache_path)
+    if cached is not None and cached.find_face(
+        request.family,
+        request.weight,
+        request.style,
+        request.flavor,
+    ) is not None:
+        result = resolve_font(cached, request)
+        return _with_provenance(result, "cache_hit")
+
+    refreshed = refresh_font_registry(
+        root,
+        metadata_reader=metadata_reader,
+        cache_path=cache_path,
+    )
+    result = resolve_font(refreshed, request)
+    provenance: LookupProvenance
+    if result.status == "exact":
+        provenance = "resolved_after_refresh"
+    elif result.status == "fallback":
+        provenance = "fallback_after_refresh"
+    else:
+        provenance = "missing_after_refresh"
+    return _with_provenance(result, provenance)
+
+
+def resolve_font_intent(
+    root: Path,
+    cache_path: Path,
+    intent: FontIntent,
+    *,
+    metadata_reader: MetadataReader = read_font_metadata,
+) -> FontResolution:
+    """Resolve a Design IR font intent without exposing source-specific metadata."""
+    return resolve_font_with_cache(
+        root,
+        cache_path,
+        font_request_from_intent(intent),
+        metadata_reader=metadata_reader,
+    )
+
+
+def _with_provenance(
+    resolution: FontResolution,
+    provenance: LookupProvenance,
+) -> FontResolution:
+    return FontResolution(
+        status=resolution.status,
+        request=resolution.request,
+        face=resolution.face,
+        reason=resolution.reason,
+        provenance=provenance,
     )
