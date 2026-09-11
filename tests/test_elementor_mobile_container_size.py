@@ -3,7 +3,7 @@ from morpher.ir.styles import DesignStyle
 from morpher.renderers.elementor import render_elementor
 
 
-def test_fluid_absolute_container_repeats_composition_size_on_mobile() -> None:
+def test_outlined_fluid_absolute_shape_uses_exact_spacer_height_on_mobile() -> None:
     root = DesignNode(
         kind="container",
         source_id="1:1",
@@ -24,12 +24,16 @@ def test_fluid_absolute_container_repeats_composition_size_on_mobile() -> None:
         ],
     )
 
-    settings = render_elementor(root)["content"][0]["elements"][0]["settings"]
+    shape = render_elementor(root)["content"][0]["elements"][0]
+    settings = shape["settings"]
 
     expected_width = {"unit": "vw", "size": 176 / 1920 * 100, "sizes": []}
-    expected_height = {"unit": "vw", "size": 55 / 1920 * 100, "sizes": []}
+    expected_space = {"unit": "custom", "size": f"{55 / 1920 * 100:g}vw", "sizes": []}
 
-    assert settings["width"] == expected_width
-    assert settings["width_mobile"] == expected_width
-    assert settings["min_height"] == expected_height
-    assert settings["min_height_mobile"] == expected_height
+    assert shape["elType"] == "widget"
+    assert shape["widgetType"] == "spacer"
+    assert settings["_element_custom_width"] == expected_width
+    assert settings["space"] == expected_space
+    assert settings["space_mobile"] == expected_space
+    assert settings["_border_border"] == "solid"
+    assert settings["_border_color"] == "rgba(255, 255, 255, 1)"
