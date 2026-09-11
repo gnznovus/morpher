@@ -29,7 +29,7 @@ def _number(value: float) -> str:
 
 
 def minimum_font_size(desktop_font_size: float) -> float:
-    """Return Morpher's generic mobile floor for a desktop Figma font size."""
+    """Return Morpher's generic mobile floor for readable flow typography."""
     return min(desktop_font_size, max(MIN_READABLE_FONT_SIZE, desktop_font_size * MIN_SCALE_RATIO))
 
 
@@ -39,17 +39,23 @@ def fluid_font_size(
     *,
     mobile_viewport: float = DEFAULT_MOBILE_VIEWPORT,
     root_font_size: float = DEFAULT_ROOT_FONT_SIZE,
+    minimum_px: float | None = None,
 ) -> FluidTypeScale | None:
-    """Derive a composition-relative type scale from Figma measurements.
+    """Derive a viewport-relative type scale from Figma measurements.
 
-    Font size follows the source design proportion directly through vw. The
-    clamp only guards the lower and upper bounds; it does not alter the
-    responsive curve with an interpolation intercept.
+    By default Morpher keeps the readable mobile floor used by flow typography.
+    Callers that must preserve a scaled spatial composition can pass
+    ``minimum_px=0`` so the type continues shrinking with the composition while
+    still capping at the authored desktop size.
     """
     if desktop_font_size <= 0 or desktop_viewport <= mobile_viewport or root_font_size <= 0:
         return None
 
-    mobile_font_size = minimum_font_size(desktop_font_size)
+    mobile_font_size = (
+        minimum_font_size(desktop_font_size)
+        if minimum_px is None
+        else min(desktop_font_size, max(0.0, minimum_px))
+    )
     if mobile_font_size == desktop_font_size:
         return None
 
