@@ -78,9 +78,6 @@ def _apply_rotation(settings: dict, style: DesignStyle) -> None:
     degrees = math.degrees(style.rotation)
     if abs(degrees) < 1e-7:
         return
-    # Elementor stores the active transform popover using the literal
-    # "transform" value. Using "yes" preserves the numeric value in the editor
-    # but does not apply it until the control is touched manually.
     settings["_transform_rotate_popover"] = "transform"
     settings["_transform_rotateZ_effect"] = _size("deg", degrees)
 
@@ -121,13 +118,7 @@ def _apply_flow_margin(settings: dict, style: DesignStyle, *, container: bool) -
     settings["margin" if container else "_margin"] = _dimensions(top, right, bottom, left, unit="%")
 
 
-def _set_fluid_absolute_size(
-    settings: dict,
-    style: DesignStyle,
-    *,
-    container: bool,
-    design_viewport: float | None,
-) -> None:
+def _set_fluid_absolute_size(settings: dict, style: DesignStyle, *, container: bool, design_viewport: float | None) -> None:
     if not container and style.text_auto_resize == "WIDTH_AND_HEIGHT":
         settings["_element_width"] = "auto"
         settings.pop("_element_custom_width", None)
@@ -150,34 +141,15 @@ def _set_fluid_absolute_size(
         settings["min_height_mobile"] = height
 
 
-def _apply_fluid_composition_size(
-    settings: dict,
-    style: DesignStyle,
-    parent_style: DesignStyle | None,
-    *,
-    container: bool,
-    design_viewport: float | None,
-) -> None:
+def _apply_fluid_composition_size(settings: dict, style: DesignStyle, parent_style: DesignStyle | None, *, container: bool, design_viewport: float | None) -> None:
     if parent_style is None or parent_style.position_mode != "absolute":
         return
     if style.position_mode == "absolute":
         return
-    _set_fluid_absolute_size(
-        settings,
-        style,
-        container=container,
-        design_viewport=design_viewport,
-    )
+    _set_fluid_absolute_size(settings, style, container=container, design_viewport=design_viewport)
 
 
-def _apply_free_layout_geometry(
-    settings: dict,
-    style: DesignStyle,
-    parent_style: DesignStyle | None,
-    *,
-    container: bool,
-    design_viewport: float | None,
-) -> None:
+def _apply_free_layout_geometry(settings: dict, style: DesignStyle, parent_style: DesignStyle | None, *, container: bool, design_viewport: float | None) -> None:
     if parent_style is None:
         if style.layout_direction is None:
             settings["width"] = _size("%", 100)
@@ -209,12 +181,7 @@ def _apply_free_layout_geometry(
     if top_vw is not None:
         settings["_offset_y"] = _size("vw", top_vw)
 
-    _set_fluid_absolute_size(
-        settings,
-        style,
-        container=container,
-        design_viewport=design_viewport,
-    )
+    _set_fluid_absolute_size(settings, style, container=container, design_viewport=design_viewport)
 
 
 def _apply_child_alignment(settings: dict, style: DesignStyle, parent_style: DesignStyle | None, *, container: bool) -> None:
@@ -236,13 +203,7 @@ def _apply_container_border(settings: dict, style: DesignStyle) -> None:
         settings["border_radius"] = _dimensions(radius, radius, radius, radius)
 
 
-def _container_settings(
-    style: DesignStyle,
-    parent_style: DesignStyle | None = None,
-    asset_sources: dict[str, str] | None = None,
-    *,
-    design_viewport: float | None = None,
-) -> dict:
+def _container_settings(style: DesignStyle, parent_style: DesignStyle | None = None, asset_sources: dict[str, str] | None = None, *, design_viewport: float | None = None) -> dict:
     settings: dict = {"content_width": "full"}
     if style.layout_direction:
         settings["flex_direction"] = "row" if style.layout_direction == "horizontal" else "column"
@@ -297,23 +258,17 @@ def _elementor_text(value: str | None) -> str:
 
 
 def _text_transform(value: str | None) -> str | None:
-    return {
-        "UPPER": "uppercase",
-        "LOWER": "lowercase",
-        "TITLE": "capitalize",
-    }.get(value or "")
+    return {"UPPER": "uppercase", "LOWER": "lowercase", "TITLE": "capitalize"}.get(value or "")
 
 
 def _source_is_single_line(node: DesignNode) -> bool:
     text = (node.text or "").replace("\r\n", "\n").replace("\r", "\n")
     if not text or "\n" in text:
         return False
-
     style = node.style
     line_box = style.line_height or style.font_size
     if line_box is None or style.height is None:
         return style.text_auto_resize == "WIDTH_AND_HEIGHT"
-
     return style.height <= line_box * 1.5
 
 
@@ -397,9 +352,6 @@ def _is_vertical_divider(style: DesignStyle) -> bool:
 def _render_divider(node: DesignNode, path: str, parent_style: DesignStyle | None = None, *, design_viewport: float | None = None) -> dict:
     style = node.style
     if _is_vertical_divider(style):
-        # A container carries Elementor's own layout chrome and rendered much
-        # wider than the authored 1px line. Use a spacer widget instead: it can
-        # own an exact custom width and a fluid height without default padding.
         settings: dict = {
             "space": _size("custom", f"{_composition_vw(style.height, design_viewport) or 0:g}vw"),
             "space_mobile": _size("custom", f"{_composition_vw(style.height, design_viewport) or 0:g}vw"),
@@ -444,10 +396,7 @@ def _is_background_image_layer(node: DesignNode, parent_style: DesignStyle | Non
         return False
     if parent_style.width in (None, 0) or parent_style.height in (None, 0):
         return False
-    return (
-        node.style.width >= parent_style.width * 0.9
-        and node.style.height >= parent_style.height * 0.9
-    )
+    return node.style.width >= parent_style.width * 0.9 and node.style.height >= parent_style.height * 0.9
 
 
 def _render_asset_widget(node: DesignNode, path: str, parent_style: DesignStyle | None, asset_sources: dict[str, str], *, design_viewport: float | None = None) -> dict | None:
@@ -460,6 +409,13 @@ def _render_asset_widget(node: DesignNode, path: str, parent_style: DesignStyle 
         settings["opacity"] = _size("px", node.style.image_opacity)
         settings["css_filters_css_filter"] = "custom"
         settings["css_filters_opacity"] = _size("px", node.style.image_opacity * 100)
+    if node.kind == "image" and node.style.image_scale_mode == "FILL" and node.style.height is not None:
+        height_vw = _composition_vw(node.style.height, design_viewport)
+        if height_vw is not None:
+            settings["height"] = _size("custom", f"{height_vw:g}vw")
+        else:
+            settings["height"] = _size("px", node.style.height)
+        settings["object-fit"] = "cover"
     if _is_background_image_layer(node, parent_style):
         settings["_z_index"] = 0
     _apply_item_sizing(settings, node.style, container=False)
