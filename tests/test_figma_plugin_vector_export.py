@@ -39,6 +39,16 @@ def test_figma_plugin_warns_on_similar_overlapping_visible_structures() -> None:
     assert "warnings.push(...findOverlappingStructureWarnings(root))" in plugin_code
 
 
+def test_figma_plugin_links_meaningful_same_name_stacks_despite_nested_counts() -> None:
+    plugin_code = _plugin_code()
+
+    assert "function isGenericStructureName" in plugin_code
+    assert 'normalized === "frame"' in plugin_code
+    assert 'normalized === "group"' in plugin_code
+    assert "const sameMeaningfulName = sameName && !isGenericStructureName(first.node.name);" in plugin_code
+    assert "if (sameMeaningfulName && textSimilarity >= 0.75) return true;" in plugin_code
+
+
 def test_figma_plugin_clusters_related_stacked_structures_into_one_warning() -> None:
     plugin_code = _plugin_code()
 
