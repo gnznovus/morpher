@@ -131,6 +131,7 @@ def _contact_icons(parent: DesignNode, text: DesignNode) -> list[DesignNode]:
     font_size = text.style.font_size or 16.0
     max_gap = max(font_size * 3.0, (text_box[2] - text_box[0]) * 0.15)
     max_anchor_size = font_size * 4.0
+    edge_tolerance = max(4.0, font_size * 0.5)
     icons: list[DesignNode] = []
     for child in parent.children:
         if child is text or not _is_contact_visual_anchor(child):
@@ -146,10 +147,10 @@ def _contact_icons(parent: DesignNode, text: DesignNode) -> list[DesignNode]:
         if vertical_overlap <= 0:
             continue
 
-        # Marker rails are leading visuals. Without this directional guard, the
-        # left amenities text wall can accidentally claim the right column's bullets
-        # because an anchor to the right produces a zero "left gap".
-        if icon_box[0] >= text_box[0]:
+        # Marker rails are leading visuals, but small glyphs can overlap the
+        # text box edge by a few authored pixels. Reject only anchors clearly
+        # inside/to the right of the text rail so near-edge contact icons survive.
+        if icon_box[0] > text_box[0] + edge_tolerance:
             continue
 
         horizontal_overlap = max(0.0, min(text_box[2], icon_box[2]) - max(text_box[0], icon_box[0]))
