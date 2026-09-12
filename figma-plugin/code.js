@@ -62,6 +62,32 @@ function formatSkipStats(label, stats) {
   return `${stats.total} ${label} skipped${details ? ` (${details})` : ""}`;
 }
 
+function buildReport(node, assets, vectorExport, textExport) {
+  const warnings = [
+    formatSkipStats("non-rendering vectors", vectorExport.skipped),
+    formatSkipStats("non-rendering text outlines", textExport.skipped),
+  ].filter(Boolean);
+
+  return [
+    "MORPHER FIGMA REPORT",
+    "====================",
+    "",
+    "SOURCE",
+    `Name: ${node.name}`,
+    `Node: ${node.id}`,
+    "",
+    "EXPORT",
+    `Images: ${assets.length}`,
+    `Vectors: ${vectorExport.assets.length}`,
+    `Outlined texts: ${textExport.assets.length}`,
+    "",
+    "WARNINGS",
+    ...(warnings.length ? warnings.map((warning) => `[warning] ${warning}`) : ["None"]),
+    "",
+    `SUMMARY: ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`,
+  ].join("\n");
+}
+
 function collectImageRefs(node, refs = new Set(), hiddenAncestor = false) {
   const hidden = hiddenAncestor || isExplicitlyHidden(node);
   if (!hidden && "fills" in node && Array.isArray(node.fills)) {
@@ -89,11 +115,7 @@ function isVectorComposite(node) {
   return annotation.length <= 8;
 }
 
-function collectVectorAssets(
-  node,
-  result = { assets: [], skipped: createSkipStats() },
-  hiddenAncestor = false
-) {
+function collectVectorAssets(node, result = { assets: [], skipped: createSkipStats() }, hiddenAncestor = false) {
   const hidden = hiddenAncestor || isExplicitlyHidden(node);
   if (node.type === "VECTOR" || isVectorComposite(node)) {
     if (hidden) recordSkip(result.skipped, "hidden");
@@ -110,14 +132,8 @@ function collectVectorAssets(
   return result;
 }
 
-function collectTextAssets(
-  node,
-  result = { assets: [], skipped: createSkipStats() },
-  hiddenAncestor = false
-) {
+function collectTextAssets(node, result = { assets: [], skipped: createSkipStats() }, hiddenAncestor = false) {
   const hidden = hiddenAncestor || isExplicitlyHidden(node);
-  // Text inside an atomic vector composition is already captured by the
-  // composition SVG; exporting it again would create an orphan child asset.
   if (isVectorComposite(node)) return result;
   if (node.type === "TEXT") {
     if (hidden) recordSkip(result.skipped, "hidden");
@@ -170,11 +186,7 @@ async function exportTextAssets(node) {
   const runtimeSkipped = createSkipStats();
   for (const text of collected.assets) {
     try {
-      const bytes = await text.exportAsync({
-        format: "SVG",
-        svgOutlineText: true,
-        useAbsoluteBounds: true,
-      });
+      const bytes = await text.exportAsync({ format: "SVG", svgOutlineText: true, useAbsoluteBounds: true });
       assets.push({ sourceId: text.id, data: bytesToBase64(bytes) });
     } catch (error) {
       if (isNoVisibleLayersExportError(error)) {
@@ -198,10 +210,11 @@ figma.ui.onmessage = async (message) => {
     const textExport = await exportTextAssets(node);
     const vectorAssets = vectorExport.assets;
     const textAssets = textExport.assets;
+    const report = buildReport(node, assets, vectorExport, textExport);
     const response = await fetch(MORPHER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: node.name, nodeId: node.id, payload, assets, vectorAssets, textAssets }),
+      body: JSON.stringify({ name: node.name, nodeId: node.id, payload, assets, vectorAssets, textAssets, report }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || `Morpher returned HTTP ${response.status}`);
@@ -218,10 +231,6 @@ figma.ui.onmessage = async (message) => {
       text: `Saved as ${result.filename} (${result.assetsSaved || 0} images, ${result.vectorsSaved || 0} vectors, ${result.textsSaved || 0} outlined texts${skippedNote})`,
     });
   } catch (error) {
-    figma.ui.postMessage({
-      type: "status",
-      state: "error",
-      text: error instanceof Error ? error.message : String(error),
-    });
+    figma.ui.postMessage({ type: "status", state: "error", text: error instanceof Error ? error.message : String(error) });
   }
 };
