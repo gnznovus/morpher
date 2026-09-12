@@ -410,6 +410,11 @@ def _render_asset_widget(node: DesignNode, path: str, parent_style: DesignStyle 
         settings["css_filters_css_filter"] = "custom"
         settings["css_filters_opacity"] = _size("px", node.style.image_opacity * 100)
     if node.kind == "image" and node.style.image_scale_mode == "FILL" and node.style.height is not None:
+        width_vw = _composition_vw(node.style.width, design_viewport)
+        if width_vw is not None:
+            settings["width"] = _size("vw", width_vw)
+        elif node.style.width is not None:
+            settings["width"] = _size("px", node.style.width)
         height_vw = _composition_vw(node.style.height, design_viewport)
         if height_vw is not None:
             settings["height"] = _size("custom", f"{height_vw:g}vw")
