@@ -145,6 +145,13 @@ def _contact_icons(parent: DesignNode, text: DesignNode) -> list[DesignNode]:
         vertical_overlap = max(0.0, min(text_box[3], icon_box[3]) - max(text_box[1], icon_box[1]))
         if vertical_overlap <= 0:
             continue
+
+        # Marker rails are leading visuals. Without this directional guard, the
+        # left amenities text wall can accidentally claim the right column's bullets
+        # because an anchor to the right produces a zero "left gap".
+        if icon_box[0] >= text_box[0]:
+            continue
+
         horizontal_overlap = max(0.0, min(text_box[2], icon_box[2]) - max(text_box[0], icon_box[0]))
         horizontal_gap = max(0.0, text_box[0] - icon_box[2])
         if horizontal_overlap <= 0 and horizontal_gap > max_gap:
@@ -292,7 +299,9 @@ def _build_contact_items(
                 width_mode="hug",
                 height_mode="fixed",
                 gap=gap,
-                counter_axis_align="center",
+                # Elementor's row "Alignment" must stay at Start. Center causes
+                # icons/bullets and wrapped wording to drift vertically.
+                counter_axis_align="min",
             ),
             children=[visual, wording],
         )
