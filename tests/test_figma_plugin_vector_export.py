@@ -49,7 +49,7 @@ def test_figma_plugin_clusters_related_stacked_structures_into_one_warning() -> 
     assert "function formatStackedDuplicateWarning" in plugin_code
     assert "${count} similar structures occupy the same visible region" in plugin_code
     assert "Morpher preserved all ${count}." in plugin_code
-    assert "collectCandidateClusters(candidates).map(formatStackedDuplicateWarning)" in plugin_code
+    assert "collectCandidateClusters(candidates)" in plugin_code
 
 
 def test_figma_plugin_overlap_warning_points_to_each_nested_layer_path() -> None:
@@ -57,19 +57,20 @@ def test_figma_plugin_overlap_warning_points_to_each_nested_layer_path() -> None
 
     assert "function formatStructurePath" in plugin_code
     assert 'join(" > ")' in plugin_code
-    assert "!isRoot && !isTransparentWrapper(node) && bounds" in plugin_code
+    assert "!isRoot && bounds && bounds.area >= minimumArea" in plugin_code
     assert "visit(root, [], false, true);" in plugin_code
     assert "cluster.map((candidate) => `- ${formatStructurePath(candidate)}`)" in plugin_code
 
 
-def test_figma_plugin_ignores_single_child_transparent_wrappers_as_overlap_candidates() -> None:
+def test_figma_plugin_prunes_only_irrelevant_transparent_wrappers_after_clustering() -> None:
     plugin_code = _plugin_code()
 
     assert "function isTransparentWrapper" in plugin_code
-    assert "children.length !== 1" in plugin_code
-    assert "const hasFill" in plugin_code
-    assert "const hasStroke" in plugin_code
-    assert "return !hasFill && !hasStroke;" in plugin_code
+    assert "function pruneTransparentWrappers" in plugin_code
+    assert "const memberIds = new Set(cluster.map((candidate) => candidate.node.id));" in plugin_code
+    assert "if (!child || !memberIds.has(child.id)) return true;" in plugin_code
+    assert "normalizedText(candidate.node.name) === normalizedText(child.name)" in plugin_code
+    assert ".map(pruneTransparentWrappers)" in plugin_code
 
 
 def test_figma_plugin_surfaces_indexed_warning_topics_in_ui() -> None:
