@@ -9,6 +9,8 @@ description = "Modular design compiler for HTML/CSS and Elementor outputs."
 requires-python = ">=3.11"
 dependencies = [
     "fonttools[woff]>=4.58",
+    "Pillow>=10",
+    "resvg_py>=0.5,<0.6",
 ]
 
 [project.scripts]
