@@ -38,7 +38,8 @@ def test_free_layout_text_uses_composition_fluid_typography_and_width() -> None:
 
     assert settings["_position"] == "absolute"
     assert settings["_offset_x"] == {"unit": "vw", "size": 30.208333333333332, "sizes": []}
-    assert settings["_element_custom_width"] == {"unit": "vw", "size": 31.25, "sizes": []}
+    assert settings["_element_width"] == "auto"
+    assert "_element_custom_width" not in settings
     assert settings["typography_font_size"] == {
         "unit": "custom",
         "size": "clamp(0rem, 1.5625vw, 1.875rem)",
