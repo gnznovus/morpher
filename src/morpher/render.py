@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from morpher.assets import semantic_asset_names
+from morpher.compiler.contact import compile_contact_spatial_layout
 from morpher.compiler.normalizer import normalize
 from morpher.compiler.responsive import compile_for_responsive_render
 from morpher.inputs.figma_json import FigmaJsonAdapter
@@ -229,17 +230,18 @@ def render_path(
         storage.output_elementor,
     )
 
-    # Elementor now renders directly from normalized source IR. Responsive review
-    # happens against Fidelity, and any structural breakpoint work remains a manual
-    # Elementor task instead of automatic layout inference in Morpher.
-    elementor = render_elementor(document.root, asset_sources=elementor_asset_sources)
+    # Elementor preserves the source composition. Contact blocks get one narrow
+    # relationship pass that splits icon-aligned multiline text into spatial rows
+    # without invoking the old responsive/flow compiler.
+    elementor_root = compile_contact_spatial_layout(document.root)
+    elementor = render_elementor(elementor_root, asset_sources=elementor_asset_sources)
     elementor_path.write_text(
         json.dumps(elementor, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",
     )
 
     elementor_font_plugin = render_elementor_font_plugin(
-        document.root,
+        elementor_root,
         font_root=storage.fonts,
         font_cache=storage.font_registry_cache,
         output_dir=storage.elementor_font_plugin,
