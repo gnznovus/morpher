@@ -34,6 +34,7 @@ class DesignStyle:
     margin_left_percent: float | None = None
     opacity: float | None = None
     image_opacity: float | None = None
+    image_scale_mode: str | None = None
     background_image_ref: str | None = None
     background_image_opacity: float | None = None
     clips_content: bool | None = None
