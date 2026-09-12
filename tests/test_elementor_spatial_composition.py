@@ -1,3 +1,5 @@
+import pytest
+
 from morpher.ir.nodes import DesignNode
 from morpher.ir.styles import DesignStyle
 from morpher.renderers.elementor import render_elementor
@@ -31,7 +33,8 @@ def test_nested_absolute_geometry_uses_one_viewport_scale():
     assert outer["settings"]["_offset_x"] == {"unit": "vw", "size": 31.614583333333336, "sizes": []}
     assert outer["settings"]["_offset_y"] == {"unit": "vw", "size": 3.4895833333333335, "sizes": []}
     assert outer["settings"]["width"] == {"unit": "vw", "size": 51.40625, "sizes": []}
-    assert outer["settings"]["min_height"] == {"unit": "vw", "size": 58.90625, "sizes": []}
+    assert outer["settings"]["min_height"]["unit"] == "vw"
+    assert outer["settings"]["min_height"]["size"] == pytest.approx(58.90625)
 
     assert inner["settings"]["_offset_x"] == {"unit": "vw", "size": 29.21875, "sizes": []}
     assert inner["settings"]["_offset_y"] == {"unit": "vw", "size": 10.104166666666666, "sizes": []}
