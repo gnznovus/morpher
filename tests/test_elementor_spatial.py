@@ -6,7 +6,7 @@ from morpher.ir.styles import DesignStyle
 from morpher.renderers.elementor import render_elementor
 
 
-def test_rotated_label_is_owned_by_containing_side_rail():
+def test_rotated_label_remains_sibling_of_side_rail():
     rail = DesignNode(
         kind="shape",
         source_id="rail",
@@ -35,27 +35,19 @@ def test_rotated_label_is_owned_by_containing_side_rail():
 
     result = compile_elementor_spatial_structure(root)
 
-    assert len(result.children) == 1
-    owned_rail = result.children[0]
-    assert owned_rail.kind == "container"
-    assert owned_rail.source_id == "rail"
-    assert [child.source_id for child in owned_rail.children] == ["label"]
+    assert [child.source_id for child in result.children] == ["rail", "label"]
+    assert result.children[0].kind == "shape"
+    assert result.children[1].style.width == 24
+    assert result.children[1].style.height == 192
+    assert result.children[1].style.text_auto_resize == "WIDTH_AND_HEIGHT"
 
-    owned_label = owned_rail.children[0]
-    assert owned_label.style.width == 202
-    assert owned_label.style.height == 24
-    assert owned_label.style.x == -63
-    assert owned_label.style.y == 446
-    assert owned_label.style.text_auto_resize is None
-    assert owned_label.style.width_mode == "fixed"
-
-    rendered = render_elementor(result)["content"][0]["elements"][0]
-    label_settings = rendered["elements"][0]["settings"]
-    assert rendered["elType"] == "container"
-    assert label_settings["_offset_x"]["size"] == -64 / 1928 * 100
-    assert label_settings["_offset_y"]["size"] == 446 / 1928 * 100
-    assert label_settings["_element_custom_width"]["size"] == 202 / 1928 * 100
-    assert label_settings["_transform_rotate_popover"] == "transform"
+    rendered = render_elementor(result)["content"][0]
+    rail_result, label_result = rendered["elements"]
+    assert rail_result["elType"] == "container"
+    assert label_result["widgetType"] == "heading"
+    assert label_result["settings"]["_element_width"] == "auto"
+    assert label_result["settings"]["_transform_rotate_popover"] == "transform"
+    assert abs(label_result["settings"]["_transform_rotateZ_effect"]["size"] + 90) < 1e-6
 
 
 def test_rotated_vertical_line_is_normalized_for_divider_widget():
