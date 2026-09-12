@@ -71,38 +71,21 @@ def _mark_submit_border(root: DesignNode) -> None:
 
 
 def _apply_contact_pair_alignment(root: DesignNode) -> None:
-    """Center generated pair containers in their owner, not inside themselves.
-
-    The owning container gets Align Items: Center. Each generated icon/wording pair
-    keeps its own Alignment at Start so the pair's children retain authored row
-    behavior.
-    """
-
-    def visit(parent: DesignNode) -> None:
-        contact_items = [
-            child
-            for child in parent.children
-            if child.kind == "container"
-            and "::contact-item-" in (child.source_id or "")
-        ]
-        if contact_items:
-            parent.style.counter_axis_align = "center"
-            for item in contact_items:
-                item.style.counter_axis_align = "min"
-                item.style.layout_align = None
-
-        for child in parent.children:
-            if child.kind == "container":
-                visit(child)
-
-    visit(root)
+    """Center items inside each generated pair while keeping item alignment at Start."""
+    for node in _walk(root):
+        if node.kind != "container" or "::contact-item-" not in (node.source_id or ""):
+            continue
+        node.style.counter_axis_align = "center"
+        node.style.layout_align = None
+        for child in node.children:
+            child.style.layout_align = "min"
 
 
 def apply_contact_elementor_intent(root: DesignNode) -> DesignNode:
     """Attach narrow Elementor intent to the final Contact-oriented IR tree.
 
-    Owners of generated contact/amenity pairs use Align Items: Center. Each pair
-    container itself keeps Alignment at Start. Newsletter submit borders keep the
+    Generated contact/amenity pair containers use Align Items: Center. Their direct
+    icon/wording items keep Alignment at Start. Newsletter submit borders keep the
     authored top/right/left stroke but intentionally omit the bottom edge.
     """
     _apply_contact_pair_alignment(root)
