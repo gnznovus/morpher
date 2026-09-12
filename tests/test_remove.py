@@ -56,11 +56,12 @@ def test_remove_target_normalizes_spaces_hyphens_and_template_suffix(tmp_path: P
     assert not (deployments / "contact-us").exists()
 
 
-def test_remove_all_clears_contents_but_preserves_managed_roots(tmp_path: Path):
+def test_remove_all_clears_contents_but_preserves_managed_roots_and_fonts(tmp_path: Path):
     storage = tmp_path / "storage"
     deployments = tmp_path / "deployments"
     _write(storage / "figma-import" / "Contact.json")
     _write(storage / "output" / "elementor" / "Contact_template.json")
+    _write(storage / "fonts" / "cache" / "Butler.woff2")
     _write(deployments / "contact" / "template.json")
 
     removed = remove_all(storage_root=storage, deployments_root=deployments)
@@ -68,5 +69,6 @@ def test_remove_all_clears_contents_but_preserves_managed_roots(tmp_path: Path):
     assert removed
     assert storage.exists()
     assert deployments.exists()
-    assert list(storage.iterdir()) == []
+    assert [path.name for path in storage.iterdir()] == ["fonts"]
+    assert (storage / "fonts" / "cache" / "Butler.woff2").exists()
     assert list(deployments.iterdir()) == []
