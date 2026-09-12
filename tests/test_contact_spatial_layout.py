@@ -23,7 +23,7 @@ def _contact_rows(root: DesignNode) -> list[DesignNode]:
     return [child for child in root.children if "::contact-spatial-row-" in (child.source_id or "")]
 
 
-def test_contact_text_is_grouped_with_visual_anchor_rows():
+def test_contact_text_is_grouped_with_first_line_visual_slots():
     root = DesignNode(
         kind="container",
         source_id="root",
@@ -53,14 +53,22 @@ def test_contact_text_is_grouped_with_visual_anchor_rows():
     assert len(rows) == 3
     assert [row.children[1].text for row in rows] == ["first", "second", "third\ncontinuation"]
     assert all(row.style.layout_direction == "horizontal" for row in rows)
-    assert all(row.style.counter_axis_align == "center" for row in rows)
+    assert all(row.style.counter_axis_align == "min" for row in rows)
     assert all(row.style.gap is not None and row.style.gap >= 0 for row in rows)
-    assert [row.children[0].source_id for row in rows] == ["mail", "instagram", "phone"]
-    assert all(row.children[0].style.x is None for row in rows)
+
+    slots = [row.children[0] for row in rows]
+    assert all(slot.kind == "container" for slot in slots)
+    assert all(slot.style.layout_direction == "vertical" for slot in slots)
+    assert all(slot.style.primary_axis_align == "center" for slot in slots)
+    assert all(slot.style.counter_axis_align == "center" for slot in slots)
+    assert all(slot.style.height == 21.6 for slot in slots)
+    assert [slot.children[0].source_id for slot in slots] == ["mail", "instagram", "phone"]
+    assert all(slot.children[0].style.x is None for slot in slots)
     assert all(row.children[1].style.x is None for row in rows)
+    assert rows[-1].style.height == 43.2
 
 
-def test_wrapped_icon_is_stripped_to_single_visual_leaf():
+def test_wrapped_icon_is_stripped_inside_first_line_slot():
     fax_icon = _node("icon", "fax-glyph", x=1288, y=5534, width=25, height=26)
     fax_frame = DesignNode(
         kind="container",
@@ -94,10 +102,10 @@ def test_wrapped_icon_is_stripped_to_single_visual_leaf():
     rows = _contact_rows(result)
 
     assert [row.children[1].text for row in rows] == [": phone", ": fax", ": email"]
-    assert [row.children[0].source_id for row in rows] == ["phone", "fax-glyph", "mail"]
+    assert [row.children[0].children[0].source_id for row in rows] == ["phone", "fax-glyph", "mail"]
     assert all(child.source_id != "fax-frame" for child in result.children)
-    assert rows[1].children[0].kind == "icon"
-    assert rows[1].style.counter_axis_align == "center"
+    assert rows[1].children[0].children[0].kind == "icon"
+    assert rows[1].style.counter_axis_align == "min"
 
 
 def test_non_contact_multiline_text_is_left_alone():
