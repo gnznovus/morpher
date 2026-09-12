@@ -78,7 +78,10 @@ def _apply_rotation(settings: dict, style: DesignStyle) -> None:
     degrees = math.degrees(style.rotation)
     if abs(degrees) < 1e-7:
         return
-    settings["_transform_rotate_popover"] = "yes"
+    # Elementor stores the active transform popover using the literal
+    # "transform" value. Using "yes" preserves the numeric value in the editor
+    # but does not apply it until the control is touched manually.
+    settings["_transform_rotate_popover"] = "transform"
     settings["_transform_rotateZ_effect"] = _size("deg", degrees)
 
 
@@ -394,11 +397,19 @@ def _is_vertical_divider(style: DesignStyle) -> bool:
 def _render_divider(node: DesignNode, path: str, parent_style: DesignStyle | None = None, *, design_viewport: float | None = None) -> dict:
     style = node.style
     if _is_vertical_divider(style):
-        settings: dict = {"content_width": "full"}
+        # A container carries Elementor's own layout chrome and rendered much
+        # wider than the authored 1px line. Use a spacer widget instead: it can
+        # own an exact custom width and a fluid height without default padding.
+        settings: dict = {
+            "space": _size("custom", f"{_composition_vw(style.height, design_viewport) or 0:g}vw"),
+            "space_mobile": _size("custom", f"{_composition_vw(style.height, design_viewport) or 0:g}vw"),
+            "_element_width": "initial",
+            "_element_custom_width": _size("px", style.stroke_weight or 1.0),
+        }
         if parent_style is not None and all(value is not None for value in (style.x, style.y, parent_style.x, parent_style.y)):
             left = _relative_offset(style.x, parent_style.x)
             top = _relative_offset(style.y, parent_style.y)
-            settings["position"] = "absolute"
+            settings["_position"] = "absolute"
             settings["_offset_orientation_h"] = "start"
             settings["_offset_orientation_v"] = "start"
             left_vw = _composition_vw(left, design_viewport)
@@ -407,16 +418,10 @@ def _render_divider(node: DesignNode, path: str, parent_style: DesignStyle | Non
                 settings["_offset_x"] = _size("vw", left_vw)
             if top_vw is not None:
                 settings["_offset_y"] = _size("vw", top_vw)
-        weight = style.stroke_weight or 1.0
-        settings["width"] = _size("px", weight)
-        height_vw = _composition_vw(style.height, design_viewport)
-        if height_vw is not None:
-            settings["min_height"] = _size("vw", height_vw)
-            settings["min_height_mobile"] = _size("vw", height_vw)
         if style.stroke_color:
             settings["background_background"] = "classic"
             settings["background_color"] = style.stroke_color
-        return {"id": _element_id(node, path), "settings": settings, "elements": [], "isInner": False, "elType": "container"}
+        return {"id": _element_id(node, path), "settings": settings, "elements": [], "isInner": False, "widgetType": "spacer", "elType": "widget"}
 
     settings = {"style": "solid", "gap": _size("px", 0)}
     if style.stroke_color:
