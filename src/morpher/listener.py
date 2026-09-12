@@ -17,7 +17,7 @@ ERROR_LOG_PATH = "/figma/error-log"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIGMA_LOG_DIR = REPO_ROOT / "figma-plugin" / "log"
 FIGMA_ERROR_LOG = FIGMA_LOG_DIR / "err-log.txt"
-FIGMA_REPORT = FIGMA_LOG_DIR / "report.txt"
+FIGMA_WARNING_LOG = FIGMA_LOG_DIR / "warning.txt"
 
 
 def safe_stem(value: str) -> str:
@@ -104,21 +104,45 @@ def _save_text_assets(envelope: dict[str, Any], storage: StoragePaths, source: P
     return _save_svg_assets(envelope, "textAssets", "Text outline", storage, source)
 
 
-def _save_report(envelope: dict[str, Any]) -> None:
-    report = envelope.get("report")
-    if not isinstance(report, str) or not report.strip():
-        return
-    FIGMA_REPORT.parent.mkdir(parents=True, exist_ok=True)
-    temporary = FIGMA_REPORT.with_suffix(".txt.tmp")
-    temporary.write_text(report.rstrip() + "\n", encoding="utf-8")
-    temporary.replace(FIGMA_REPORT)
+def _save_warnings(envelope: dict[str, Any], name: str, node_id: str | None) -> int:
+    warnings = envelope.get("warnings", [])
+    if warnings is None:
+        warnings = []
+    if not isinstance(warnings, list) or any(not isinstance(item, str) for item in warnings):
+        raise ValueError("Request 'warnings' must be an array of strings when provided.")
+
+    cleaned = [item.strip() for item in warnings if item.strip()]
+    if not cleaned:
+        FIGMA_WARNING_LOG.unlink(missing_ok=True)
+        return 0
+
+    FIGMA_WARNING_LOG.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "MORPHER FIGMA WARNINGS",
+        "======================",
+        "",
+        f"Source: {name}",
+    ]
+    if node_id:
+        lines.append(f"Node: {node_id}")
+    lines.extend(["", "WARNINGS"])
+    lines.extend(f"[{index}] {warning}" for index, warning in enumerate(cleaned, start=1))
+    lines.extend(["", f"Total: {len(cleaned)}"])
+
+    temporary = FIGMA_WARNING_LOG.with_suffix(".txt.tmp")
+    temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    temporary.replace(FIGMA_WARNING_LOG)
+    return len(cleaned)
 
 
-def save_figma_import(envelope: dict[str, Any], storage: StoragePaths) -> tuple[Path, bool, int, int, int]:
+def save_figma_import(envelope: dict[str, Any], storage: StoragePaths) -> tuple[Path, bool, int, int, int, int]:
     name = envelope.get("name")
+    node_id = envelope.get("nodeId")
     payload = envelope.get("payload")
     if not isinstance(name, str) or not name.strip():
         raise ValueError("Request must include a non-empty string 'name'.")
+    if node_id is not None and not isinstance(node_id, str):
+        raise ValueError("Request 'nodeId' must be a string when provided.")
     if not isinstance(payload, dict):
         raise ValueError("Request must include an object 'payload'.")
     if "document" not in payload:
@@ -133,8 +157,8 @@ def save_figma_import(envelope: dict[str, Any], storage: StoragePaths) -> tuple[
     assets_saved = _save_assets(envelope, storage, target)
     vectors_saved = _save_vector_assets(envelope, storage, target)
     texts_saved = _save_text_assets(envelope, storage, target)
-    _save_report(envelope)
-    return target, replaced, assets_saved, vectors_saved, texts_saved
+    warnings_saved = _save_warnings(envelope, name.strip(), node_id)
+    return target, replaced, assets_saved, vectors_saved, texts_saved, warnings_saved
 
 
 def save_figma_error_log(envelope: dict[str, Any]) -> Path:
@@ -181,8 +205,21 @@ class MorpherRequestHandler(BaseHTTPRequestHandler):
                 target = save_figma_error_log(envelope)
                 self._json(200, {"ok": True, "filename": target.name})
                 return
-            target, replaced, assets_saved, vectors_saved, texts_saved = save_figma_import(envelope, self.storage)
-            self._json(200, {"ok": True, "filename": target.name, "replaced": replaced, "assetsSaved": assets_saved, "vectorsSaved": vectors_saved, "textsSaved": texts_saved})
+            target, replaced, assets_saved, vectors_saved, texts_saved, warnings_saved = save_figma_import(
+                envelope, self.storage
+            )
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "filename": target.name,
+                    "replaced": replaced,
+                    "assetsSaved": assets_saved,
+                    "vectorsSaved": vectors_saved,
+                    "textsSaved": texts_saved,
+                    "warningsSaved": warnings_saved,
+                },
+            )
         except (ValueError, json.JSONDecodeError) as error:
             self._json(400, {"error": str(error)})
         except OSError as error:
@@ -197,7 +234,7 @@ def serve(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, storage_root: Path
     server = ThreadingHTTPServer((host, port), handler)
     print(f"Morpher listener: http://{host}:{port}{IMPORT_PATH}")
     print(f"Figma error log: {FIGMA_ERROR_LOG}")
-    print(f"Figma report: {FIGMA_REPORT}")
+    print(f"Figma warning log: {FIGMA_WARNING_LOG}")
     print(f"Figma imports: {storage_root / 'figma-import'}")
     try:
         server.serve_forever()
