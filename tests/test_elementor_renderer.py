@@ -77,12 +77,12 @@ def test_free_layout_uses_fluid_owner_relative_geometry():
     assert heading_settings["_offset_orientation_h"] == "start"
     assert heading_settings["_offset_orientation_v"] == "start"
     assert heading_settings["_offset_x"] == {"unit": "vw", "size": 5.333333333333334, "sizes": []}
-    assert heading_settings["_offset_y"] == {"unit": "vw", "size": 6.0, "sizes": []}
+    assert heading_settings["_offset_y"] == {"unit": "vw", "size": 4.0, "sizes": []}
     assert heading_settings["_element_custom_width"] == {"unit": "vw", "size": 11.5, "sizes": []}
     shape_settings = container["elements"][1]["settings"]
     assert shape_settings["position"] == "absolute"
     assert shape_settings["_offset_x"] == {"unit": "vw", "size": 33.33333333333333, "sizes": []}
-    assert shape_settings["_offset_y"] == {"unit": "vw", "size": 15.0, "sizes": []}
+    assert shape_settings["_offset_y"] == {"unit": "vw", "size": 10.0, "sizes": []}
     assert shape_settings["width"] == {"unit": "vw", "size": 20.0, "sizes": []}
     assert shape_settings["min_height"] == {"unit": "vw", "size": 20.0, "sizes": []}
 
@@ -112,7 +112,7 @@ def test_auto_sized_absolute_text_stays_natural_width():
 
     assert settings["_position"] == "absolute"
     assert settings["_offset_x"] == {"unit": "vw", "size": 30.0, "sizes": []}
-    assert settings["_offset_y"] == {"unit": "vw", "size": 20.0, "sizes": []}
+    assert settings["_offset_y"] == {"unit": "vw", "size": 10.0, "sizes": []}
     assert settings["_element_width"] == "auto"
     assert "_element_custom_width" not in settings
 
