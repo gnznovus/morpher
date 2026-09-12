@@ -25,10 +25,49 @@ function isNoVisibleLayersExportError(error) {
   return message.includes("may not have any visible layers");
 }
 
+function isExplicitlyHidden(node) {
+  return node.visible === false || (typeof node.opacity === "number" && node.opacity <= 0);
+}
+
+function nonRenderingReason(node) {
+  if (isExplicitlyHidden(node)) return node.visible === false ? "hidden" : "zero opacity";
+  if (typeof node.width === "number" && node.width <= 0) return "zero width";
+  if (typeof node.height === "number" && node.height <= 0) return "zero height";
+  if ("absoluteRenderBounds" in node && node.absoluteRenderBounds === null) return "no render bounds";
+  if (node.type === "TEXT" && !(node.characters || "").trim()) return "empty text";
+  return null;
+}
+
+function createSkipStats() {
+  return { total: 0, reasons: {} };
+}
+
+function recordSkip(stats, reason) {
+  stats.total += 1;
+  stats.reasons[reason] = (stats.reasons[reason] || 0) + 1;
+}
+
+function mergeSkipStats(target, source) {
+  target.total += source.total;
+  for (const [reason, count] of Object.entries(source.reasons)) {
+    target.reasons[reason] = (target.reasons[reason] || 0) + count;
+  }
+  return target;
+}
+
+function formatSkipStats(label, stats) {
+  if (!stats.total) return null;
+  const details = Object.entries(stats.reasons)
+    .map(([reason, count]) => `${count} ${reason}`)
+    .join(", ");
+  return `${stats.total} ${label} skipped${details ? ` (${details})` : ""}`;
+}
+
 function collectImageRefs(node, refs = new Set()) {
+  if (isExplicitlyHidden(node)) return refs;
   if ("fills" in node && Array.isArray(node.fills)) {
     for (const fill of node.fills) {
-      if (fill && fill.type === "IMAGE" && fill.imageHash) refs.add(fill.imageHash);
+      if (fill && fill.visible !== false && fill.type === "IMAGE" && fill.imageHash) refs.add(fill.imageHash);
     }
   }
   if ("children" in node) {
@@ -38,8 +77,8 @@ function collectImageRefs(node, refs = new Set()) {
 }
 
 function isVectorComposite(node) {
-  if (node.type === "VECTOR" || !("children" in node)) return false;
-  const children = node.children.filter((child) => child.visible !== false);
+  if (node.type === "VECTOR" || !("children" in node) || isExplicitlyHidden(node)) return false;
+  const children = node.children.filter((child) => !isExplicitlyHidden(child));
   if (children.length === 0) return false;
   if (children.every((child) => child.type === "VECTOR")) return true;
 
@@ -51,26 +90,35 @@ function isVectorComposite(node) {
   return annotation.length <= 8;
 }
 
-function collectVectorAssets(node, assets = []) {
+function collectVectorAssets(node, result = { assets: [], skipped: createSkipStats() }) {
+  if (isExplicitlyHidden(node)) return result;
   if (node.type === "VECTOR" || isVectorComposite(node)) {
-    assets.push(node);
-    return assets;
+    const reason = nonRenderingReason(node);
+    if (reason) recordSkip(result.skipped, reason);
+    else result.assets.push(node);
+    return result;
   }
   if ("children" in node) {
-    for (const child of node.children) collectVectorAssets(child, assets);
+    for (const child of node.children) collectVectorAssets(child, result);
   }
-  return assets;
+  return result;
 }
 
-function collectTextAssets(node, assets = []) {
+function collectTextAssets(node, result = { assets: [], skipped: createSkipStats() }) {
+  if (isExplicitlyHidden(node)) return result;
   // Text inside an atomic vector composition is already captured by the
   // composition SVG; exporting it again would create an orphan child asset.
-  if (isVectorComposite(node)) return assets;
-  if (node.type === "TEXT") assets.push(node);
-  if ("children" in node) {
-    for (const child of node.children) collectTextAssets(child, assets);
+  if (isVectorComposite(node)) return result;
+  if (node.type === "TEXT") {
+    const reason = nonRenderingReason(node);
+    if (reason) recordSkip(result.skipped, reason);
+    else result.assets.push(node);
+    return result;
   }
-  return assets;
+  if ("children" in node) {
+    for (const child of node.children) collectTextAssets(child, result);
+  }
+  return result;
 }
 
 async function exportImageAssets(node) {
@@ -85,27 +133,29 @@ async function exportImageAssets(node) {
 }
 
 async function exportVectorAssets(node) {
+  const collected = collectVectorAssets(node);
   const assets = [];
-  let skipped = 0;
-  for (const vector of collectVectorAssets(node)) {
+  const runtimeSkipped = createSkipStats();
+  for (const vector of collected.assets) {
     try {
       const bytes = await vector.exportAsync({ format: "SVG", useAbsoluteBounds: true });
       assets.push({ sourceId: vector.id, data: bytesToBase64(bytes) });
     } catch (error) {
       if (isNoVisibleLayersExportError(error)) {
-        skipped += 1;
+        recordSkip(runtimeSkipped, "Figma rejected");
         continue;
       }
       throw error;
     }
   }
-  return { assets, skipped };
+  return { assets, skipped: mergeSkipStats(collected.skipped, runtimeSkipped) };
 }
 
 async function exportTextAssets(node) {
+  const collected = collectTextAssets(node);
   const assets = [];
-  let skipped = 0;
-  for (const text of collectTextAssets(node)) {
+  const runtimeSkipped = createSkipStats();
+  for (const text of collected.assets) {
     try {
       const bytes = await text.exportAsync({
         format: "SVG",
@@ -115,13 +165,13 @@ async function exportTextAssets(node) {
       assets.push({ sourceId: text.id, data: bytesToBase64(bytes) });
     } catch (error) {
       if (isNoVisibleLayersExportError(error)) {
-        skipped += 1;
+        recordSkip(runtimeSkipped, "Figma rejected");
         continue;
       }
       throw error;
     }
   }
-  return { assets, skipped };
+  return { assets, skipped: mergeSkipStats(collected.skipped, runtimeSkipped) };
 }
 
 figma.ui.onmessage = async (message) => {
@@ -143,9 +193,10 @@ figma.ui.onmessage = async (message) => {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || `Morpher returned HTTP ${response.status}`);
 
-    const skippedNotes = [];
-    if (vectorExport.skipped) skippedNotes.push(`${vectorExport.skipped} non-rendering vectors skipped`);
-    if (textExport.skipped) skippedNotes.push(`${textExport.skipped} non-rendering text outlines skipped`);
+    const skippedNotes = [
+      formatSkipStats("non-rendering vectors", vectorExport.skipped),
+      formatSkipStats("non-rendering text outlines", textExport.skipped),
+    ].filter(Boolean);
     const skippedNote = skippedNotes.length ? `, ${skippedNotes.join(", ")}` : "";
 
     figma.ui.postMessage({
