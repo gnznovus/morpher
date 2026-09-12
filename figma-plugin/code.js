@@ -30,7 +30,6 @@ function isExplicitlyHidden(node) {
 }
 
 function nonRenderingReason(node) {
-  if (isExplicitlyHidden(node)) return node.visible === false ? "hidden" : "zero opacity";
   if (typeof node.width === "number" && node.width <= 0) return "zero width";
   if (typeof node.height === "number" && node.height <= 0) return "zero height";
   if ("absoluteRenderBounds" in node && node.absoluteRenderBounds === null) return "no render bounds";
@@ -63,21 +62,21 @@ function formatSkipStats(label, stats) {
   return `${stats.total} ${label} skipped${details ? ` (${details})` : ""}`;
 }
 
-function collectImageRefs(node, refs = new Set()) {
-  if (isExplicitlyHidden(node)) return refs;
-  if ("fills" in node && Array.isArray(node.fills)) {
+function collectImageRefs(node, refs = new Set(), hiddenAncestor = false) {
+  const hidden = hiddenAncestor || isExplicitlyHidden(node);
+  if (!hidden && "fills" in node && Array.isArray(node.fills)) {
     for (const fill of node.fills) {
       if (fill && fill.visible !== false && fill.type === "IMAGE" && fill.imageHash) refs.add(fill.imageHash);
     }
   }
   if ("children" in node) {
-    for (const child of node.children) collectImageRefs(child, refs);
+    for (const child of node.children) collectImageRefs(child, refs, hidden);
   }
   return refs;
 }
 
 function isVectorComposite(node) {
-  if (node.type === "VECTOR" || !("children" in node) || isExplicitlyHidden(node)) return false;
+  if (node.type === "VECTOR" || !("children" in node)) return false;
   const children = node.children.filter((child) => !isExplicitlyHidden(child));
   if (children.length === 0) return false;
   if (children.every((child) => child.type === "VECTOR")) return true;
@@ -90,33 +89,47 @@ function isVectorComposite(node) {
   return annotation.length <= 8;
 }
 
-function collectVectorAssets(node, result = { assets: [], skipped: createSkipStats() }) {
-  if (isExplicitlyHidden(node)) return result;
+function collectVectorAssets(
+  node,
+  result = { assets: [], skipped: createSkipStats() },
+  hiddenAncestor = false
+) {
+  const hidden = hiddenAncestor || isExplicitlyHidden(node);
   if (node.type === "VECTOR" || isVectorComposite(node)) {
-    const reason = nonRenderingReason(node);
-    if (reason) recordSkip(result.skipped, reason);
-    else result.assets.push(node);
+    if (hidden) recordSkip(result.skipped, "hidden");
+    else {
+      const reason = nonRenderingReason(node);
+      if (reason) recordSkip(result.skipped, reason);
+      else result.assets.push(node);
+    }
     return result;
   }
   if ("children" in node) {
-    for (const child of node.children) collectVectorAssets(child, result);
+    for (const child of node.children) collectVectorAssets(child, result, hidden);
   }
   return result;
 }
 
-function collectTextAssets(node, result = { assets: [], skipped: createSkipStats() }) {
-  if (isExplicitlyHidden(node)) return result;
+function collectTextAssets(
+  node,
+  result = { assets: [], skipped: createSkipStats() },
+  hiddenAncestor = false
+) {
+  const hidden = hiddenAncestor || isExplicitlyHidden(node);
   // Text inside an atomic vector composition is already captured by the
   // composition SVG; exporting it again would create an orphan child asset.
   if (isVectorComposite(node)) return result;
   if (node.type === "TEXT") {
-    const reason = nonRenderingReason(node);
-    if (reason) recordSkip(result.skipped, reason);
-    else result.assets.push(node);
+    if (hidden) recordSkip(result.skipped, "hidden");
+    else {
+      const reason = nonRenderingReason(node);
+      if (reason) recordSkip(result.skipped, reason);
+      else result.assets.push(node);
+    }
     return result;
   }
   if ("children" in node) {
-    for (const child of node.children) collectTextAssets(child, result);
+    for (const child of node.children) collectTextAssets(child, result, hidden);
   }
   return result;
 }
