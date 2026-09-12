@@ -31,6 +31,7 @@ class RenderOutputs:
     elementor: Path
     warning_count: int
     elementor_font_plugin: Path | None = None
+    font_warnings: tuple[str, ...] = ()
 
 
 def _copy_assets(
@@ -256,11 +257,13 @@ def render_path(
         encoding="utf-8",
     )
 
+    font_warnings: list[str] = []
     elementor_font_plugin = render_elementor_font_plugin(
         elementor_root,
         font_root=storage.fonts,
         font_cache=storage.font_registry_cache,
         output_dir=storage.elementor_font_plugin,
+        diagnostics=font_warnings,
     )
 
     return RenderOutputs(
@@ -271,6 +274,7 @@ def render_path(
         elementor=elementor_path,
         warning_count=len(document.warnings),
         elementor_font_plugin=elementor_font_plugin,
+        font_warnings=tuple(font_warnings),
     )
 
 
@@ -311,6 +315,8 @@ def main() -> None:
         if outputs.elementor_font_plugin is not None:
             print(f"Elementor Font Plugin: {outputs.elementor_font_plugin}")
         print(f"Warnings: {outputs.warning_count}")
+        for warning in outputs.font_warnings:
+            print(warning)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
 
