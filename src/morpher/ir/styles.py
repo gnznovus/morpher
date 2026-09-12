@@ -60,6 +60,7 @@ class DesignStyle:
     font_size: float | None = None
     letter_spacing: float | None = None
     line_height: float | None = None
+    paragraph_spacing: float | None = None
     text_auto_resize: str | None = None
     text_case: str | None = None
     text_align_horizontal: str | None = None
