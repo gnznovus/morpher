@@ -247,10 +247,31 @@ def _elementor_text(value: str | None) -> str:
     return (value or "").replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
 
 
+def _text_transform(value: str | None) -> str | None:
+    return {
+        "UPPER": "uppercase",
+        "LOWER": "lowercase",
+        "TITLE": "capitalize",
+    }.get(value or "")
+
+
+def _source_is_single_line(node: DesignNode) -> bool:
+    text = (node.text or "").replace("\r\n", "\n").replace("\r", "\n")
+    if not text or "\n" in text:
+        return False
+
+    style = node.style
+    line_box = style.line_height or style.font_size
+    if line_box is None or style.height is None:
+        return style.text_auto_resize == "WIDTH_AND_HEIGHT"
+
+    return style.height <= line_box * 1.5
+
+
 def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None, *, design_viewport: float | None = None) -> dict:
     style = node.style
     settings: dict = {"title": _elementor_text(node.text)}
-    has_typography = any(value is not None for value in (style.font_family, style.font_weight, style.font_size, style.line_height, style.letter_spacing))
+    has_typography = any(value is not None for value in (style.font_family, style.font_weight, style.font_size, style.line_height, style.letter_spacing, style.text_case))
     if has_typography:
         settings["header_size"] = "div"
         settings["typography_typography"] = "custom"
@@ -270,6 +291,9 @@ def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None,
         if style.letter_spacing is not None:
             relative = relative_typography_value(style.letter_spacing, style.font_size) if style.font_size is not None else None
             settings["typography_letter_spacing"] = _size("em", relative) if relative is not None else _size("px", style.letter_spacing)
+        text_transform = _text_transform(style.text_case)
+        if text_transform:
+            settings["typography_text_transform"] = text_transform
     if style.text_color:
         settings["title_color"] = style.text_color
     text_align = {"LEFT": "left", "CENTER": "center", "RIGHT": "right", "JUSTIFIED": "justify"}.get(style.text_align_horizontal or "")
@@ -278,6 +302,9 @@ def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None,
     _apply_item_sizing(settings, style, container=False)
     _apply_flow_margin(settings, style, container=False)
     _apply_free_layout_geometry(settings, style, parent_style, container=False, design_viewport=design_viewport)
+    if _is_fluid_absolute(style, parent_style) and _source_is_single_line(node):
+        settings["_element_width"] = "auto"
+        settings.pop("_element_custom_width", None)
     _apply_child_alignment(settings, style, parent_style, container=False)
     return settings
 
