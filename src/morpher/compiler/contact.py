@@ -83,6 +83,33 @@ def _leading_space_count(line: str) -> int:
     return len(line) - len(line.lstrip(" "))
 
 
+def _is_contact_visual_anchor(node: DesignNode) -> bool:
+    """Return true for an icon or a wrapper whose descendants are only icon visuals.
+
+    Some Figma exports keep a simple glyph as a direct icon while others wrap the
+    same kind of glyph in a small Frame/Group. The wrapper geometry is the authored
+    row anchor, so contact inference must treat both shapes equivalently without
+    flattening or moving the visual itself.
+    """
+    if node.kind == "icon":
+        return True
+    if node.kind != "container" or not node.children:
+        return False
+
+    found_icon = False
+
+    def visual_only(current: DesignNode) -> bool:
+        nonlocal found_icon
+        if current.kind == "icon":
+            found_icon = True
+            return True
+        if current.kind != "container" or not current.children:
+            return False
+        return all(visual_only(child) for child in current.children)
+
+    return visual_only(node) and found_icon
+
+
 def _contact_icons(parent: DesignNode, text: DesignNode) -> list[DesignNode]:
     text_box = _box(text)
     if text_box is None:
@@ -92,7 +119,7 @@ def _contact_icons(parent: DesignNode, text: DesignNode) -> list[DesignNode]:
     max_gap = max(font_size * 3.0, (text_box[2] - text_box[0]) * 0.15)
     icons: list[DesignNode] = []
     for child in parent.children:
-        if child.kind != "icon" or child is text:
+        if child is text or not _is_contact_visual_anchor(child):
             continue
         icon_box = _box(child)
         if icon_box is None:
