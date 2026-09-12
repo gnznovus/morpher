@@ -100,14 +100,21 @@ def _apply_border_override(
 def _apply_contact_overrides(root: DesignNode, rendered: dict[str, dict]) -> None:
     nodes = _walk_with_paths(root)
 
-    # Generated Contact/Amenities rows always center themselves in their owning
-    # flow column. Their inner row alignment remains Start.
+    # Generated Contact/Amenities pairs are horizontal containers. The container
+    # uses Align Items: Center, while its direct icon/wording widgets keep their
+    # own Alignment at Start.
     for node, path in nodes:
         if node.kind != "container" or "::contact-item-" not in (node.source_id or ""):
             continue
         element = rendered.get(_element_id(node, path))
-        if element is not None:
-            element.setdefault("settings", {})["align_self"] = "center"
+        if element is None:
+            continue
+        settings = element.setdefault("settings", {})
+        settings["flex_align_items"] = "center"
+        settings.pop("align_self", None)
+        for child in element.get("elements", []):
+            if child.get("elType") == "widget":
+                child.setdefault("settings", {})["align"] = "left"
 
     # The newsletter label and its stroked rectangle may live in different Figma
     # groups. Use final authored geometry instead of tree ownership: choose the
