@@ -9,6 +9,7 @@ from pathlib import Path
 
 from morpher.assets import prepare_elementor_assets, semantic_asset_names
 from morpher.compiler.contact import compile_contact_spatial_layout
+from morpher.compiler.elementor_spatial import compile_elementor_spatial_structure
 from morpher.compiler.normalizer import normalize
 from morpher.compiler.responsive import compile_for_responsive_render
 from morpher.inputs.figma_json import FigmaJsonAdapter
@@ -248,9 +249,11 @@ def render_path(
     )
 
     # Elementor preserves the source composition. Contact blocks get one narrow
-    # relationship pass that splits icon-aligned multiline text into spatial rows
-    # without invoking the old responsive/flow compiler.
+    # relationship pass that splits icon-aligned multiline text into spatial rows.
+    # A second spatial pass restores authored ownership for narrow side rails and
+    # normalizes rotated Figma lines for Elementor's transform model.
     elementor_root = compile_contact_spatial_layout(document.root)
+    elementor_root = compile_elementor_spatial_structure(elementor_root)
     elementor = render_elementor(elementor_root, asset_sources=elementor_asset_sources)
     elementor_path.write_text(
         json.dumps(elementor, ensure_ascii=False, separators=(",", ":")),
