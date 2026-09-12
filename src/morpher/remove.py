@@ -86,6 +86,8 @@ def remove_all(
         for child in sorted(root.iterdir(), key=lambda path: path.name.lower()):
             if not _inside(child, root):
                 continue
+            if root.resolve() == storage_root.resolve() and child.name.lower() == "fonts":
+                continue
             _remove_path(child, root)
             removed.append(child)
     return removed
@@ -110,7 +112,7 @@ def main() -> None:
         "--all",
         action="store_true",
         dest="remove_everything",
-        help="Remove all contents of Morpher storage and deployments after interactive confirmation.",
+        help="Remove all Morpher storage except storage/fonts, plus all deployments, after interactive confirmation.",
     )
     args = parser.parse_args()
 
@@ -122,7 +124,7 @@ def main() -> None:
 
     if args.remove_everything:
         print("This will remove ALL Morpher-managed files from:")
-        print(f"  {DEFAULT_STORAGE_ROOT}")
+        print(f"  {DEFAULT_STORAGE_ROOT} (except fonts/)")
         print(f"  {DEFAULT_DEPLOYMENTS_ROOT}")
         answer = input("\nContinue? [y/N]: ").strip().lower()
         if answer not in {"y", "yes"}:
