@@ -74,18 +74,13 @@ class FigmaJsonAdapter:
             return "divider"
         if source_type == "RECTANGLE":
             return "image" if self._image_ref(node) else "shape"
+        if source_type == "ELLIPSE":
+            return "shape"
         return "unsupported"
 
     @staticmethod
     def _is_vector_composite(node: dict[str, Any]) -> bool:
-        """Treat vector-dominant authored marks as one atomic graphic.
-
-        Figma artwork is sometimes built from one VECTOR per outlined glyph plus
-        a tiny live-text annotation such as a trademark. That is still one visual
-        object, not a layout container. Keep the older all-vector case, and also
-        accept a strongly vector-dominant container with only a small amount of
-        short annotation text. Ordinary icon/text rows remain containers.
-        """
+        """Treat vector-dominant authored marks as one atomic graphic."""
         if node.get("type") not in _CONTAINER_TYPES:
             return False
         children = [
@@ -142,10 +137,15 @@ class FigmaJsonAdapter:
         font_postscript_name = text_style.get("fontPostScriptName")
         font_style = text_style.get("fontStyle")
         font_weight = self._integer(text_style.get("fontWeight"))
+        width = self._geometry_number(box.get("width"))
+        height = self._geometry_number(box.get("height"))
+        border_radius = self._geometry_number(node.get("cornerRadius"))
+        if source_type == "ELLIPSE" and width is not None and height is not None:
+            border_radius = min(width, height) / 2.0
 
         return DesignStyle(
-            width=self._geometry_number(box.get("width")),
-            height=self._geometry_number(box.get("height")),
+            width=width,
+            height=height,
             x=self._geometry_number(box.get("x")),
             y=self._geometry_number(box.get("y")),
             rotation=self._geometry_number(node.get("rotation")),
@@ -162,7 +162,7 @@ class FigmaJsonAdapter:
             text_color=solid_color if source_type == "TEXT" else None,
             stroke_color=self._solid_stroke_color(node),
             stroke_weight=self._geometry_number(node.get("strokeWeight")),
-            border_radius=self._geometry_number(node.get("cornerRadius")),
+            border_radius=border_radius,
             layout_direction=self._layout_direction(layout_mode),
             width_mode=self._sizing_mode(node.get("layoutSizingHorizontal")),
             height_mode=self._sizing_mode(node.get("layoutSizingVertical")),
