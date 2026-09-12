@@ -43,6 +43,35 @@ def _is_rotated_rail_text(node: DesignNode) -> bool:
     return abs(abs(node.style.rotation) - math.pi / 2) <= 0.05
 
 
+def _normalize_rotated_text_box(node: DesignNode) -> None:
+    """Recover the pre-transform box Elementor needs for quarter-turn text.
+
+    Figma's absoluteBoundingBox describes the already-rotated visual bounds. Elementor
+    rotates the widget after layout, so a 90-degree label needs the unrotated width
+    and height while keeping the same visual center. Without this, an owned label is
+    constrained by a narrow rail and wraps into multiple columns before rotation.
+    """
+    style = node.style
+    if not _is_rotated_rail_text(node):
+        return
+    if any(value is None for value in (style.x, style.y, style.width, style.height)):
+        return
+
+    center_x = style.x + style.width / 2.0
+    center_y = style.y + style.height / 2.0
+    logical_width = style.height
+    logical_height = style.width
+
+    style.x = center_x - logical_width / 2.0
+    style.y = center_y - logical_height / 2.0
+    style.width = logical_width
+    style.height = logical_height
+    # Elementor's auto-width heading is still constrained by the parent rail.
+    # Preserve the authored single-line width explicitly instead.
+    style.text_auto_resize = None
+    style.width_mode = "fixed"
+
+
 def _own_rail_text(parent: DesignNode) -> None:
     consumed: set[int] = set()
     for surface in parent.children:
@@ -58,7 +87,10 @@ def _own_rail_text(parent: DesignNode) -> None:
         if not owned:
             continue
         surface.kind = "container"
-        surface.children.extend(deepcopy(child) for child in owned)
+        for child in owned:
+            owned_child = deepcopy(child)
+            _normalize_rotated_text_box(owned_child)
+            surface.children.append(owned_child)
         consumed.update(id(child) for child in owned)
 
     if consumed:
