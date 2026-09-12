@@ -7,7 +7,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from morpher.assets import semantic_asset_names
+from morpher.assets import prepare_elementor_assets, semantic_asset_names
 from morpher.compiler.contact import compile_contact_spatial_layout
 from morpher.compiler.normalizer import normalize
 from morpher.compiler.responsive import compile_for_responsive_render
@@ -59,6 +59,24 @@ def _copy_assets(
             ) from exc
         asset_sources[asset.stem] = target.relative_to(relative_root).as_posix()
     return asset_sources
+
+
+def _prepare_elementor_assets(
+    source: Path,
+    storage: StoragePaths,
+    root: DesignNode,
+) -> dict[str, str]:
+    source_dir = storage.figma_asset_dir(source)
+    if not source_dir.exists():
+        return {}
+
+    assets = [asset for asset in source_dir.iterdir() if asset.is_file()]
+    return prepare_elementor_assets(
+        root,
+        assets,
+        storage.elementor_asset_dir(source),
+        storage.output_elementor,
+    )
 
 
 def _text_source_keys(root: DesignNode) -> set[str]:
@@ -222,12 +240,10 @@ def render_path(
         native_html_path.write_text(native_html, encoding="utf-8")
         native_css_path.write_text(native_css, encoding="utf-8")
 
-    elementor_asset_sources = _copy_assets(
+    elementor_asset_sources = _prepare_elementor_assets(
         path,
         storage,
         document.root,
-        storage.elementor_asset_dir(path),
-        storage.output_elementor,
     )
 
     # Elementor preserves the source composition. Contact blocks get one narrow
