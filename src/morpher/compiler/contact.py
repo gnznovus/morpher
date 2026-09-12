@@ -195,15 +195,12 @@ def _build_contact_items(text: DesignNode, anchors: list[DesignNode]) -> list[De
         leading = _leading_space_count(item_lines[0])
         text_x = (text.style.x or 0.0) + leading * font_size * 0.36
         item_y = text.style.y + (anchor_box[1] - first_anchor_box[1])
-        icon_local_y = anchor_box[1] - item_y
         gap = max(0.0, text_x - anchor_box[2])
 
         visual = _contact_visual_leaf(anchor)
         _clear_local_geometry(visual)
         visual.style.width_mode = "fixed"
         visual.style.height_mode = "fixed"
-        if icon_local_y > 0:
-            visual.style.margin_top_percent = icon_local_y
 
         wording = deepcopy(text)
         wording.children = []
@@ -218,7 +215,7 @@ def _build_contact_items(text: DesignNode, anchors: list[DesignNode]) -> list[De
         wording.style.text_auto_resize = "WIDTH_AND_HEIGHT"
 
         text_height = line_height * len(item_lines)
-        visual_height = (anchor_box[3] - anchor_box[1]) + max(0.0, icon_local_y)
+        visual_height = anchor_box[3] - anchor_box[1]
         item = DesignNode(
             kind="container",
             name=f"{text.name or 'contact'} item {index + 1}",
