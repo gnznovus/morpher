@@ -72,6 +72,7 @@ def render_elementor_font_plugin(
 
     manifest = _load_manifest(manifest_path)
     faces: dict[str, dict] = manifest.setdefault("faces", {})
+    missing: dict[str, str] = {}
 
     for node in _walk(root):
         intent = node.style.font
@@ -80,6 +81,8 @@ def render_elementor_font_plugin(
 
         resolution = resolver(font_root, font_cache, intent)
         if resolution.face is None:
+            family_key = resolution.request.family.casefold()
+            missing.setdefault(family_key, render_font_resolution_css(resolution).rstrip())
             continue
 
         face = resolution.face
@@ -105,10 +108,10 @@ def render_elementor_font_plugin(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    css_path.write_text(
-        "\n".join(faces[key]["css"].rstrip() for key in sorted(faces)).rstrip() + "\n",
-        encoding="utf-8",
-    )
+
+    css_blocks = [faces[key]["css"].rstrip() for key in sorted(faces)]
+    css_blocks.extend(missing[key] for key in sorted(missing))
+    css_path.write_text("\n".join(css_blocks).rstrip() + "\n", encoding="utf-8")
     return output_dir
 
 
