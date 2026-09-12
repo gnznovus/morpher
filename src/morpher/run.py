@@ -54,6 +54,13 @@ def _print_outputs(outputs: RenderOutputs) -> None:
     print(f"  Elementor:     {outputs.elementor}")
 
 
+def _font_warning_message(css_comment: str) -> str:
+    warning = css_comment.strip()
+    if warning.startswith("/*") and warning.endswith("*/"):
+        warning = warning[2:-2].strip()
+    return warning
+
+
 def clean_outputs(storage: StoragePaths | None = None) -> None:
     """Delete generated output only; source/import/processed data is never touched."""
     storage = storage or StoragePaths()
@@ -148,6 +155,17 @@ def main() -> None:
     skipped = sum(result.status == "skipped" for result in results)
     failed = sum(result.status == "failed" for result in results)
     print(f"\nResult: processed={processed} skipped={skipped} failed={failed}")
+
+    font_warnings = sorted(
+        {
+            _font_warning_message(warning)
+            for result in results
+            if result.outputs is not None
+            for warning in result.outputs.font_warnings
+        }
+    )
+    for warning in font_warnings:
+        print(warning)
 
     if failed:
         raise SystemExit(1)
