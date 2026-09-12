@@ -87,6 +87,8 @@ def _leading_space_count(line: str) -> int:
 def _is_contact_visual_anchor(node: DesignNode) -> bool:
     if node.kind == "icon":
         return True
+    if node.kind == "shape" and node.source_type == "ELLIPSE":
+        return True
     if node.kind != "container" or not node.children:
         return False
 
@@ -128,6 +130,7 @@ def _contact_icons(parent: DesignNode, text: DesignNode) -> list[DesignNode]:
 
     font_size = text.style.font_size or 16.0
     max_gap = max(font_size * 3.0, (text_box[2] - text_box[0]) * 0.15)
+    max_anchor_size = font_size * 4.0
     icons: list[DesignNode] = []
     for child in parent.children:
         if child is text or not _is_contact_visual_anchor(child):
@@ -135,9 +138,20 @@ def _contact_icons(parent: DesignNode, text: DesignNode) -> list[DesignNode]:
         icon_box = _box(child)
         if icon_box is None:
             continue
+        icon_width = icon_box[2] - icon_box[0]
+        icon_height = icon_box[3] - icon_box[1]
+        if icon_width > max_anchor_size or icon_height > max_anchor_size:
+            continue
         vertical_overlap = max(0.0, min(text_box[3], icon_box[3]) - max(text_box[1], icon_box[1]))
         if vertical_overlap <= 0:
             continue
+
+        # Marker rails are leading visuals. Without this directional guard, the
+        # left amenities text wall can accidentally claim the right column's bullets
+        # because an anchor to the right produces a zero "left gap".
+        if icon_box[0] >= text_box[0]:
+            continue
+
         horizontal_overlap = max(0.0, min(text_box[2], icon_box[2]) - max(text_box[0], icon_box[0]))
         horizontal_gap = max(0.0, text_box[0] - icon_box[2])
         if horizontal_overlap <= 0 and horizontal_gap > max_gap:
@@ -160,17 +174,56 @@ def _clear_local_geometry(node: DesignNode) -> None:
     node.style.margin_left_percent = None
 
 
+def _line_start_indices(
+    anchors: list[DesignNode],
+    raw_lines: list[str],
+    line_height: float,
+) -> list[int] | None:
+    """Map visual-anchor rhythm to logical text-line starts.
+
+    A normal marker-to-marker gap represents one logical row. A gap near twice that
+    rhythm means the preceding wording wrapped to a continuation line. This uses the
+    authored marker rail rather than assuming every newline starts a new item.
+    """
+    if not anchors or not raw_lines or line_height <= 0:
+        return None
+
+    tops: list[float] = []
+    for anchor in anchors:
+        box = _box(anchor)
+        if box is None:
+            return None
+        tops.append(box[1])
+
+    if len(tops) == 1:
+        return [0]
+    gaps = [later - earlier for earlier, later in zip(tops, tops[1:]) if later > earlier]
+    if not gaps:
+        return None
+    base_gap = min(gaps)
+    if base_gap <= 0:
+        return None
+
+    starts = [0]
+    for gap in (later - earlier for earlier, later in zip(tops, tops[1:])):
+        line_count = max(1, int(round(gap / base_gap)))
+        start = starts[-1] + line_count
+        if start >= len(raw_lines):
+            return None
+        starts.append(start)
+    return starts
+
+
 def _build_contact_items(
     text: DesignNode,
     anchors: list[DesignNode],
     parent_style: DesignStyle,
 ) -> list[DesignNode] | None:
-    """Turn one multiline text wall plus visual rail into authored item pairs.
+    """Turn one multiline text wall plus a visual rail into authored item pairs.
 
-    The text wall provides one shared wording column, while the visual rail provides
-    the stable per-item Y rhythm. Each output item owns one icon and one wording
-    node, so the relationship is explicit before Elementor sees it. Continuation
-    lines after the final anchored line remain part of that final wording item.
+    The visual rail defines logical item starts. Text between two neighboring anchor
+    starts stays inside the earlier item, which preserves wrapped continuation lines
+    such as a two-line amenity beside one bullet marker.
     """
     if not text.text or not text.source_id:
         return None
@@ -185,6 +238,10 @@ def _build_contact_items(
 
     font_size = text.style.font_size or 16.0
     line_height = text.style.line_height or font_size
+    starts = _line_start_indices(anchors, raw_lines, line_height)
+    if starts is None:
+        return None
+
     shared_leading = _leading_space_count(raw_lines[0])
     shared_text_x = (text.style.x or 0.0) + shared_leading * font_size * 0.36
     parent_x = parent_style.x or 0.0
@@ -196,9 +253,11 @@ def _build_contact_items(
         if anchor_box is None:
             return None
 
-        item_lines = [raw_lines[index]]
-        if index == len(anchors) - 1 and len(raw_lines) > len(anchors):
-            item_lines.extend(raw_lines[len(anchors) :])
+        start = starts[index]
+        end = starts[index + 1] if index + 1 < len(starts) else len(raw_lines)
+        item_lines = raw_lines[start:end]
+        if not item_lines:
+            return None
 
         visual = _contact_visual_leaf(anchor)
         visual_box = _box(visual) or anchor_box
@@ -240,7 +299,9 @@ def _build_contact_items(
                 width_mode="hug",
                 height_mode="fixed",
                 gap=gap,
-                counter_axis_align="center",
+                # Elementor's row "Alignment" must stay at Start. Center causes
+                # icons/bullets and wrapped wording to drift vertically.
+                counter_axis_align="min",
             ),
             children=[visual, wording],
         )
@@ -250,13 +311,12 @@ def _build_contact_items(
 
 
 def compile_contact_spatial_layout(root: DesignNode) -> DesignNode:
-    """Normalize contact text walls into explicit absolute icon/text items.
+    """Normalize visual-marker text walls into explicit absolute row items.
 
-    Figma often exports several logical contact items as one multiline text node
-    beside a separate icon rail. Recover those item boundaries before rendering,
-    strip redundant single-icon wrappers, and keep every reconstructed item on the
-    existing free-layout/Fluid Absolute path. Native keeps the older flow-oriented
-    contact ownership pass below.
+    Figma often exports logical rows as one multiline text node beside a separate
+    visual rail. Contacts use icons; amenity lists may use small ellipse markers.
+    Recover those item boundaries before Elementor sees them while preserving the
+    existing size guard so large decorative graphics cannot become row anchors.
     """
     compiled = deepcopy(root)
 

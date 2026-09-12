@@ -16,6 +16,15 @@ def _resolution(face: FontFace, intent: FontIntent) -> FontResolution:
     )
 
 
+def _missing_resolution(intent: FontIntent) -> FontResolution:
+    return FontResolution(
+        status="missing",
+        request=FontRequest(intent.family, intent.weight, intent.style, intent.flavor),
+        face=None,
+        provenance="missing_after_refresh",
+    )
+
+
 def test_morpher_plugin_packages_exact_face_and_enqueues_for_preview(tmp_path: Path) -> None:
     source = tmp_path / "fonts" / "HKGrotesk-BoldLegacy.woff2"
     source.parent.mkdir()
@@ -129,3 +138,28 @@ def test_morpher_plugin_deduplicates_same_resolved_face(tmp_path: Path) -> None:
 
     css = (plugin / "assets" / "fonts.css").read_text(encoding="utf-8")
     assert css.count("@font-face") == 1
+
+
+def test_morpher_plugin_emits_deduplicated_missing_font_diagnostic(tmp_path: Path) -> None:
+    intent = FontIntent("Big Caslon", 500, "normal", None)
+    root = DesignNode(
+        kind="container",
+        children=[
+            DesignNode(kind="text", text="A", style=DesignStyle(font=intent)),
+            DesignNode(kind="text", text="B", style=DesignStyle(font=intent)),
+        ],
+    )
+
+    def resolver(*args):
+        return _missing_resolution(args[2])
+
+    plugin = render_elementor_font_plugin(
+        root,
+        font_root=tmp_path / "fonts",
+        font_cache=tmp_path / "fonts" / "font-registry.json",
+        output_dir=tmp_path / "plugin",
+        resolver=resolver,
+    )
+
+    css = (plugin / "assets" / "fonts.css").read_text(encoding="utf-8")
+    assert css.count('/* MORPHER FONT: "Big Caslon" is unavailable */') == 1

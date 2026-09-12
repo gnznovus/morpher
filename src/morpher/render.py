@@ -7,8 +7,9 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from morpher.assets import semantic_asset_names
+from morpher.assets import prepare_elementor_assets, semantic_asset_names
 from morpher.compiler.contact import compile_contact_spatial_layout
+from morpher.compiler.elementor_spatial import compile_elementor_spatial_structure
 from morpher.compiler.normalizer import normalize
 from morpher.compiler.responsive import compile_for_responsive_render
 from morpher.inputs.figma_json import FigmaJsonAdapter
@@ -31,6 +32,7 @@ class RenderOutputs:
     elementor: Path
     warning_count: int
     elementor_font_plugin: Path | None = None
+    font_warnings: tuple[str, ...] = ()
 
 
 def _copy_assets(
@@ -59,6 +61,24 @@ def _copy_assets(
             ) from exc
         asset_sources[asset.stem] = target.relative_to(relative_root).as_posix()
     return asset_sources
+
+
+def _prepare_elementor_assets(
+    source: Path,
+    storage: StoragePaths,
+    root: DesignNode,
+) -> dict[str, str]:
+    source_dir = storage.figma_asset_dir(source)
+    if not source_dir.exists():
+        return {}
+
+    assets = [asset for asset in source_dir.iterdir() if asset.is_file()]
+    return prepare_elementor_assets(
+        root,
+        assets,
+        storage.elementor_asset_dir(source),
+        storage.output_elementor,
+    )
 
 
 def _text_source_keys(root: DesignNode) -> set[str]:
@@ -222,29 +242,31 @@ def render_path(
         native_html_path.write_text(native_html, encoding="utf-8")
         native_css_path.write_text(native_css, encoding="utf-8")
 
-    elementor_asset_sources = _copy_assets(
+    elementor_asset_sources = _prepare_elementor_assets(
         path,
         storage,
         document.root,
-        storage.elementor_asset_dir(path),
-        storage.output_elementor,
     )
 
     # Elementor preserves the source composition. Contact blocks get one narrow
-    # relationship pass that splits icon-aligned multiline text into spatial rows
-    # without invoking the old responsive/flow compiler.
+    # relationship pass that splits icon-aligned multiline text into spatial rows.
+    # A second spatial pass restores authored ownership for narrow side rails and
+    # normalizes rotated Figma lines for Elementor's transform model.
     elementor_root = compile_contact_spatial_layout(document.root)
+    elementor_root = compile_elementor_spatial_structure(elementor_root)
     elementor = render_elementor(elementor_root, asset_sources=elementor_asset_sources)
     elementor_path.write_text(
         json.dumps(elementor, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",
     )
 
+    font_warnings: list[str] = []
     elementor_font_plugin = render_elementor_font_plugin(
         elementor_root,
         font_root=storage.fonts,
         font_cache=storage.font_registry_cache,
         output_dir=storage.elementor_font_plugin,
+        diagnostics=font_warnings,
     )
 
     return RenderOutputs(
@@ -255,6 +277,7 @@ def render_path(
         elementor=elementor_path,
         warning_count=len(document.warnings),
         elementor_font_plugin=elementor_font_plugin,
+        font_warnings=tuple(font_warnings),
     )
 
 
@@ -295,6 +318,8 @@ def main() -> None:
         if outputs.elementor_font_plugin is not None:
             print(f"Elementor Font Plugin: {outputs.elementor_font_plugin}")
         print(f"Warnings: {outputs.warning_count}")
+        for warning in outputs.font_warnings:
+            print(warning)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
 

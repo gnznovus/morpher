@@ -34,6 +34,7 @@ class DesignStyle:
     margin_left_percent: float | None = None
     opacity: float | None = None
     image_opacity: float | None = None
+    image_scale_mode: str | None = None
     background_image_ref: str | None = None
     background_image_opacity: float | None = None
     clips_content: bool | None = None
@@ -59,6 +60,7 @@ class DesignStyle:
     font_size: float | None = None
     letter_spacing: float | None = None
     line_height: float | None = None
+    paragraph_spacing: float | None = None
     text_auto_resize: str | None = None
     text_case: str | None = None
     text_align_horizontal: str | None = None

@@ -44,6 +44,10 @@ wp-content/plugins/morpher-plugin/assets/fonts.json
 wp-content/plugins/morpher-plugin/assets/fonts/*
 !wp-content/plugins/morpher-plugin/assets/fonts/.gitkeep
 
+# Morpher WordPress deployment staging/runtime state
+wp-content/plugins/morpher-plugin/deployments/*
+!wp-content/plugins/morpher-plugin/deployments/.gitkeep
+
 # Local Elementor fidelity fixtures
 # Font binaries stay local; Morpher only mounts them into the testbed.
 testbed/fonts/*.woff

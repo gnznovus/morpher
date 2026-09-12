@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import io
 import re
+import shutil
 from pathlib import Path
+
+from PIL import Image
+import resvg_py
 
 from morpher.ir.nodes import DesignNode
 
@@ -84,5 +89,78 @@ def semantic_asset_names(root: DesignNode, source_assets: list[Path]) -> dict[st
             continue
         result[key] = reserve(f"{context}-asset-{orphan_index}", asset.suffix.lower())
         orphan_index += 1
+
+    return result
+
+
+def elementor_asset_keys(root: DesignNode) -> set[str]:
+    """Return only source assets that can become Elementor media.
+
+    Standalone TEXT nodes are deliberately excluded. If text is contained inside
+    a vector subtree that the compiler has already collapsed to one atomic icon,
+    only that atomic icon's source id reaches this function, so the artwork stays
+    intact without exporting the original text node as separate media.
+    """
+    keys: set[str] = set()
+
+    def visit(node: DesignNode) -> None:
+        if node.kind == "image" and node.image_ref:
+            keys.add(node.image_ref.replace(":", "-"))
+        elif node.kind == "icon" and node.source_id:
+            keys.add(node.source_id.replace(":", "-"))
+
+        for child in node.children:
+            visit(child)
+
+    visit(root)
+    return keys
+
+
+def _svg_to_webp(source: Path, target: Path, *, scale: float = 2.0) -> None:
+    """Rasterize one SVG to transparent lossless WebP for Elementor."""
+    png_bytes = resvg_py.svg_to_bytes(svg_path=str(source), zoom=scale)
+    with Image.open(io.BytesIO(png_bytes)) as image:
+        rgba = image.convert("RGBA")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        rgba.save(target, format="WEBP", lossless=True, method=6)
+
+
+def prepare_elementor_assets(
+    root: DesignNode,
+    source_assets: list[Path],
+    target_dir: Path,
+    relative_root: Path,
+) -> dict[str, str]:
+    """Package only media actually referenced by Elementor.
+
+    Raster formats pass through unchanged. SVG artwork is derived as transparent
+    2x lossless WebP so Elementor never needs to upload SVG media. Standalone text
+    exports and unrelated/orphaned Figma assets are omitted entirely.
+    """
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    assets_by_key = {asset.stem: asset for asset in source_assets}
+    semantic_names = semantic_asset_names(root, source_assets)
+    result: dict[str, str] = {}
+
+    for key in sorted(elementor_asset_keys(root)):
+        source = assets_by_key.get(key)
+        if source is None:
+            continue
+
+        semantic_name = semantic_names[key]
+        if source.suffix.lower() == ".svg":
+            target = target_dir / f"{Path(semantic_name).stem}.webp"
+            _svg_to_webp(source, target)
+        else:
+            target = target_dir / semantic_name
+            try:
+                shutil.copy2(source, target)
+            except OSError as exc:
+                raise OSError(
+                    f"Could not package Figma asset {source!s} -> {target!s}: {exc}"
+                ) from exc
+
+        result[key] = target.relative_to(relative_root).as_posix()
 
     return result
