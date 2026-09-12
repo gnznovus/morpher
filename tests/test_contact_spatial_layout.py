@@ -55,11 +55,42 @@ def test_contact_text_wall_is_normalized_into_icon_text_items():
     assert [item.children[0].source_id for item in items] == ["mail", "instagram", "phone"]
     assert all(item.style.layout_direction == "horizontal" for item in items)
     assert all(item.style.counter_axis_align == "center" for item in items)
+    assert all(item.style.position_mode == "absolute" for item in items)
     assert all(item.style.gap is not None and item.style.gap >= 0 for item in items)
     assert [item.style.y for item in items] == [3537, 3576, 3616]
+    assert [item.style.offset_y for item in items] == [3537, 3576, 3616]
     assert all(item.children[0].style.x is None for item in items)
     assert all(item.children[1].style.x is None for item in items)
     assert items[-1].children[1].style.text_auto_resize == "WIDTH_AND_HEIGHT"
+
+
+def test_contact_absolute_offsets_are_local_to_parent():
+    root = DesignNode(
+        kind="container",
+        source_id="root",
+        style=DesignStyle(x=1000, y=3000, width=1920, height=960),
+        children=[
+            _node(
+                "text",
+                "contact",
+                x=1131,
+                y=3537,
+                width=413,
+                height=148,
+                text="first\nsecond",
+                font_size=18,
+                line_height=21.6,
+            ),
+            _node("icon", "mail", x=1100, y=3539, width=25, height=20),
+            _node("icon", "phone", x=1100, y=3578, width=25, height=20),
+        ],
+    )
+
+    result = compile_contact_spatial_layout(root)
+    items = _contact_items(result)
+
+    assert [item.style.offset_x for item in items] == [100, 100]
+    assert [item.style.offset_y for item in items] == [537, 576]
 
 
 def test_wrapped_icon_is_stripped_before_pairing():
