@@ -148,3 +148,35 @@ def test_non_contact_multiline_text_is_left_alone():
     assert len(result.children) == 1
     assert result.children[0].source_id == "copy"
     assert result.children[0].text == "ordinary\nmultiline copy"
+
+
+def test_oversized_visuals_are_not_contact_anchors():
+    root = DesignNode(
+        kind="container",
+        source_id="root",
+        style=DesignStyle(x=0, y=0, width=1920, height=960),
+        children=[
+            _node(
+                "text",
+                "body-copy",
+                x=179,
+                y=493,
+                width=768,
+                height=246,
+                text="There are many expats living in Thonglor.\nThere are many restaurants nearby.\nThere are many cafes as well.",
+                font_size=18,
+                line_height=21.6,
+            ),
+            _node("icon", "decorative-vector", x=442, y=-635, width=1233, height=1412),
+            _node("icon", "play-vdo", x=1789, y=455, width=144, height=144),
+        ],
+    )
+
+    result = compile_contact_spatial_layout(root)
+
+    assert _contact_items(result) == []
+    assert [child.source_id for child in result.children] == [
+        "body-copy",
+        "decorative-vector",
+        "play-vdo",
+    ]
