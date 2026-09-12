@@ -62,30 +62,64 @@ function formatSkipStats(label, stats) {
   return `${stats.total} ${label} skipped${details ? ` (${details})` : ""}`;
 }
 
-function buildReport(node, assets, vectorExport, textExport) {
-  const warnings = [
-    formatSkipStats("non-rendering vectors", vectorExport.skipped),
-    formatSkipStats("non-rendering text outlines", textExport.skipped),
-  ].filter(Boolean);
+function rounded(value) {
+  return typeof value === "number" ? Math.round(value * 100) / 100 : null;
+}
 
-  return [
-    "MORPHER FIGMA REPORT",
-    "====================",
-    "",
-    "SOURCE",
-    `Name: ${node.name}`,
-    `Node: ${node.id}`,
-    "",
-    "EXPORT",
-    `Images: ${assets.length}`,
-    `Vectors: ${vectorExport.assets.length}`,
-    `Outlined texts: ${textExport.assets.length}`,
-    "",
-    "WARNINGS",
-    ...(warnings.length ? warnings.map((warning) => `[warning] ${warning}`) : ["None"]),
-    "",
-    `SUMMARY: ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`,
-  ].join("\n");
+function duplicateFingerprint(node) {
+  const children = "children" in node
+    ? node.children.filter((child) => !isExplicitlyHidden(child)).map(duplicateFingerprint)
+    : [];
+  return JSON.stringify({
+    type: node.type,
+    width: rounded(node.width),
+    height: rounded(node.height),
+    text: node.type === "TEXT" ? node.characters || "" : null,
+    children,
+  });
+}
+
+function isDuplicateCandidate(node) {
+  return !isExplicitlyHidden(node) && "children" in node && node.children.length > 0;
+}
+
+function findDuplicateWarnings(root) {
+  const warnings = [];
+
+  function visit(parent, hiddenAncestor = false) {
+    const hidden = hiddenAncestor || isExplicitlyHidden(parent);
+    if (hidden || !("children" in parent)) return;
+
+    const groups = new Map();
+    for (const child of parent.children) {
+      if (!isDuplicateCandidate(child)) continue;
+      const key = JSON.stringify({
+        x: rounded(child.x),
+        y: rounded(child.y),
+        width: rounded(child.width),
+        height: rounded(child.height),
+        fingerprint: duplicateFingerprint(child),
+      });
+      const matches = groups.get(key) || [];
+      matches.push(child);
+      groups.set(key, matches);
+    }
+
+    for (const matches of groups.values()) {
+      if (matches.length < 2) continue;
+      const original = matches[0];
+      for (const duplicate of matches.slice(1)) {
+        warnings.push(
+          `Possible duplicate layer: "${duplicate.name}" (${duplicate.id}) matches "${original.name}" (${original.id}) at the same position and size. Both were preserved.`
+        );
+      }
+    }
+
+    for (const child of parent.children) visit(child, hidden);
+  }
+
+  visit(root);
+  return warnings;
 }
 
 function collectImageRefs(node, refs = new Set(), hiddenAncestor = false) {
@@ -204,17 +238,17 @@ figma.ui.onmessage = async (message) => {
   try {
     const node = selectedNode();
     figma.ui.postMessage({ type: "status", state: "sending", text: `Exporting ${node.name}...` });
+    const warnings = findDuplicateWarnings(node);
     const payload = await node.exportAsync({ format: "JSON_REST_V1" });
     const assets = await exportImageAssets(node);
     const vectorExport = await exportVectorAssets(node);
     const textExport = await exportTextAssets(node);
     const vectorAssets = vectorExport.assets;
     const textAssets = textExport.assets;
-    const report = buildReport(node, assets, vectorExport, textExport);
     const response = await fetch(MORPHER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: node.name, nodeId: node.id, payload, assets, vectorAssets, textAssets, report }),
+      body: JSON.stringify({ name: node.name, nodeId: node.id, payload, assets, vectorAssets, textAssets, warnings }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || `Morpher returned HTTP ${response.status}`);
@@ -224,11 +258,14 @@ figma.ui.onmessage = async (message) => {
       formatSkipStats("non-rendering text outlines", textExport.skipped),
     ].filter(Boolean);
     const skippedNote = skippedNotes.length ? `, ${skippedNotes.join(", ")}` : "";
+    const warningNote = warnings.length
+      ? ` ⚠ ${warnings.length} design warning${warnings.length === 1 ? "" : "s"}; see figma-plugin/log/warning.txt.`
+      : "";
 
     figma.ui.postMessage({
       type: "status",
-      state: "success",
-      text: `Saved as ${result.filename} (${result.assetsSaved || 0} images, ${result.vectorsSaved || 0} vectors, ${result.textsSaved || 0} outlined texts${skippedNote})`,
+      state: warnings.length ? "warning" : "success",
+      text: `Saved as ${result.filename} (${result.assetsSaved || 0} images, ${result.vectorsSaved || 0} vectors, ${result.textsSaved || 0} outlined texts${skippedNote}).${warningNote}`,
     });
   } catch (error) {
     figma.ui.postMessage({ type: "status", state: "error", text: error instanceof Error ? error.message : String(error) });
