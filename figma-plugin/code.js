@@ -179,7 +179,7 @@ function collectRegionCandidates(root) {
     if ("children" in node && node.children.length > 0) {
       const nodePath = isRoot ? [] : [...path, node.name];
       const bounds = visibleBounds(node);
-      if (!isRoot && !isTransparentWrapper(node) && bounds && bounds.area >= minimumArea) {
+      if (!isRoot && bounds && bounds.area >= minimumArea) {
         candidates.push({
           node,
           path: nodePath,
@@ -252,6 +252,18 @@ function collectCandidateClusters(candidates) {
   return clusters;
 }
 
+function pruneTransparentWrappers(cluster) {
+  const memberIds = new Set(cluster.map((candidate) => candidate.node.id));
+  const filtered = cluster.filter((candidate) => {
+    if (!isTransparentWrapper(candidate.node)) return true;
+    const children = candidate.node.children.filter((child) => !isExplicitlyHidden(child));
+    const child = children[0];
+    if (!child || !memberIds.has(child.id)) return true;
+    return normalizedText(candidate.node.name) === normalizedText(child.name);
+  });
+  return filtered.length >= 2 ? filtered : cluster;
+}
+
 function formatStackedDuplicateWarning(cluster) {
   const paths = cluster.map((candidate) => `- ${formatStructurePath(candidate)}`).join("\n");
   const count = cluster.length;
@@ -260,7 +272,10 @@ function formatStackedDuplicateWarning(cluster) {
 
 function findOverlappingStructureWarnings(root) {
   const candidates = collectRegionCandidates(root);
-  return collectCandidateClusters(candidates).map(formatStackedDuplicateWarning);
+  return collectCandidateClusters(candidates)
+    .map(pruneTransparentWrappers)
+    .filter((cluster) => cluster.length >= 2)
+    .map(formatStackedDuplicateWarning);
 }
 
 function findDuplicateWarnings(root) {
