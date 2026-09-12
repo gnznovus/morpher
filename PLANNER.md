@@ -7,12 +7,10 @@
 - Core architecture stays compiler-style: input adapter → Design IR → compiler → output renderer.
 - Design IR and compiler behavior stay independent from Elementor, WordPress, and any single output target.
 - Development rule: **small verified slice → real fixture → trace → render → compare → expand**.
-- The input integration stays thin; normalization and compilation belong to Morpher Core.
-- The CLI is a frontend to Morpher Core, not the permanent product boundary.
-- Output targets remain separable responsibilities.
 - Elementor is the primary WordPress production target.
-- Native HTML/CSS remains the semantic, framework-neutral reference/export target.
 - Fidelity is the visual reference and responsive-triage target.
+- Production deployment is a separate responsibility from compilation: `morpher` compiles; `morpher-deploy` deploys generated Elementor output.
+- The WordPress importer has one canonical processing path. Manual admin processing remains a fallback/debug path; future automation should call the same importer rather than duplicate it.
 - Whole-page understanding includes **Header Section**, **Body**, and **Footer Section**.
 - A Header Section is not the same thing as Navigation; Navigation is a component within it.
 
@@ -23,8 +21,6 @@
 > **Preserve the source relationship first. Introduce structural responsive transformation when the composition requires it.**
 
 > **Structural and spatial responsive behavior can coexist within the same section.**
-
-Morpher should preserve compositions that already adapt well and apply deeper structural responsive treatment only where the design requires it.
 
 ## Product Architecture Direction
 
@@ -40,140 +36,139 @@ visual validation + responsive triage
         ↓
 Responsive / semantic compilation
         ↓
-┌─────────────────────┬─────────────────────┐
-│ Elementor           │ Native HTML/CSS     │
-│ WordPress production│ Semantic web output │
-└─────────────────────┴─────────────────────┘
+Elementor
+editable WordPress production output
+        ↓
+morpher-deploy
+        ↓
+Morpher WordPress importer
+        ↓
+Elementor Library
 ```
 
 Renderer-specific behavior must not dictate shared compiler architecture.
 
-## Target Roles
+## Elementor Production Milestones
 
-### Fidelity
+### Production asset pipeline
 
-Fidelity is Morpher's visual reference and responsive-triage target.
+- [x] Keep text nodes out of Elementor media asset collection.
+- [x] Convert eligible vector graphics into transparent WebP production derivatives.
+- [x] Preserve raster production assets.
+- [x] Keep atomic visual graphics as single editable image widgets where appropriate.
+- [x] Use deterministic/cached asset handling through the existing asset subsystem.
 
-It should:
+### Image frame fidelity
 
-- preserve source relationships;
-- provide a trustworthy visual baseline;
-- adapt compositions across viewport sizes;
-- help determine whether simple responsive adaptation is sufficient;
-- expose sections that require structural responsive treatment.
+- [x] Preserve source image scale mode in Design IR.
+- [x] Compile source `FILL` images with authored frame width and height.
+- [x] Apply production cover behavior for `FILL` images.
+- [x] Emit both Elementor layout width and Image Style width so the rendered image is constrained to the authored frame.
+- [x] Verify the generic fix against multiple real compositions.
 
-Fidelity does not need to structurally reconstruct every composition.
+### Spatial normalization
 
-### Elementor
+- [x] Normalize quarter-turn text geometry before Elementor rendering.
+- [x] Normalize rotated divider geometry while preserving intended composition.
+- [x] Keep rotated labels editable rather than collapsing them into graphics.
+- [x] Retain conservative guards against decorative backing surfaces becoming semantic row content.
 
-Elementor is Morpher's primary WordPress production target.
+### Visual-marker row reconstruction
 
-It should:
+- [x] Reconstruct contact-style visual rail + multiline text walls into explicit editable rows.
+- [x] Support small ellipse markers for amenity/bullet rows.
+- [x] Use marker geometry to preserve wrapped continuation lines within one logical item.
+- [x] Prevent neighboring marker rails from claiming each other's text columns.
+- [x] Use start alignment for reconstructed contact/amenity rows.
+- [x] Preserve paragraph spacing metadata used by row reconstruction.
+- [ ] Defer exact authored line-wrap matching until repeated fixtures justify a generic width/fidelity improvement.
 
-- preserve visual composition where practical;
-- produce editable Elementor content;
-- support structural responsive transformations where required;
-- keep Elementor-specific representation outside shared compiler logic;
-- avoid unnecessary generated structure when simpler composition is sufficient.
+### Deferred compact control
 
-### Native HTML/CSS
+- [ ] Compact graphic + label / atomic layout grouping still has an Elementor wrapping edge case. Keep parked until higher-value work is complete.
 
-Native remains a first-class output, but its primary role is semantic and framework-neutral rather than WordPress production.
+## WordPress Deployment — MVP GREEN
 
-It should:
-
-- provide meaningful semantic HTML where intent is known;
-- serve as a clean HTML/CSS reference;
-- support developer/debug workflows;
-- provide a foundation for custom applications and framework-oriented development;
-- remain independent from WordPress and Elementor.
-
-Potential semantic targets include `header`, `nav`, `main`, `section`, `article`, `aside`, `footer`, headings, paragraphs, links, and actions.
-
-## Whole-Page Structure
-
-A **Morph** represents one complete page/template compilation unit. Section-level fixtures are useful for development but must not become the permanent product boundary.
+The local deployment MVP is verified end-to-end.
 
 ```text
-Page / Morph
-├─ Header Section
-│  ├─ Navigation Component
-│  ├─ Optional components
-│  └─ Header Content
-├─ Body
-│  └─ Sections...
-└─ Footer Section
+morpher
+→ Elementor template + assets
+→ morpher-deploy
+→ plugin deployments/<slug>/
+→ WordPress Morpher admin processing
+→ assets copied to uploads/morpher-assets/<slug>/
+→ asset references rewritten
+→ Elementor Library entry created/updated
+→ template available for insertion
 ```
 
-Header Sections, Body Sections, and Footer Sections may combine structural responsive behavior with preserved spatial composition.
+### CLI
 
-### Per-Morph output
+- [x] Separate `morpher-deploy` executable.
+- [x] Bare command performs bulk deployment.
+- [x] Friendly target resolution supports bare names, optional extension, template suffix variants, and valid Elementor output paths.
+- [x] Strictly constrain deployment resolution to Elementor output.
+- [x] Deterministic build hash for template + assets.
+- [x] Skip unchanged staged/deployed builds by default.
+- [x] `--force` intentionally re-stages while preserving normal validation.
 
-The target is a coherent optimized output per Morph/page. Output targets may package their styles and assets differently, but shared design understanding belongs above the renderer layer.
+### WordPress importer
+
+- [x] Stage template, manifest, and assets into the Morpher plugin deployment directory.
+- [x] Copy production assets into WordPress uploads.
+- [x] Rewrite staged asset references to WordPress upload URLs.
+- [x] Create/update Elementor Library entries with Morpher identity/build metadata.
+- [x] Write deployment status including imported/updated/skipped/failed state and Elementor template ID.
+- [x] Verify imported templates appear in Elementor Library and assemble with assets/content automatically.
+- [x] Fix plugin ownership so font rendering cannot overwrite the deployment-capable plugin runtime.
+
+### WordPress admin
+
+- [x] Morpher admin page.
+- [x] Manual **Process staged deployments** action.
+- [x] Deployment status table.
+- [x] Keep manual processing as fallback/debug path.
+- [ ] Add explicit re-deploy workflow for a previously removed Elementor Library entry without requiring the full staging sequence again.
+- [ ] Automate the import trigger from `morpher-deploy` while reusing the same canonical importer.
+- [ ] Consider REST transport after the local/manual workflow is stable.
+
+## CLI Ergonomics
+
+- [x] `morpher` supports bulk processing with no target.
+- [x] `morpher` accepts friendly source targets such as bare names and optional `.json` extension.
+- [x] Resolve friendly targets inside `figma-import/` and `input/` only.
+- [x] Preserve source priority: `figma-import/` before `input/`.
+- [x] Reject traversal/arbitrary external paths.
+- [x] `morpher-deploy` provides matching friendly-target ergonomics for Elementor output.
+
+## Font Registry / WordPress Font Bridge
+
+- [x] Font source discovery foundation.
+- [x] Font metadata parsing and deterministic registry/grouping.
+- [x] Cache-aware resolution.
+- [x] Design IR font intent bridge.
+- [x] Production font packaging foundation.
+- [x] Missing-font diagnostics propagated to generated output/CLI.
+- [x] Font renderer ownership separated from the main WordPress plugin runtime.
+- [ ] Continue hardening packaging and edge cases against real font collections.
 
 ## Responsive Compilation
 
-Morpher distinguishes between compositions that can be preserved through simple responsive adaptation and layouts that require structural transformation.
+Current verified section work includes Discovery and Destination, with Offers substantially validated apart from deferred margin polish. Happenings remains active responsive-structure work.
 
-```text
-Design composition
-        ↓
-Responsive evaluation
-        ↓
-┌─────────────────────┬─────────────────────┐
-│ Simple adaptation   │ Structural change   │
-│ is sufficient       │ is required         │
-└──────────┬──────────┴──────────┬──────────┘
-           │                     │
-           └──────────┬──────────┘
-                      ↓
-              Responsive output
-```
+Important current principle from Happenings investigation:
 
-A section may use both structural and spatial responsive behavior. For example, major content regions can change arrangement at a breakpoint while visual elements inside those regions retain their intended composition.
+> Backing-surface geometry may define a visual region without participating as semantic collision/flow content.
 
-### Planned work
-
+- [x] Discovery responsive section validation.
+- [x] Destination responsive section validation.
+- [x] Offers responsive section validation, excluding deferred margin polish.
+- [ ] Resume Happenings structural reconstruction using backing-surface-as-region behavior.
 - [ ] Harden responsive classification against diverse real fixtures.
 - [ ] Preserve source relationships when simple adaptation is sufficient.
 - [ ] Promote layouts to structural responsive behavior where required.
 - [ ] Support hybrid sections without unnecessary reconstruction.
-- [ ] Keep responsive interpretation target-neutral until renderer-specific serialization.
-
-## Stable Identity Contract
-
-Rendered elements should have deterministic identity so renderers, diagnostics, editing systems, and developer tooling can refer to the same logical content reliably.
-
-Source provenance and Morpher-owned compiled identity remain conceptually separate.
-
-### Planned work
-
-- [ ] Emit deterministic unique DOM identity where applicable.
-- [ ] Preserve source provenance independently from rendering selectors.
-- [ ] Add renderer invariants/tests rejecting duplicate identities.
-- [ ] Define deterministic Morpher identity for generated nodes without direct source identity.
-
-## Font Registry
-
-The font registry supports semantic text output using locally available font families and variants.
-
-Font source:
-
-```text
-storage/fonts/
-```
-
-The registry should preserve available font sources and resolve requested faces deterministically. Successful resolution remains silent in generated output; unavailable fonts produce a diagnostic warning.
-
-### Current direction
-
-- [x] Font source discovery foundation.
-- [x] Font metadata parsing foundation.
-- [x] Deterministic registry/grouping foundation.
-- [x] Cache-aware resolution foundation.
-- [x] Design IR font intent bridge.
-- [x] Native font CSS/packaging foundation.
-- [ ] Continue hardening packaging and edge cases against real font collections.
 
 ## Current Prototype Scope
 
@@ -187,82 +182,64 @@ The registry should preserve available font sources and resolve requested faces 
 - [x] Raster and vector asset transport.
 - [x] Output-agnostic Design IR with preserved source identity.
 - [x] Free-layout and Auto Layout foundations.
-- [x] Style, clipping, rotation, image, stroke, and typography metadata used by verified fixtures.
+- [x] Style, clipping, rotation, image scale mode, stroke, ellipse, paragraph spacing, and typography metadata used by verified fixtures.
 - [x] Hidden source subtrees pruned from IR.
 
 ### Fidelity
 
-- [x] Standalone HTML + companion CSS.
-- [x] Deterministic source-based classes.
-- [x] Free-layout reconstruction foundation.
-- [x] Auto Layout foundations.
-- [x] Raster and vector rendering.
-- [x] Text fidelity representation with semantic source retained.
-- [x] Multiline text handling.
-- [x] Frame clipping.
-- [x] Rotation handling.
-- [x] Divider and shape-stroke rendering.
-- [x] Inspect traces and regression coverage for verified behavior.
+- [x] Visual-reference renderer foundation.
+- [x] Deterministic source-based identity/classes.
+- [x] Free-layout and Auto Layout foundations.
+- [x] Raster/vector rendering, clipping, rotation, multiline text, dividers, and shape strokes.
 - [ ] Harden fluid responsive Fidelity as the normal visual-reference behavior.
 - [ ] Expand responsive triage across diverse section types.
 
-### Responsive compiler / Elementor
+### Elementor
 
-Responsive compilation is active work. Elementor consumes shared responsive understanding rather than driving compiler architecture.
-
-- [x] Responsive compiler foundations.
-- [x] Region/flow grouping foundations.
-- [x] Generated-wrapper pruning foundation.
 - [x] Elementor renderer foundation.
-- [ ] Align responsive compilation with preserve-first classification.
-- [ ] Preserve editable Elementor mappings where practical.
-- [ ] Reduce unnecessary structural reconstruction.
+- [x] Editable production image widgets with verified authored `FILL` frames.
+- [x] WebP production vector asset path.
+- [x] Exact-font WordPress bridge foundation.
+- [x] Contact/amenity marker-row reconstruction.
+- [x] Local WordPress deployment MVP verified end-to-end.
 - [ ] Continue validating generated output against real Elementor behavior.
+- [ ] Reduce unnecessary structural reconstruction.
+- [ ] Automate deployment triggering after staging.
 
-### Native HTML/CSS
+### Semantic / framework-neutral output
 
-- [x] Native HTML renderer foundation.
-- [x] Native typography/font CSS foundation.
-- [x] Independent Native output directory and CLI target.
-- [ ] Expand semantic element selection.
-- [ ] Keep Native framework-neutral.
-- [ ] Use Native as a reference/export foundation for custom and framework-based applications.
+- [x] Independent renderer foundation.
+- [x] Typography/font packaging foundation.
+- [ ] Expand semantic element selection and validation.
+- [ ] Keep this target independent from WordPress/Elementor concerns.
 
 ## Immediate Sequence
 
-1. **Harden fluid Fidelity** as the visual reference and responsive-triage path.
-2. **Align responsive compilation** with preserve-first layout classification.
-3. **Compile Elementor** as the primary editable WordPress production path.
-4. **Validate hybrid sections** that combine structural responsive behavior with preserved spatial composition.
-5. **Expand whole-page understanding** across Header Section, Body, and Footer Section.
-6. **Continue Native semantics** as the framework-neutral reference/export target.
+1. **Rest / checkpoint after deployment + image + amenities milestone.**
+2. **Resume Happenings responsive structure** with backing surfaces defining regions without contaminating semantic flow.
+3. **Add re-deploy behavior** to the Morpher WordPress admin workflow.
+4. **Automate `morpher-deploy` import triggering** while keeping the manual button as fallback.
+5. **Continue real-design Elementor validation** and only generalize fidelity issues when repeated evidence supports it.
+6. **Expand whole-page understanding** across Header Section, Body, and Footer Section.
 7. **Harden identity, fonts, assets, and output validation** across targets.
 
-## Later / Optional Inputs
+## Later / Optional
 
-- [ ] SVG adapter.
-- [ ] PNG adapter.
-- [ ] JPG/JPEG adapter.
-- [ ] PDF adapter.
-- [ ] Additional design-source adapters.
-
-## Later / Optional Outputs / Integration
-
+- [ ] Additional input adapters.
 - [ ] Morpher application/UI.
 - [ ] Whole-page Morph compilation as normal workflow.
-- [ ] Per-Morph CSS optimization/bundling.
-- [ ] Optional Elementor deployment/integration automation.
+- [ ] Per-Morph output optimization/bundling.
 - [ ] Gutenberg renderer.
-- [ ] React-oriented renderer or integration.
-- [ ] Tailwind renderer.
-- [ ] Other renderers through the same output-agnostic IR.
+- [ ] Framework-oriented renderers/integrations.
 
 ## Prototype Maturity
 
 Morpher should currently be described as an **advanced prototype / early product foundation**.
 
-The project can transport, normalize, inspect, render, and compile real design input through meaningful parts of the pipeline. It is not production-ready yet because responsive compilation, whole-page semantic understanding, and production-target hardening are still active work.
+The project can transport, normalize, inspect, compile, package, stage, and deploy real design input through meaningful parts of the production workflow. The local WordPress/Elementor deployment path is now empirically proven, including automatic asset relocation and complete template assembly after insertion.
 
-The guiding compiler behavior is conservative:
+It is not production-ready yet because responsive compilation, whole-page understanding, automated deployment transport, and broader production-target hardening remain active work.
+
+The guiding compiler behavior remains conservative:
 
 > **Preserve what already works. Transform what genuinely requires responsive structure.**
