@@ -52,7 +52,7 @@ def test_rotated_label_remains_sibling_and_recovers_pretransform_box():
     assert rail_result["elType"] == "container"
     assert label_result["widgetType"] == "heading"
     assert settings["_element_width"] == "auto"
-    assert abs(settings["_element_custom_width"]["size"] - 192 / 1928 * 100) < 1e-9
+    assert "_element_custom_width" not in settings
     assert abs(settings["_offset_x"]["size"] - (-50 / 1928 * 100)) < 1e-9
     assert abs(settings["_offset_y"]["size"] - (450 / 1928 * 100)) < 1e-9
     assert settings["_transform_rotate_popover"] == "transform"
