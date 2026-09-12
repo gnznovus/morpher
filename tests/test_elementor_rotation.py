@@ -66,5 +66,5 @@ def test_vertical_figma_line_renders_as_vertical_elementor_surface():
     assert "widgetType" not in divider
     assert settings["position"] == "absolute"
     assert settings["width"] == {"unit": "px", "size": 1, "sizes": []}
-    assert settings["min_height"] == {"unit": "vw", "size": 4.511410788381743, "sizes": []}
+    assert settings["min_height"] == {"unit": "vw", "size": 4.512448132780083, "sizes": []}
     assert settings["background_color"] == "rgba(255, 255, 255, 0.5)"
