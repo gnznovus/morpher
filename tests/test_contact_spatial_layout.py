@@ -1,3 +1,5 @@
+import pytest
+
 from morpher.compiler.contact import compile_contact_spatial_layout
 from morpher.ir.nodes import DesignNode
 from morpher.ir.styles import DesignStyle
@@ -47,7 +49,7 @@ def test_contact_text_is_split_into_absolute_rows_using_icon_spacing():
     assert root.children[0].source_id == "contact"
     lines = [child for child in result.children if (child.source_id or "").startswith("contact::contact-line-")]
     assert [line.text for line in lines] == ["first", "second", "third", "continuation"]
-    assert [line.style.y for line in lines] == [3538.2, 3579.7, 3619.7, 3641.2999999999997]
+    assert [line.style.y for line in lines] == pytest.approx([3538.2, 3579.7, 3619.7, 3641.3])
     assert lines[0].style.x > 1131
     assert lines[3].style.x == 1131
     assert all(line.style.width_mode == "hug" for line in lines)
@@ -95,7 +97,7 @@ def test_wrapped_icon_is_used_as_contact_row_anchor():
     lines = [child for child in result.children if (child.source_id or "").startswith("contact::contact-line-")]
 
     assert [line.text for line in lines] == [": phone", ": fax", ": email"]
-    assert [line.style.y for line in lines] == [5493.5, 5534.5, 5571.0]
+    assert [line.style.y for line in lines] == pytest.approx([5493.5, 5534.5, 5571.0])
     assert next(child for child in result.children if child.source_id == "fax-frame").children[0].source_id == "fax-glyph"
 
 
