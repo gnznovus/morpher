@@ -192,13 +192,31 @@ def _build_spatial_contact_rows(
         text_x = (text.style.x or 0.0) + leading * font_size * 0.36
         gap = max(0.0, text_x - anchor_box[2])
 
-        # The row owns all authored page-space positioning. Once icon and wording
-        # become children, their old x/y values belong to the previous coordinate
-        # system and must not participate again. Keep only their intrinsic size.
         visual = _contact_visual_leaf(anchor)
         _clear_flow_child_geometry(visual)
         visual.style.width_mode = "hug"
         visual.style.height_mode = "hug"
+
+        # The icon slot represents exactly one text line. The icon is centered
+        # inside that slot, while the wording begins at the row top. This keeps
+        # multiline contact values aligned to their first line rather than to the
+        # center of the entire wording block.
+        anchor_width = anchor_box[2] - anchor_box[0]
+        icon_slot = DesignNode(
+            kind="container",
+            name=f"{text.name or 'contact'} icon slot {index + 1}",
+            source_id=f"{text.source_id}::contact-icon-slot-{index + 1}",
+            style=DesignStyle(
+                width=anchor_width,
+                height=line_height,
+                layout_direction="vertical",
+                width_mode="fixed",
+                height_mode="fixed",
+                primary_axis_align="center",
+                counter_axis_align="center",
+            ),
+            children=[visual],
+        )
 
         wording = deepcopy(text)
         wording.children = []
@@ -213,10 +231,7 @@ def _build_spatial_contact_rows(
         wording.style.text_auto_resize = "WIDTH_AND_HEIGHT"
 
         text_height = line_height * len(group_lines)
-        visual_height = anchor_box[3] - anchor_box[1]
-        row_height = max(visual_height, text_height)
-        # Anchor the pair to the authored icon position. The text no longer needs
-        # its former page-space Y because flex centering owns the local alignment.
+        row_height = max(line_height, text_height)
         row = DesignNode(
             kind="container",
             name=f"{text.name or 'contact'} row {index + 1}",
@@ -230,9 +245,9 @@ def _build_spatial_contact_rows(
                 width_mode="hug",
                 height_mode="fixed",
                 gap=gap,
-                counter_axis_align="center",
+                counter_axis_align="min",
             ),
-            children=[visual, wording],
+            children=[icon_slot, wording],
         )
         rows.append(row)
 
@@ -242,9 +257,9 @@ def _build_spatial_contact_rows(
 def compile_contact_spatial_layout(root: DesignNode) -> DesignNode:
     """Preserve contact rows as absolute pair containers for Elementor.
 
-    Each detected visual/text pair becomes one horizontal container positioned by
-    authored source geometry. Its children are normal flex items with center cross-
-    axis alignment, so glyph and wording stay vertically aligned at every scale.
+    Each detected contact pair becomes one absolute row. A one-line icon slot
+    centers the visual against the first wording line, while the wording itself
+    remains top-aligned so multiline continuations extend downward naturally.
     Redundant icon-only Figma wrappers are stripped when they contain one icon leaf.
     Native keeps the existing flow-oriented contact pass below.
     """
