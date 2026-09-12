@@ -74,7 +74,7 @@ def test_main_reports_generated_targets_and_paths(
         outputs=outputs,
     )
 
-    monkeypatch.setattr(run, "run_all", lambda force=False: [result])
+    monkeypatch.setattr(run, "run_all", lambda target=None, force=False: [result])
     monkeypatch.setattr("sys.argv", ["morpher"])
 
     run.main()
@@ -98,7 +98,7 @@ def test_main_reports_existing_paths_when_source_is_skipped(
     outputs = _outputs(tmp_path, source)
     result = run.RunResult(source=source, status="skipped", outputs=outputs)
 
-    monkeypatch.setattr(run, "run_all", lambda force=False: [result])
+    monkeypatch.setattr(run, "run_all", lambda target=None, force=False: [result])
     monkeypatch.setattr("sys.argv", ["morpher"])
 
     run.main()
