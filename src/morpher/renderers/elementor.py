@@ -43,7 +43,9 @@ def _composition_vw(value: float | None, design_viewport: float | None) -> float
 
 def _is_fluid_absolute(style: DesignStyle, parent_style: DesignStyle | None) -> bool:
     return parent_style is not None and (
-        style.position_mode == "absolute" or parent_style.layout_direction is None
+        style.position_mode == "absolute"
+        or parent_style.layout_direction is None
+        or parent_style.position_mode == "absolute"
     )
 
 
@@ -213,8 +215,15 @@ def _container_settings(
     if align:
         settings["flex_align_items"] = align
     if style.gap is not None:
-        gap = str(style.gap)
-        settings["flex_gap"] = {"column": gap, "row": gap, "isLinked": True, "unit": "px", "size": style.gap}
+        gap_unit = "px"
+        gap_size = style.gap
+        if _is_fluid_absolute(style, parent_style):
+            fluid_gap = _composition_vw(style.gap, design_viewport)
+            if fluid_gap is not None:
+                gap_unit = "vw"
+                gap_size = fluid_gap
+        gap = str(gap_size)
+        settings["flex_gap"] = {"column": gap, "row": gap, "isLinked": True, "unit": gap_unit, "size": gap_size}
     padding = (style.padding_top, style.padding_right, style.padding_bottom, style.padding_left)
     if any(value is not None for value in padding):
         top, right, bottom, left = (value or 0 for value in padding)
@@ -348,6 +357,19 @@ def _render_divider(node: DesignNode, path: str, parent_style: DesignStyle | Non
     return {"id": _element_id(node, path), "settings": settings, "elements": [], "isInner": False, "widgetType": "divider", "elType": "widget"}
 
 
+def _is_background_image_layer(node: DesignNode, parent_style: DesignStyle | None) -> bool:
+    if node.kind != "image" or parent_style is None:
+        return False
+    if node.style.width is None or node.style.height is None:
+        return False
+    if parent_style.width in (None, 0) or parent_style.height in (None, 0):
+        return False
+    return (
+        node.style.width >= parent_style.width * 0.9
+        and node.style.height >= parent_style.height * 0.9
+    )
+
+
 def _render_asset_widget(node: DesignNode, path: str, parent_style: DesignStyle | None, asset_sources: dict[str, str], *, design_viewport: float | None = None) -> dict | None:
     key = _asset_key(node.image_ref) if node.kind == "image" and node.image_ref else (node.source_id or "").replace(":", "-")
     source = asset_sources.get(key)
@@ -358,6 +380,8 @@ def _render_asset_widget(node: DesignNode, path: str, parent_style: DesignStyle 
         settings["opacity"] = _size("px", node.style.image_opacity)
         settings["css_filters_css_filter"] = "custom"
         settings["css_filters_opacity"] = _size("px", node.style.image_opacity * 100)
+    if _is_background_image_layer(node, parent_style):
+        settings["_z_index"] = 0
     _apply_item_sizing(settings, node.style, container=False)
     _apply_flow_margin(settings, node.style, container=False)
     _apply_free_layout_geometry(settings, node.style, parent_style, container=False, design_viewport=design_viewport)
