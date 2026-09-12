@@ -27,23 +27,39 @@ def _area(node: DesignNode) -> float:
     return max(0.0, box[2] - box[0]) * max(0.0, box[3] - box[1])
 
 
-def _mark_submit_border(parent: DesignNode) -> None:
+def _walk(root: DesignNode) -> list[DesignNode]:
+    nodes: list[DesignNode] = []
+
+    def visit(node: DesignNode) -> None:
+        nodes.append(node)
+        for child in node.children:
+            visit(child)
+
+    visit(root)
+    return nodes
+
+
+def _mark_submit_border(root: DesignNode) -> None:
+    """Find the tightest stroked box around SUBMIT regardless of tree ownership.
+
+    Figma frequently places the label and its stroked rectangle in different nested
+    groups even though they occupy the same authored region. Geometry is the stronger
+    relationship here, so compare all visible IR nodes in the final Elementor tree.
+    """
+    nodes = _walk(root)
     submits = [
-        child
-        for child in parent.children
-        if child.kind == "text" and (child.text or "").strip().upper() == "SUBMIT"
+        node
+        for node in nodes
+        if node.kind == "text" and (node.text or "").strip().upper() == "SUBMIT"
     ]
-    if not submits:
-        return
+    shapes = [
+        node
+        for node in nodes
+        if node.kind == "shape" and node.style.stroke_color and _box(node) is not None
+    ]
 
     for submit in submits:
-        candidates = [
-            child
-            for child in parent.children
-            if child.kind == "shape"
-            and child.style.stroke_color
-            and _contains_center(child, submit)
-        ]
+        candidates = [shape for shape in shapes if _contains_center(shape, submit)]
         if not candidates:
             continue
         border = min(candidates, key=_area)
@@ -55,21 +71,15 @@ def _mark_submit_border(parent: DesignNode) -> None:
 
 
 def apply_contact_elementor_intent(root: DesignNode) -> DesignNode:
-    """Attach narrow Elementor intent recovered by Contact normalization.
+    """Attach narrow Elementor intent to the final Contact-oriented IR tree.
 
-    Contact/icon rows keep their inner Alignment at Start while centering the row
-    itself in its owning column. Newsletter submit borders preserve the authored
+    Generated contact/icon rows keep their own inner Alignment at Start while the row
+    itself gets Align Self: Center. Newsletter submit borders keep the authored
     top/right/left stroke but intentionally omit the bottom edge.
     """
-
-    def visit(node: DesignNode) -> None:
+    for node in _walk(root):
         if node.kind == "container" and "::contact-item-" in (node.source_id or ""):
             node.style.layout_align = "center"
 
-        if node.children:
-            _mark_submit_border(node)
-            for child in node.children:
-                visit(child)
-
-    visit(root)
+    _mark_submit_border(root)
     return root
