@@ -122,15 +122,15 @@ def test_discovery_visuals_join_flow_without_forcing_text_absolute():
     play_json = section["elements"][5]
     assert play_json["widgetType"] == "image"
     assert play_json["settings"]["_position"] == "absolute"
-    assert play_json["settings"]["_offset_x"]["size"] == 510
-    assert play_json["settings"]["_offset_y"]["size"] == 406
+    assert play_json["settings"]["_offset_x"] == {"unit": "vw", "size": 510 / 1920 * 100, "sizes": []}
+    assert play_json["settings"]["_offset_y"] == {"unit": "vw", "size": 406 / 1920 * 100, "sizes": []}
 
     body_json = section["elements"][4]
     backdrop_json = body_json["elements"][0]
     assert backdrop_json["widgetType"] == "image"
     assert backdrop_json["settings"]["_position"] == "absolute"
-    assert backdrop_json["settings"]["_offset_x"]["size"] == -54
-    assert backdrop_json["settings"]["_offset_y"]["size"] == -533
+    assert backdrop_json["settings"]["_offset_x"] == {"unit": "vw", "size": -54 / 1920 * 100, "sizes": []}
+    assert backdrop_json["settings"]["_offset_y"] == {"unit": "vw", "size": -533 / 1920 * 100, "sizes": []}
 
 
 def test_nested_wrapper_is_compiled_before_parent_flow_erases_geometry():
