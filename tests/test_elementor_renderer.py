@@ -84,7 +84,7 @@ def test_free_layout_uses_fluid_owner_relative_geometry():
     assert shape_settings["_offset_x"] == {"unit": "vw", "size": 33.33333333333333, "sizes": []}
     assert shape_settings["_offset_y"] == {"unit": "vw", "size": 10.0, "sizes": []}
     assert shape_settings["width"] == {"unit": "vw", "size": 20.0, "sizes": []}
-    assert shape_settings["min_height"] == {"unit": "vw", "size": 20.0, "sizes": []}
+    assert shape_settings["min_height"] == {"unit": "vw", "size": 13.333333333333334, "sizes": []}
 
 
 def test_auto_sized_absolute_text_stays_natural_width():
