@@ -48,8 +48,12 @@ def _normalize_rotated_text_box(node: DesignNode) -> None:
 
     Figma's absoluteBoundingBox describes the already-rotated visual bounds. Elementor
     rotates the widget after layout, so a 90-degree label needs the unrotated width
-    and height while keeping the same visual center. Without this, an owned label is
-    constrained by a narrow rail and wraps into multiple columns before rotation.
+    and height while keeping the same visual center.
+
+    A small inline-width allowance is added because Elementor/browser font metrics can
+    differ by a few pixels from Figma even when the intended face is the same. Without
+    that allowance, a source label that fits exactly in Figma can wrap its last word
+    before the rotation is applied.
     """
     style = node.style
     if not _is_rotated_rail_text(node):
@@ -59,15 +63,14 @@ def _normalize_rotated_text_box(node: DesignNode) -> None:
 
     center_x = style.x + style.width / 2.0
     center_y = style.y + style.height / 2.0
-    logical_width = style.height
+    inline_allowance = max(4.0, (style.font_size or 0.0) * 0.5)
+    logical_width = style.height + inline_allowance
     logical_height = style.width
 
     style.x = center_x - logical_width / 2.0
     style.y = center_y - logical_height / 2.0
     style.width = logical_width
     style.height = logical_height
-    # Elementor's auto-width heading is still constrained by the parent rail.
-    # Preserve the authored single-line width explicitly instead.
     style.text_auto_resize = None
     style.width_mode = "fixed"
 
