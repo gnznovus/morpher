@@ -115,6 +115,14 @@ class FigmaJsonAdapter:
                 return str(value) if value else None
         return None
 
+    @staticmethod
+    def _image_scale_mode(node: dict[str, Any]) -> str | None:
+        for fill in node.get("fills", []):
+            if isinstance(fill, dict) and fill.get("type") == "IMAGE" and fill.get("visible") is not False:
+                value = fill.get("scaleMode")
+                return str(value) if value else None
+        return None
+
     @classmethod
     def _image_opacity(cls, node: dict[str, Any]) -> float | None:
         for fill in node.get("fills", []):
@@ -148,6 +156,7 @@ class FigmaJsonAdapter:
             padding_left=self._geometry_number(node.get("paddingLeft")),
             opacity=self._number(node.get("opacity")),
             image_opacity=self._image_opacity(node),
+            image_scale_mode=self._image_scale_mode(node),
             clips_content=node.get("clipsContent") if isinstance(node.get("clipsContent"), bool) else None,
             background=None if source_type == "TEXT" else solid_color,
             text_color=solid_color if source_type == "TEXT" else None,
