@@ -52,6 +52,7 @@ def render_elementor_font_plugin(
     font_cache: Path,
     output_dir: Path,
     resolver: FontIntentResolver = resolve_font_intent,
+    diagnostics: list[str] | None = None,
 ) -> Path:
     """Update the persistent Morpher WordPress plugin with fonts required by this design.
 
@@ -82,7 +83,8 @@ def render_elementor_font_plugin(
         resolution = resolver(font_root, font_cache, intent)
         if resolution.face is None:
             family_key = resolution.request.family.casefold()
-            missing.setdefault(family_key, render_font_resolution_css(resolution).rstrip())
+            warning = render_font_resolution_css(resolution).rstrip()
+            missing.setdefault(family_key, warning)
             continue
 
         face = resolution.face
@@ -109,8 +111,12 @@ def render_elementor_font_plugin(
         encoding="utf-8",
     )
 
+    missing_warnings = [missing[key] for key in sorted(missing)]
+    if diagnostics is not None:
+        diagnostics.extend(missing_warnings)
+
     css_blocks = [faces[key]["css"].rstrip() for key in sorted(faces)]
-    css_blocks.extend(missing[key] for key in sorted(missing))
+    css_blocks.extend(missing_warnings)
     css_path.write_text("\n".join(css_blocks).rstrip() + "\n", encoding="utf-8")
     return output_dir
 
