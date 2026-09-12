@@ -230,7 +230,7 @@ def _build_contact_items(text: DesignNode, anchors: list[DesignNode]) -> list[De
                 width_mode="hug",
                 height_mode="fixed",
                 gap=gap,
-                counter_axis_align="min",
+                counter_axis_align="center",
             ),
             children=[visual, wording],
         )
