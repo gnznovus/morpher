@@ -149,8 +149,7 @@ def _split_spatial_contact_text(parent: DesignNode, text: DesignNode) -> list[De
         return None
 
     text_box = _box(text)
-    first_icon_box = _box(icons[0])
-    if text_box is None or first_icon_box is None:
+    if text_box is None:
         return None
 
     base_y = text.style.y
@@ -177,7 +176,11 @@ def _split_spatial_contact_text(parent: DesignNode, text: DesignNode) -> list[De
             icon_box = _box(icons[index])
             if icon_box is None:
                 return None
-            row.style.y = base_y + (icon_box[1] - first_icon_box[1])
+            # Treat the authored visual as the row's vertical anchor. Elementor's
+            # spatial equivalent of align-self:center is to center the text line box
+            # on the icon/wrapper box rather than aligning their top edges.
+            icon_center_y = (icon_box[1] + icon_box[3]) / 2.0
+            row.style.y = icon_center_y - line_height / 2.0
             last_y = row.style.y
         else:
             row.style.y = last_y + line_height
