@@ -1,4 +1,5 @@
 import hashlib
+import math
 import re
 
 from morpher.ir.nodes import DesignNode
@@ -69,6 +70,16 @@ def _overlay_color(background: str | None, alpha: float) -> str:
             b = int(background[5:7], 16)
             return f"rgba({r}, {g}, {b}, {alpha})"
     return f"rgba(0, 0, 0, {alpha})"
+
+
+def _apply_rotation(settings: dict, style: DesignStyle) -> None:
+    if style.rotation is None or abs(style.rotation) < 1e-9:
+        return
+    degrees = math.degrees(style.rotation)
+    if abs(degrees) < 1e-7:
+        return
+    settings["_transform_rotate_popover"] = "yes"
+    settings["_transform_rotateZ_effect"] = _size("deg", degrees)
 
 
 def _apply_item_sizing(settings: dict, style: DesignStyle, *, container: bool) -> None:
@@ -258,6 +269,7 @@ def _container_settings(
     _apply_fluid_composition_size(settings, style, parent_style, container=True, design_viewport=design_viewport)
     _apply_child_alignment(settings, style, parent_style, container=True)
     _apply_container_border(settings, style)
+    _apply_rotation(settings, style)
     if style.background:
         settings["background_background"] = "classic"
         settings["background_color"] = style.background
@@ -341,6 +353,7 @@ def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None,
         settings["_element_width"] = "auto"
         settings.pop("_element_custom_width", None)
     _apply_child_alignment(settings, style, parent_style, container=False)
+    _apply_rotation(settings, style)
     return settings
 
 
@@ -357,6 +370,7 @@ def _render_shape(node: DesignNode, path: str, parent_style: DesignStyle | None 
         _apply_free_layout_geometry(settings, style, parent_style, container=False, design_viewport=design_viewport)
         _apply_fluid_composition_size(settings, style, parent_style, container=False, design_viewport=design_viewport)
         _apply_child_alignment(settings, style, parent_style, container=False)
+        _apply_rotation(settings, style)
         height_vw = _composition_vw(style.height, design_viewport)
         if height_vw is not None:
             space = _size("custom", f"{height_vw:g}vw")
@@ -370,9 +384,41 @@ def _render_shape(node: DesignNode, path: str, parent_style: DesignStyle | None 
     return {"id": _element_id(node, path), "settings": _container_settings(style, parent_style, asset_sources, design_viewport=design_viewport), "elements": [], "isInner": False, "elType": "container"}
 
 
+def _is_vertical_divider(style: DesignStyle) -> bool:
+    if style.width is None or style.height is None or style.height <= 0:
+        return False
+    weight = style.stroke_weight or 1.0
+    return style.width <= max(weight * 2.0, 2.0) and style.height > max(style.width * 4.0, 8.0)
+
+
 def _render_divider(node: DesignNode, path: str, parent_style: DesignStyle | None = None, *, design_viewport: float | None = None) -> dict:
     style = node.style
-    settings: dict = {"style": "solid", "gap": _size("px", 0)}
+    if _is_vertical_divider(style):
+        settings: dict = {"content_width": "full"}
+        if parent_style is not None and all(value is not None for value in (style.x, style.y, parent_style.x, parent_style.y)):
+            left = _relative_offset(style.x, parent_style.x)
+            top = _relative_offset(style.y, parent_style.y)
+            settings["position"] = "absolute"
+            settings["_offset_orientation_h"] = "start"
+            settings["_offset_orientation_v"] = "start"
+            left_vw = _composition_vw(left, design_viewport)
+            top_vw = _composition_vw(top, design_viewport)
+            if left_vw is not None:
+                settings["_offset_x"] = _size("vw", left_vw)
+            if top_vw is not None:
+                settings["_offset_y"] = _size("vw", top_vw)
+        weight = style.stroke_weight or 1.0
+        settings["width"] = _size("px", weight)
+        height_vw = _composition_vw(style.height, design_viewport)
+        if height_vw is not None:
+            settings["min_height"] = _size("vw", height_vw)
+            settings["min_height_mobile"] = _size("vw", height_vw)
+        if style.stroke_color:
+            settings["background_background"] = "classic"
+            settings["background_color"] = style.stroke_color
+        return {"id": _element_id(node, path), "settings": settings, "elements": [], "isInner": False, "elType": "container"}
+
+    settings = {"style": "solid", "gap": _size("px", 0)}
     if style.stroke_color:
         settings["color"] = style.stroke_color
     if style.stroke_weight is not None:
@@ -382,6 +428,7 @@ def _render_divider(node: DesignNode, path: str, parent_style: DesignStyle | Non
     _apply_free_layout_geometry(settings, style, parent_style, container=False, design_viewport=design_viewport)
     _apply_fluid_composition_size(settings, style, parent_style, container=False, design_viewport=design_viewport)
     _apply_child_alignment(settings, style, parent_style, container=False)
+    _apply_rotation(settings, style)
     return {"id": _element_id(node, path), "settings": settings, "elements": [], "isInner": False, "widgetType": "divider", "elType": "widget"}
 
 
@@ -415,6 +462,7 @@ def _render_asset_widget(node: DesignNode, path: str, parent_style: DesignStyle 
     _apply_free_layout_geometry(settings, node.style, parent_style, container=False, design_viewport=design_viewport)
     _apply_fluid_composition_size(settings, node.style, parent_style, container=False, design_viewport=design_viewport)
     _apply_child_alignment(settings, node.style, parent_style, container=False)
+    _apply_rotation(settings, node.style)
     return {"id": _element_id(node, path), "settings": settings, "elements": [], "isInner": False, "widgetType": "image", "elType": "widget"}
 
 
