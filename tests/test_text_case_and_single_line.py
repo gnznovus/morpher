@@ -1,7 +1,10 @@
+from pathlib import Path
+
 from morpher.inputs.figma_json import FigmaJsonAdapter
 from morpher.ir.nodes import DesignNode
 from morpher.ir.styles import DesignStyle
 from morpher.renderers.elementor import render_elementor
+from morpher.renderers.native_css import render_native_css
 
 
 def test_figma_text_case_reaches_design_ir() -> None:
@@ -57,6 +60,31 @@ def test_elementor_renders_figma_uppercase_intent() -> None:
     settings = render_elementor(root)["content"][0]["elements"][0]["settings"]
 
     assert settings["typography_text_transform"] == "uppercase"
+
+
+def test_native_css_renders_figma_uppercase_intent(tmp_path: Path) -> None:
+    root = DesignNode(
+        kind="container",
+        source_id="1:1",
+        children=[
+            DesignNode(
+                kind="text",
+                source_id="1:2",
+                text="Kodawari Tsukiji",
+                style=DesignStyle(text_case="UPPER"),
+            )
+        ],
+    )
+
+    css = render_native_css(
+        root,
+        font_root=tmp_path / "fonts",
+        font_cache=tmp_path / "fonts" / "font-registry.json",
+        font_asset_dir=tmp_path / "native" / "assets" / "fonts",
+        css_dir=tmp_path / "native",
+    )
+
+    assert "text-transform: uppercase;" in css
 
 
 def test_authored_single_line_spatial_text_keeps_natural_width() -> None:
