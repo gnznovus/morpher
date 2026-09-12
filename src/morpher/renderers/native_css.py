@@ -66,6 +66,9 @@ def render_native_css(
             declarations.append(f"line-height: {_px(node.style.line_height)};")
         if node.style.letter_spacing is not None:
             declarations.append(f"letter-spacing: {_px(node.style.letter_spacing)};")
+        text_transform = _text_transform(node.style.text_case)
+        if text_transform:
+            declarations.append(f"text-transform: {text_transform};")
         if node.style.text_color:
             declarations.append(f"color: {node.style.text_color};")
         if node.style.text_align_horizontal:
@@ -75,6 +78,14 @@ def render_native_css(
             rules.append(_rule(dom_id(node), declarations))
 
     return "\n".join(font_blocks + rules).rstrip() + "\n"
+
+
+def _text_transform(value: str | None) -> str | None:
+    return {
+        "UPPER": "uppercase",
+        "LOWER": "lowercase",
+        "TITLE": "capitalize",
+    }.get(value or "")
 
 
 def _walk(node: DesignNode):
