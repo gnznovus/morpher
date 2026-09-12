@@ -172,28 +172,38 @@ def _line_start_indices(
     raw_lines: list[str],
     line_height: float,
 ) -> list[int] | None:
-    """Map visual-anchor Y positions to text-line starts.
+    """Map visual-anchor rhythm to logical text-line starts.
 
-    Wrapped continuation lines create larger gaps between neighboring anchors. Using
-    the anchor rail as the source of truth preserves those wrapped lines inside the
-    previous logical item instead of treating every newline as a new item.
+    A normal marker-to-marker gap represents one logical row. A gap near twice that
+    rhythm means the preceding wording wrapped to a continuation line. This uses the
+    authored marker rail rather than assuming every newline starts a new item.
     """
     if not anchors or not raw_lines or line_height <= 0:
         return None
-    first_box = _box(anchors[0])
-    if first_box is None:
-        return None
 
-    starts = [0]
-    for anchor in anchors[1:]:
+    tops: list[float] = []
+    for anchor in anchors:
         box = _box(anchor)
         if box is None:
             return None
-        estimated = int(round((box[1] - first_box[1]) / line_height))
-        estimated = max(starts[-1] + 1, estimated)
-        if estimated >= len(raw_lines):
+        tops.append(box[1])
+
+    if len(tops) == 1:
+        return [0]
+    gaps = [later - earlier for earlier, later in zip(tops, tops[1:]) if later > earlier]
+    if not gaps:
+        return None
+    base_gap = min(gaps)
+    if base_gap <= 0:
+        return None
+
+    starts = [0]
+    for gap in (later - earlier for earlier, later in zip(tops, tops[1:])):
+        line_count = max(1, int(round(gap / base_gap)))
+        start = starts[-1] + line_count
+        if start >= len(raw_lines):
             return None
-        starts.append(estimated)
+        starts.append(start)
     return starts
 
 
