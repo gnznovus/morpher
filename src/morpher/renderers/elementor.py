@@ -43,9 +43,13 @@ def _composition_vw(value: float | None, design_viewport: float | None) -> float
 
 def _is_fluid_absolute(style: DesignStyle, parent_style: DesignStyle | None) -> bool:
     return parent_style is not None and (
-        style.position_mode == "absolute"
-        or parent_style.layout_direction is None
-        or parent_style.position_mode == "absolute"
+        style.position_mode == "absolute" or parent_style.layout_direction is None
+    )
+
+
+def _is_fluid_composition(style: DesignStyle, parent_style: DesignStyle | None) -> bool:
+    return _is_fluid_absolute(style, parent_style) or (
+        parent_style is not None and parent_style.position_mode == "absolute"
     )
 
 
@@ -130,6 +134,26 @@ def _set_fluid_absolute_size(
         height = _size("vw", height_vw)
         settings["min_height"] = height
         settings["min_height_mobile"] = height
+
+
+def _apply_fluid_composition_size(
+    settings: dict,
+    style: DesignStyle,
+    parent_style: DesignStyle | None,
+    *,
+    container: bool,
+    design_viewport: float | None,
+) -> None:
+    if parent_style is None or parent_style.position_mode != "absolute":
+        return
+    if style.position_mode == "absolute":
+        return
+    _set_fluid_absolute_size(
+        settings,
+        style,
+        container=container,
+        design_viewport=design_viewport,
+    )
 
 
 def _apply_free_layout_geometry(
@@ -217,7 +241,7 @@ def _container_settings(
     if style.gap is not None:
         gap_unit = "px"
         gap_size = style.gap
-        if _is_fluid_absolute(style, parent_style):
+        if _is_fluid_composition(style, parent_style):
             fluid_gap = _composition_vw(style.gap, design_viewport)
             if fluid_gap is not None:
                 gap_unit = "vw"
@@ -231,6 +255,7 @@ def _container_settings(
     _apply_item_sizing(settings, style, container=True)
     _apply_flow_margin(settings, style, container=True)
     _apply_free_layout_geometry(settings, style, parent_style, container=True, design_viewport=design_viewport)
+    _apply_fluid_composition_size(settings, style, parent_style, container=True, design_viewport=design_viewport)
     _apply_child_alignment(settings, style, parent_style, container=True)
     _apply_container_border(settings, style)
     if style.background:
@@ -291,7 +316,7 @@ def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None,
         if style.font_size is not None:
             fluid = None
             if design_viewport is not None:
-                minimum_px = 0.0 if _is_fluid_absolute(style, parent_style) else None
+                minimum_px = 0.0 if _is_fluid_composition(style, parent_style) else None
                 fluid = fluid_font_size(style.font_size, design_viewport, minimum_px=minimum_px)
             settings["typography_font_size"] = _size("custom", fluid.css()) if fluid is not None else _size("px", style.font_size)
         if style.line_height is not None:
@@ -311,7 +336,8 @@ def _heading_settings(node: DesignNode, parent_style: DesignStyle | None = None,
     _apply_item_sizing(settings, style, container=False)
     _apply_flow_margin(settings, style, container=False)
     _apply_free_layout_geometry(settings, style, parent_style, container=False, design_viewport=design_viewport)
-    if _is_fluid_absolute(style, parent_style) and _source_is_single_line(node):
+    _apply_fluid_composition_size(settings, style, parent_style, container=False, design_viewport=design_viewport)
+    if _is_fluid_composition(style, parent_style) and _source_is_single_line(node):
         settings["_element_width"] = "auto"
         settings.pop("_element_custom_width", None)
     _apply_child_alignment(settings, style, parent_style, container=False)
@@ -329,6 +355,7 @@ def _render_shape(node: DesignNode, path: str, parent_style: DesignStyle | None 
         _apply_item_sizing(settings, style, container=False)
         _apply_flow_margin(settings, style, container=False)
         _apply_free_layout_geometry(settings, style, parent_style, container=False, design_viewport=design_viewport)
+        _apply_fluid_composition_size(settings, style, parent_style, container=False, design_viewport=design_viewport)
         _apply_child_alignment(settings, style, parent_style, container=False)
         height_vw = _composition_vw(style.height, design_viewport)
         if height_vw is not None:
@@ -353,6 +380,7 @@ def _render_divider(node: DesignNode, path: str, parent_style: DesignStyle | Non
     _apply_item_sizing(settings, style, container=False)
     _apply_flow_margin(settings, style, container=False)
     _apply_free_layout_geometry(settings, style, parent_style, container=False, design_viewport=design_viewport)
+    _apply_fluid_composition_size(settings, style, parent_style, container=False, design_viewport=design_viewport)
     _apply_child_alignment(settings, style, parent_style, container=False)
     return {"id": _element_id(node, path), "settings": settings, "elements": [], "isInner": False, "widgetType": "divider", "elType": "widget"}
 
@@ -385,6 +413,7 @@ def _render_asset_widget(node: DesignNode, path: str, parent_style: DesignStyle 
     _apply_item_sizing(settings, node.style, container=False)
     _apply_flow_margin(settings, node.style, container=False)
     _apply_free_layout_geometry(settings, node.style, parent_style, container=False, design_viewport=design_viewport)
+    _apply_fluid_composition_size(settings, node.style, parent_style, container=False, design_viewport=design_viewport)
     _apply_child_alignment(settings, node.style, parent_style, container=False)
     return {"id": _element_id(node, path), "settings": settings, "elements": [], "isInner": False, "widgetType": "image", "elType": "widget"}
 
