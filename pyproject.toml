@@ -20,6 +20,7 @@ morpher-listen = "morpher.listener:main"
 morpher-inspect = "morpher.inspect:main"
 morpher-render = "morpher.render:main"
 morpher-fonts = "morpher.fonts.inspect:main"
+morpher-rm = "morpher.remove:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
