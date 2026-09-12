@@ -153,6 +153,21 @@ function regionFingerprint(node) {
   return { texts, visuals, containers };
 }
 
+function hasVisiblePaint(paints) {
+  return Array.isArray(paints) && paints.some(
+    (paint) => paint && paint.visible !== false && (typeof paint.opacity !== "number" || paint.opacity > 0)
+  );
+}
+
+function isTransparentWrapper(node) {
+  if (!("children" in node)) return false;
+  const children = node.children.filter((child) => !isExplicitlyHidden(child));
+  if (children.length !== 1 || !("children" in children[0])) return false;
+  const hasFill = "fills" in node && hasVisiblePaint(node.fills);
+  const hasStroke = "strokes" in node && hasVisiblePaint(node.strokes);
+  return !hasFill && !hasStroke;
+}
+
 function collectRegionCandidates(root) {
   const rootBounds = visibleBounds(root);
   const minimumArea = rootBounds ? rootBounds.area * 0.05 : 0;
@@ -164,7 +179,7 @@ function collectRegionCandidates(root) {
     if ("children" in node && node.children.length > 0) {
       const nodePath = isRoot ? [] : [...path, node.name];
       const bounds = visibleBounds(node);
-      if (!isRoot && bounds && bounds.area >= minimumArea) {
+      if (!isRoot && !isTransparentWrapper(node) && bounds && bounds.area >= minimumArea) {
         candidates.push({
           node,
           path: nodePath,
@@ -184,35 +199,68 @@ function formatStructurePath(candidate) {
   return candidate.path.filter(Boolean).join(" > ") || candidate.node.name;
 }
 
-function findOverlappingStructureWarnings(root) {
-  const warnings = [];
-  const candidates = collectRegionCandidates(root);
+function similarOverlappingPair(first, second) {
+  const overlap = overlapRatio(first.bounds, second.bounds);
+  if (overlap < 0.9) return false;
+
+  const areaRatio = Math.min(first.bounds.area, second.bounds.area) / Math.max(first.bounds.area, second.bounds.area);
+  if (areaRatio < 0.8) return false;
+
+  const textSimilarity = setSimilarity(first.fingerprint.texts, second.fingerprint.texts);
+  const visualSimilarity = countSimilarity(first.fingerprint.visuals, second.fingerprint.visuals);
+  const containerSimilarity = countSimilarity(first.fingerprint.containers, second.fingerprint.containers);
+  const sameName = normalizedText(first.node.name) === normalizedText(second.node.name);
+
+  if (textSimilarity < 0.75 || visualSimilarity < 0.7 || containerSimilarity < 0.7) return false;
+  if (!sameName && textSimilarity < 0.9) return false;
+  return true;
+}
+
+function collectCandidateClusters(candidates) {
+  const adjacency = candidates.map(() => new Set());
 
   for (let index = 0; index < candidates.length; index += 1) {
-    const first = candidates[index];
     for (let otherIndex = index + 1; otherIndex < candidates.length; otherIndex += 1) {
-      const second = candidates[otherIndex];
-      const overlap = overlapRatio(first.bounds, second.bounds);
-      if (overlap < 0.9) continue;
-
-      const areaRatio = Math.min(first.bounds.area, second.bounds.area) / Math.max(first.bounds.area, second.bounds.area);
-      if (areaRatio < 0.8) continue;
-
-      const textSimilarity = setSimilarity(first.fingerprint.texts, second.fingerprint.texts);
-      const visualSimilarity = countSimilarity(first.fingerprint.visuals, second.fingerprint.visuals);
-      const containerSimilarity = countSimilarity(first.fingerprint.containers, second.fingerprint.containers);
-      const sameName = normalizedText(first.node.name) === normalizedText(second.node.name);
-
-      if (textSimilarity < 0.75 || visualSimilarity < 0.7 || containerSimilarity < 0.7) continue;
-      if (!sameName && textSimilarity < 0.9) continue;
-
-      warnings.push(
-        `Possible stacked duplicate content: "${formatStructurePath(first)}" and "${formatStructurePath(second)}" overlap ${Math.round(overlap * 100)}% in the same visible area and contain similar content (text ${Math.round(textSimilarity * 100)}%, visuals ${Math.round(visualSimilarity * 100)}%). Check these layer paths for duplicated or accidentally stacked sections. Morpher preserved both.`
-      );
+      if (!similarOverlappingPair(candidates[index], candidates[otherIndex])) continue;
+      adjacency[index].add(otherIndex);
+      adjacency[otherIndex].add(index);
     }
   }
 
-  return warnings;
+  const visited = new Set();
+  const clusters = [];
+  for (let index = 0; index < candidates.length; index += 1) {
+    if (visited.has(index) || adjacency[index].size === 0) continue;
+    const pending = [index];
+    const cluster = [];
+    visited.add(index);
+
+    while (pending.length) {
+      const current = pending.pop();
+      cluster.push(candidates[current]);
+      for (const neighbor of adjacency[current]) {
+        if (visited.has(neighbor)) continue;
+        visited.add(neighbor);
+        pending.push(neighbor);
+      }
+    }
+
+    cluster.sort((first, second) => first.path.length - second.path.length);
+    clusters.push(cluster);
+  }
+
+  return clusters;
+}
+
+function formatStackedDuplicateWarning(cluster) {
+  const paths = cluster.map((candidate) => `- ${formatStructurePath(candidate)}`).join("\n");
+  const count = cluster.length;
+  return `Possible stacked duplicate content: ${count} similar structures occupy the same visible region:\n${paths}\nThese structures contain highly similar content and appear stacked in the same area. Check these layer paths for accidental duplication. Morpher preserved all ${count}.`;
+}
+
+function findOverlappingStructureWarnings(root) {
+  const candidates = collectRegionCandidates(root);
+  return collectCandidateClusters(candidates).map(formatStackedDuplicateWarning);
 }
 
 function findDuplicateWarnings(root) {
