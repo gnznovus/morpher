@@ -180,6 +180,7 @@ class FigmaJsonAdapter:
             font_size=self._geometry_number(text_style.get("fontSize")),
             letter_spacing=self._geometry_number(text_style.get("letterSpacing")),
             line_height=self._geometry_number(text_style.get("lineHeightPx")),
+            paragraph_spacing=self._geometry_number(text_style.get("paragraphSpacing")),
             text_auto_resize=text_style.get("textAutoResize"),
             text_case=text_style.get("textCase"),
             text_align_horizontal=text_style.get("textAlignHorizontal"),
