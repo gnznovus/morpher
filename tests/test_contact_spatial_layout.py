@@ -1,5 +1,3 @@
-import pytest
-
 from morpher.compiler.contact import compile_contact_spatial_layout
 from morpher.ir.nodes import DesignNode
 from morpher.ir.styles import DesignStyle
@@ -21,7 +19,11 @@ def _node(kind, source_id, *, x=None, y=None, width=None, height=None, text=None
     )
 
 
-def test_contact_text_is_split_into_absolute_rows_using_icon_spacing():
+def _contact_rows(root: DesignNode) -> list[DesignNode]:
+    return [child for child in root.children if "::contact-spatial-row-" in (child.source_id or "")]
+
+
+def test_contact_text_is_grouped_with_visual_anchor_rows():
     root = DesignNode(
         kind="container",
         source_id="root",
@@ -45,25 +47,20 @@ def test_contact_text_is_split_into_absolute_rows_using_icon_spacing():
     )
 
     result = compile_contact_spatial_layout(root)
+    rows = _contact_rows(result)
 
     assert root.children[0].source_id == "contact"
-    lines = [child for child in result.children if (child.source_id or "").startswith("contact::contact-line-")]
-    assert [line.text for line in lines] == ["first", "second", "third", "continuation"]
-    assert [line.style.y for line in lines] == pytest.approx([3538.2, 3579.7, 3619.7, 3641.3])
-    assert lines[0].style.x > 1131
-    assert lines[3].style.x == 1131
-    assert all(line.style.width_mode == "hug" for line in lines)
-    assert all(line.style.text_auto_resize == "WIDTH_AND_HEIGHT" for line in lines)
-
-    icons = [child for child in result.children if child.kind == "icon"]
-    assert [(icon.source_id, icon.style.x, icon.style.y, icon.style.width) for icon in icons] == [
-        ("mail", 1130, 3539, 25),
-        ("instagram", 1130, 3578, 25),
-        ("phone", 1134, 3618, 17),
-    ]
+    assert len(rows) == 3
+    assert [row.children[1].text for row in rows] == ["first", "second", "third\ncontinuation"]
+    assert all(row.style.layout_direction == "horizontal" for row in rows)
+    assert all(row.style.counter_axis_align == "center" for row in rows)
+    assert all(row.style.gap is not None and row.style.gap >= 0 for row in rows)
+    assert [row.children[0].source_id for row in rows] == ["mail", "instagram", "phone"]
+    assert all(row.children[0].style.x is None for row in rows)
+    assert all(row.children[1].style.x is None for row in rows)
 
 
-def test_wrapped_icon_is_used_as_contact_row_anchor():
+def test_wrapped_icon_is_stripped_to_single_visual_leaf():
     fax_icon = _node("icon", "fax-glyph", x=1288, y=5534, width=25, height=26)
     fax_frame = DesignNode(
         kind="container",
@@ -94,11 +91,13 @@ def test_wrapped_icon_is_used_as_contact_row_anchor():
     )
 
     result = compile_contact_spatial_layout(root)
-    lines = [child for child in result.children if (child.source_id or "").startswith("contact::contact-line-")]
+    rows = _contact_rows(result)
 
-    assert [line.text for line in lines] == [": phone", ": fax", ": email"]
-    assert [line.style.y for line in lines] == pytest.approx([5493.5, 5534.5, 5571.0])
-    assert next(child for child in result.children if child.source_id == "fax-frame").children[0].source_id == "fax-glyph"
+    assert [row.children[1].text for row in rows] == [": phone", ": fax", ": email"]
+    assert [row.children[0].source_id for row in rows] == ["phone", "fax-glyph", "mail"]
+    assert all(child.source_id != "fax-frame" for child in result.children)
+    assert rows[1].children[0].kind == "icon"
+    assert rows[1].style.counter_axis_align == "center"
 
 
 def test_non_contact_multiline_text_is_left_alone():
