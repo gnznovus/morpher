@@ -61,6 +61,44 @@ def test_contact_text_is_split_into_absolute_rows_using_icon_spacing():
     ]
 
 
+def test_wrapped_icon_is_used_as_contact_row_anchor():
+    fax_icon = _node("icon", "fax-glyph", x=1288, y=5534, width=25, height=26)
+    fax_frame = DesignNode(
+        kind="container",
+        source_id="fax-frame",
+        style=DesignStyle(x=1286, y=5531, width=28, height=31),
+        children=[fax_icon],
+    )
+    root = DesignNode(
+        kind="container",
+        source_id="root",
+        style=DesignStyle(x=0, y=0, width=1920, height=907),
+        children=[
+            _node(
+                "text",
+                "contact",
+                x=1340,
+                y=5491,
+                width=348,
+                height=106,
+                text=": phone\n: fax\n: email",
+                font_size=20,
+                line_height=24,
+            ),
+            _node("icon", "phone", x=1288, y=5493, width=17, height=25),
+            fax_frame,
+            _node("icon", "mail", x=1286, y=5573, width=25, height=20),
+        ],
+    )
+
+    result = compile_contact_spatial_layout(root)
+    lines = [child for child in result.children if (child.source_id or "").startswith("contact::contact-line-")]
+
+    assert [line.text for line in lines] == [": phone", ": fax", ": email"]
+    assert [line.style.y for line in lines] == [5491, 5529, 5571]
+    assert next(child for child in result.children if child.source_id == "fax-frame").children[0].source_id == "fax-glyph"
+
+
 def test_non_contact_multiline_text_is_left_alone():
     root = DesignNode(
         kind="container",
