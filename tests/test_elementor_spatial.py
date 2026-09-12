@@ -23,6 +23,7 @@ def test_rotated_label_is_owned_by_containing_side_rail():
             height=192,
             rotation=-math.pi / 2,
             text_auto_resize="WIDTH_AND_HEIGHT",
+            font_size=20,
         ),
     )
     root = DesignNode(
@@ -41,9 +42,9 @@ def test_rotated_label_is_owned_by_containing_side_rail():
     assert [child.source_id for child in owned_rail.children] == ["label"]
 
     owned_label = owned_rail.children[0]
-    assert owned_label.style.width == 192
+    assert owned_label.style.width == 202
     assert owned_label.style.height == 24
-    assert owned_label.style.x == -58
+    assert owned_label.style.x == -63
     assert owned_label.style.y == 446
     assert owned_label.style.text_auto_resize is None
     assert owned_label.style.width_mode == "fixed"
@@ -51,9 +52,9 @@ def test_rotated_label_is_owned_by_containing_side_rail():
     rendered = render_elementor(result)["content"][0]["elements"][0]
     label_settings = rendered["elements"][0]["settings"]
     assert rendered["elType"] == "container"
-    assert label_settings["_offset_x"]["size"] == -59 / 1928 * 100
+    assert label_settings["_offset_x"]["size"] == -64 / 1928 * 100
     assert label_settings["_offset_y"]["size"] == 446 / 1928 * 100
-    assert label_settings["_element_custom_width"]["size"] == 192 / 1928 * 100
+    assert label_settings["_element_custom_width"]["size"] == 202 / 1928 * 100
     assert label_settings["_transform_rotate_popover"] == "transform"
 
 
