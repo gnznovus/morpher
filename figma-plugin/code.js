@@ -83,6 +83,128 @@ function isDuplicateCandidate(node) {
   return !isExplicitlyHidden(node) && "children" in node && node.children.length > 0;
 }
 
+function normalizedText(value) {
+  return (value || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function visibleBounds(node) {
+  const bounds = "absoluteRenderBounds" in node && node.absoluteRenderBounds
+    ? node.absoluteRenderBounds
+    : ("absoluteBoundingBox" in node ? node.absoluteBoundingBox : null);
+  if (!bounds || bounds.width <= 0 || bounds.height <= 0) return null;
+  return {
+    x1: bounds.x,
+    y1: bounds.y,
+    x2: bounds.x + bounds.width,
+    y2: bounds.y + bounds.height,
+    width: bounds.width,
+    height: bounds.height,
+    area: bounds.width * bounds.height,
+  };
+}
+
+function overlapRatio(a, b) {
+  const width = Math.max(0, Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1));
+  const height = Math.max(0, Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1));
+  const smallerArea = Math.min(a.area, b.area);
+  return smallerArea > 0 ? (width * height) / smallerArea : 0;
+}
+
+function setSimilarity(first, second) {
+  if (!first.size && !second.size) return 1;
+  if (!first.size || !second.size) return 0;
+  let shared = 0;
+  for (const value of first) if (second.has(value)) shared += 1;
+  const union = first.size + second.size - shared;
+  return union > 0 ? shared / union : 0;
+}
+
+function countSimilarity(first, second) {
+  const larger = Math.max(first, second);
+  if (!larger) return 1;
+  return Math.min(first, second) / larger;
+}
+
+function regionFingerprint(node) {
+  const texts = new Set();
+  let visuals = 0;
+  let containers = 0;
+
+  function visit(current, hiddenAncestor = false) {
+    const hidden = hiddenAncestor || isExplicitlyHidden(current);
+    if (hidden) return;
+    if (current.type === "TEXT") {
+      const text = normalizedText(current.characters);
+      if (text) texts.add(text);
+    }
+    if (["VECTOR", "BOOLEAN_OPERATION", "STAR", "ELLIPSE", "POLYGON", "LINE"].includes(current.type)) {
+      visuals += 1;
+    }
+    if ("fills" in current && Array.isArray(current.fills) && current.fills.some((fill) => fill && fill.visible !== false && fill.type === "IMAGE")) {
+      visuals += 1;
+    }
+    if ("children" in current) {
+      containers += 1;
+      for (const child of current.children) visit(child, hidden);
+    }
+  }
+
+  visit(node);
+  return { texts, visuals, containers };
+}
+
+function collectRegionCandidates(root) {
+  const rootBounds = visibleBounds(root);
+  const minimumArea = rootBounds ? rootBounds.area * 0.05 : 0;
+  const candidates = [];
+
+  function visit(node, hiddenAncestor = false) {
+    const hidden = hiddenAncestor || isExplicitlyHidden(node);
+    if (hidden) return;
+    if ("children" in node && node.children.length > 0) {
+      const bounds = visibleBounds(node);
+      if (bounds && bounds.area >= minimumArea) {
+        candidates.push({ node, bounds, fingerprint: regionFingerprint(node) });
+      }
+      for (const child of node.children) visit(child, hidden);
+    }
+  }
+
+  visit(root);
+  return candidates;
+}
+
+function findOverlappingStructureWarnings(root) {
+  const warnings = [];
+  const candidates = collectRegionCandidates(root);
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    const first = candidates[index];
+    for (let otherIndex = index + 1; otherIndex < candidates.length; otherIndex += 1) {
+      const second = candidates[otherIndex];
+      const overlap = overlapRatio(first.bounds, second.bounds);
+      if (overlap < 0.9) continue;
+
+      const areaRatio = Math.min(first.bounds.area, second.bounds.area) / Math.max(first.bounds.area, second.bounds.area);
+      if (areaRatio < 0.8) continue;
+
+      const textSimilarity = setSimilarity(first.fingerprint.texts, second.fingerprint.texts);
+      const visualSimilarity = countSimilarity(first.fingerprint.visuals, second.fingerprint.visuals);
+      const containerSimilarity = countSimilarity(first.fingerprint.containers, second.fingerprint.containers);
+      const sameName = normalizedText(first.node.name) === normalizedText(second.node.name);
+
+      if (textSimilarity < 0.75 || visualSimilarity < 0.7 || containerSimilarity < 0.7) continue;
+      if (!sameName && textSimilarity < 0.9) continue;
+
+      warnings.push(
+        `Suspicious overlapping structures: "${first.node.name}" (${first.node.id}) and "${second.node.name}" (${second.node.id}) occupy ${Math.round(overlap * 100)}% of the same visible region with similar content (text ${Math.round(textSimilarity * 100)}%, visuals ${Math.round(visualSimilarity * 100)}%). Both were preserved.`
+      );
+    }
+  }
+
+  return warnings;
+}
+
 function findDuplicateWarnings(root) {
   const warnings = [];
 
@@ -119,6 +241,7 @@ function findDuplicateWarnings(root) {
   }
 
   visit(root);
+  warnings.push(...findOverlappingStructureWarnings(root));
   return warnings;
 }
 
