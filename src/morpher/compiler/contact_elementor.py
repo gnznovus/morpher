@@ -73,15 +73,15 @@ def _mark_submit_border(root: DesignNode) -> None:
 def apply_contact_elementor_intent(root: DesignNode) -> DesignNode:
     """Attach narrow Elementor intent to the final Contact-oriented IR tree.
 
-    Generated contact/amenity pairs are already horizontal row containers, so center
-    their children on the row's cross axis instead of centering every child or the
-    row itself. Newsletter submit borders keep the authored top/right/left stroke but
-    intentionally omit the bottom edge.
+    Generated contact/amenity pair containers keep their internal item alignment at
+    Start. The pair container itself is centered as an item in its owner via Align
+    Self, so no child-level alignment overrides are needed. Newsletter submit borders
+    keep the authored top/right/left stroke but intentionally omit the bottom edge.
     """
     for node in _walk(root):
         if node.kind == "container" and "::contact-item-" in (node.source_id or ""):
-            node.style.counter_axis_align = "center"
-            node.style.layout_align = None
+            node.style.counter_axis_align = "min"
+            node.style.layout_align = "center"
 
     _mark_submit_border(root)
     return root
