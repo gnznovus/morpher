@@ -6,7 +6,7 @@ from morpher.ir.styles import DesignStyle
 from morpher.renderers.elementor import render_elementor
 
 
-def test_rotated_label_remains_sibling_of_side_rail():
+def test_rotated_label_remains_sibling_and_recovers_pretransform_box():
     rail = DesignNode(
         kind="shape",
         source_id="rail",
@@ -37,17 +37,26 @@ def test_rotated_label_remains_sibling_of_side_rail():
 
     assert [child.source_id for child in result.children] == ["rail", "label"]
     assert result.children[0].kind == "shape"
-    assert result.children[1].style.width == 24
-    assert result.children[1].style.height == 192
-    assert result.children[1].style.text_auto_resize == "WIDTH_AND_HEIGHT"
+
+    normalized = result.children[1]
+    assert normalized.style.width == 192
+    assert normalized.style.height == 24
+    assert normalized.style.x == -58
+    assert normalized.style.y == 446
+    assert normalized.style.text_auto_resize is None
+    assert normalized.style.width_mode == "fixed"
 
     rendered = render_elementor(result)["content"][0]
     rail_result, label_result = rendered["elements"]
+    settings = label_result["settings"]
     assert rail_result["elType"] == "container"
     assert label_result["widgetType"] == "heading"
-    assert label_result["settings"]["_element_width"] == "auto"
-    assert label_result["settings"]["_transform_rotate_popover"] == "transform"
-    assert abs(label_result["settings"]["_transform_rotateZ_effect"]["size"] + 90) < 1e-6
+    assert settings["_element_width"] == "initial"
+    assert abs(settings["_element_custom_width"]["size"] - 192 / 1928 * 100) < 1e-9
+    assert abs(settings["_offset_x"]["size"] - (-50 / 1928 * 100)) < 1e-9
+    assert abs(settings["_offset_y"]["size"] - (450 / 1928 * 100)) < 1e-9
+    assert settings["_transform_rotate_popover"] == "transform"
+    assert abs(settings["_transform_rotateZ_effect"]["size"] + 90) < 1e-6
 
 
 def test_rotated_vertical_line_is_normalized_for_divider_widget():
