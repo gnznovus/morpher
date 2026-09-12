@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Morpher
  * Description: WordPress integration for Morpher-generated Elementor output.
- * Version: 0.2.0
+ * Version: 0.3.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -154,8 +154,8 @@ function morpher_import_deployment( $directory ) {
         return;
     }
 
-    $asset_dir = trailingslashit( $uploads['basedir'] ) . 'morpher-assets/' . $slug;
-    $asset_url = trailingslashit( $uploads['baseurl'] ) . 'morpher-assets/' . $slug;
+    $asset_dir     = trailingslashit( $uploads['basedir'] ) . 'morpher-assets/' . $slug;
+    $asset_url     = trailingslashit( $uploads['baseurl'] ) . 'morpher-assets/' . $slug;
     $source_assets = trailingslashit( $directory ) . 'assets';
 
     if ( ! morpher_copy_directory( $source_assets, $asset_dir ) ) {
@@ -232,4 +232,112 @@ function morpher_process_deployments() {
     }
 }
 
-add_action( 'admin_init', 'morpher_process_deployments', 5 );
+function morpher_admin_menu() {
+    add_menu_page(
+        'Morpher',
+        'Morpher',
+        'manage_options',
+        'morpher',
+        'morpher_render_admin_page',
+        'dashicons-layout',
+        58
+    );
+}
+add_action( 'admin_menu', 'morpher_admin_menu' );
+
+function morpher_handle_manual_process() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_die( esc_html__( 'You are not allowed to process Morpher deployments.', 'morpher' ) );
+    }
+
+    check_admin_referer( 'morpher_process_deployments' );
+    morpher_process_deployments();
+
+    wp_safe_redirect(
+        add_query_arg(
+            'morpher_processed',
+            '1',
+            admin_url( 'admin.php?page=morpher' )
+        )
+    );
+    exit;
+}
+add_action( 'admin_post_morpher_process_deployments', 'morpher_handle_manual_process' );
+
+function morpher_deployment_rows() {
+    $root = plugin_dir_path( __FILE__ ) . 'deployments';
+    if ( ! is_dir( $root ) ) {
+        return array();
+    }
+
+    $rows = array();
+    $directories = glob( trailingslashit( $root ) . '*', GLOB_ONLYDIR );
+    foreach ( $directories ?: array() as $directory ) {
+        $manifest_path = trailingslashit( $directory ) . 'manifest.json';
+        $status_path   = trailingslashit( $directory ) . 'status.json';
+        $manifest      = is_file( $manifest_path ) ? json_decode( file_get_contents( $manifest_path ), true ) : array();
+        $status        = is_file( $status_path ) ? json_decode( file_get_contents( $status_path ), true ) : array();
+
+        $rows[] = array(
+            'slug'   => isset( $manifest['slug'] ) ? $manifest['slug'] : basename( $directory ),
+            'title'  => isset( $manifest['title'] ) ? $manifest['title'] : basename( $directory ),
+            'status' => isset( $status['status'] ) ? $status['status'] : 'staged',
+            'id'     => isset( $status['template_id'] ) ? (int) $status['template_id'] : 0,
+            'error'  => isset( $status['error'] ) ? $status['error'] : '',
+        );
+    }
+
+    return $rows;
+}
+
+function morpher_render_admin_page() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+
+    $rows = morpher_deployment_rows();
+    ?>
+    <div class="wrap">
+        <h1>Morpher</h1>
+        <p>Process staged Morpher Elementor deployments manually.</p>
+
+        <?php if ( isset( $_GET['morpher_processed'] ) ) : ?>
+            <div class="notice notice-success is-dismissible"><p>Morpher deployments processed.</p></div>
+        <?php endif; ?>
+
+        <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+            <input type="hidden" name="action" value="morpher_process_deployments">
+            <?php wp_nonce_field( 'morpher_process_deployments' ); ?>
+            <?php submit_button( 'Process staged deployments', 'primary', 'submit', false ); ?>
+        </form>
+
+        <h2>Deployments</h2>
+        <?php if ( ! $rows ) : ?>
+            <p>No staged deployments found.</p>
+        <?php else : ?>
+            <table class="widefat striped" style="max-width: 1000px;">
+                <thead>
+                    <tr>
+                        <th>Template</th>
+                        <th>Slug</th>
+                        <th>Status</th>
+                        <th>Elementor ID</th>
+                        <th>Error</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ( $rows as $row ) : ?>
+                        <tr>
+                            <td><?php echo esc_html( $row['title'] ); ?></td>
+                            <td><code><?php echo esc_html( $row['slug'] ); ?></code></td>
+                            <td><?php echo esc_html( $row['status'] ); ?></td>
+                            <td><?php echo $row['id'] ? esc_html( (string) $row['id'] ) : '—'; ?></td>
+                            <td><?php echo $row['error'] ? esc_html( $row['error'] ) : '—'; ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
+    </div>
+    <?php
+}
