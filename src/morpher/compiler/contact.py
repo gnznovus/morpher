@@ -87,6 +87,8 @@ def _leading_space_count(line: str) -> int:
 def _is_contact_visual_anchor(node: DesignNode) -> bool:
     if node.kind == "icon":
         return True
+    if node.kind == "shape" and node.source_type == "ELLIPSE":
+        return True
     if node.kind != "container" or not node.children:
         return False
 
@@ -165,17 +167,46 @@ def _clear_local_geometry(node: DesignNode) -> None:
     node.style.margin_left_percent = None
 
 
+def _line_start_indices(
+    anchors: list[DesignNode],
+    raw_lines: list[str],
+    line_height: float,
+) -> list[int] | None:
+    """Map visual-anchor Y positions to text-line starts.
+
+    Wrapped continuation lines create larger gaps between neighboring anchors. Using
+    the anchor rail as the source of truth preserves those wrapped lines inside the
+    previous logical item instead of treating every newline as a new item.
+    """
+    if not anchors or not raw_lines or line_height <= 0:
+        return None
+    first_box = _box(anchors[0])
+    if first_box is None:
+        return None
+
+    starts = [0]
+    for anchor in anchors[1:]:
+        box = _box(anchor)
+        if box is None:
+            return None
+        estimated = int(round((box[1] - first_box[1]) / line_height))
+        estimated = max(starts[-1] + 1, estimated)
+        if estimated >= len(raw_lines):
+            return None
+        starts.append(estimated)
+    return starts
+
+
 def _build_contact_items(
     text: DesignNode,
     anchors: list[DesignNode],
     parent_style: DesignStyle,
 ) -> list[DesignNode] | None:
-    """Turn one multiline text wall plus visual rail into authored item pairs.
+    """Turn one multiline text wall plus a visual rail into authored item pairs.
 
-    The text wall provides one shared wording column, while the visual rail provides
-    the stable per-item Y rhythm. Each output item owns one icon and one wording
-    node, so the relationship is explicit before Elementor sees it. Continuation
-    lines after the final anchored line remain part of that final wording item.
+    The visual rail defines logical item starts. Text between two neighboring anchor
+    starts stays inside the earlier item, which preserves wrapped continuation lines
+    such as a two-line amenity beside one bullet marker.
     """
     if not text.text or not text.source_id:
         return None
@@ -190,6 +221,10 @@ def _build_contact_items(
 
     font_size = text.style.font_size or 16.0
     line_height = text.style.line_height or font_size
+    starts = _line_start_indices(anchors, raw_lines, line_height)
+    if starts is None:
+        return None
+
     shared_leading = _leading_space_count(raw_lines[0])
     shared_text_x = (text.style.x or 0.0) + shared_leading * font_size * 0.36
     parent_x = parent_style.x or 0.0
@@ -201,9 +236,11 @@ def _build_contact_items(
         if anchor_box is None:
             return None
 
-        item_lines = [raw_lines[index]]
-        if index == len(anchors) - 1 and len(raw_lines) > len(anchors):
-            item_lines.extend(raw_lines[len(anchors) :])
+        start = starts[index]
+        end = starts[index + 1] if index + 1 < len(starts) else len(raw_lines)
+        item_lines = raw_lines[start:end]
+        if not item_lines:
+            return None
 
         visual = _contact_visual_leaf(anchor)
         visual_box = _box(visual) or anchor_box
@@ -255,13 +292,12 @@ def _build_contact_items(
 
 
 def compile_contact_spatial_layout(root: DesignNode) -> DesignNode:
-    """Normalize contact text walls into explicit absolute icon/text items.
+    """Normalize visual-marker text walls into explicit absolute row items.
 
-    Figma often exports several logical contact items as one multiline text node
-    beside a separate icon rail. Recover those item boundaries before rendering,
-    strip redundant single-icon wrappers, and keep every reconstructed item on the
-    existing free-layout/Fluid Absolute path. Native keeps the older flow-oriented
-    contact ownership pass below.
+    Figma often exports logical rows as one multiline text node beside a separate
+    visual rail. Contacts use icons; amenity lists may use small ellipse markers.
+    Recover those item boundaries before Elementor sees them while preserving the
+    existing size guard so large decorative graphics cannot become row anchors.
     """
     compiled = deepcopy(root)
 
