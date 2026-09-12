@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Morpher
  * Description: WordPress integration for Morpher-generated Elementor output.
- * Version: 0.3.0
+ * Version: 0.4.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -107,7 +107,7 @@ function morpher_rewrite_asset_urls( $value, $asset_root, $asset_url ) {
     return $value;
 }
 
-function morpher_import_deployment( $directory ) {
+function morpher_import_deployment( $directory, $force_override = false ) {
     $manifest_path = trailingslashit( $directory ) . 'manifest.json';
     $template_path = trailingslashit( $directory ) . 'template.json';
     $status_path   = trailingslashit( $directory ) . 'status.json';
@@ -121,7 +121,9 @@ function morpher_import_deployment( $directory ) {
         return;
     }
 
-    if ( is_file( $status_path ) ) {
+    $force = $force_override || ! empty( $manifest['force'] );
+
+    if ( ! $force && is_file( $status_path ) ) {
         $status = json_decode( file_get_contents( $status_path ), true );
         if ( is_array( $status ) && isset( $status['build_hash'] ) && $status['build_hash'] === $manifest['build_hash'] ) {
             return;
@@ -129,7 +131,6 @@ function morpher_import_deployment( $directory ) {
     }
 
     $slug     = sanitize_title( $manifest['slug'] );
-    $force    = ! empty( $manifest['force'] );
     $existing = morpher_find_template_by_slug( $slug );
 
     if ( $existing && ! $force ) {
@@ -264,6 +265,36 @@ function morpher_handle_manual_process() {
 }
 add_action( 'admin_post_morpher_process_deployments', 'morpher_handle_manual_process' );
 
+function morpher_handle_redeploy() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_die( esc_html__( 'You are not allowed to re-deploy Morpher templates.', 'morpher' ) );
+    }
+
+    check_admin_referer( 'morpher_redeploy' );
+
+    $requested = isset( $_POST['deployment'] ) ? sanitize_file_name( wp_unslash( $_POST['deployment'] ) ) : '';
+    $root      = plugin_dir_path( __FILE__ ) . 'deployments';
+    $directory = $requested ? trailingslashit( $root ) . $requested : '';
+
+    if ( ! $requested || ! is_dir( $directory ) || basename( $directory ) !== $requested ) {
+        wp_die( esc_html__( 'Invalid Morpher deployment.', 'morpher' ) );
+    }
+
+    morpher_import_deployment( $directory, true );
+
+    wp_safe_redirect(
+        add_query_arg(
+            array(
+                'page'                => 'morpher',
+                'morpher_redeployed'  => $requested,
+            ),
+            admin_url( 'admin.php' )
+        )
+    );
+    exit;
+}
+add_action( 'admin_post_morpher_redeploy', 'morpher_handle_redeploy' );
+
 function morpher_deployment_rows() {
     $root = plugin_dir_path( __FILE__ ) . 'deployments';
     if ( ! is_dir( $root ) ) {
@@ -279,11 +310,12 @@ function morpher_deployment_rows() {
         $status        = is_file( $status_path ) ? json_decode( file_get_contents( $status_path ), true ) : array();
 
         $rows[] = array(
-            'slug'   => isset( $manifest['slug'] ) ? $manifest['slug'] : basename( $directory ),
-            'title'  => isset( $manifest['title'] ) ? $manifest['title'] : basename( $directory ),
-            'status' => isset( $status['status'] ) ? $status['status'] : 'staged',
-            'id'     => isset( $status['template_id'] ) ? (int) $status['template_id'] : 0,
-            'error'  => isset( $status['error'] ) ? $status['error'] : '',
+            'deployment' => basename( $directory ),
+            'slug'       => isset( $manifest['slug'] ) ? $manifest['slug'] : basename( $directory ),
+            'title'      => isset( $manifest['title'] ) ? $manifest['title'] : basename( $directory ),
+            'status'     => isset( $status['status'] ) ? $status['status'] : 'staged',
+            'id'         => isset( $status['template_id'] ) ? (int) $status['template_id'] : 0,
+            'error'      => isset( $status['error'] ) ? $status['error'] : '',
         );
     }
 
@@ -304,6 +336,9 @@ function morpher_render_admin_page() {
         <?php if ( isset( $_GET['morpher_processed'] ) ) : ?>
             <div class="notice notice-success is-dismissible"><p>Morpher deployments processed.</p></div>
         <?php endif; ?>
+        <?php if ( isset( $_GET['morpher_redeployed'] ) ) : ?>
+            <div class="notice notice-success is-dismissible"><p><?php echo esc_html( 'Re-deployed ' . sanitize_file_name( wp_unslash( $_GET['morpher_redeployed'] ) ) . '.' ); ?></p></div>
+        <?php endif; ?>
 
         <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
             <input type="hidden" name="action" value="morpher_process_deployments">
@@ -315,7 +350,7 @@ function morpher_render_admin_page() {
         <?php if ( ! $rows ) : ?>
             <p>No staged deployments found.</p>
         <?php else : ?>
-            <table class="widefat striped" style="max-width: 1000px;">
+            <table class="widefat striped" style="max-width: 1100px;">
                 <thead>
                     <tr>
                         <th>Template</th>
@@ -323,6 +358,7 @@ function morpher_render_admin_page() {
                         <th>Status</th>
                         <th>Elementor ID</th>
                         <th>Error</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -333,6 +369,14 @@ function morpher_render_admin_page() {
                             <td><?php echo esc_html( $row['status'] ); ?></td>
                             <td><?php echo $row['id'] ? esc_html( (string) $row['id'] ) : '—'; ?></td>
                             <td><?php echo $row['error'] ? esc_html( $row['error'] ) : '—'; ?></td>
+                            <td>
+                                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+                                    <input type="hidden" name="action" value="morpher_redeploy">
+                                    <input type="hidden" name="deployment" value="<?php echo esc_attr( $row['deployment'] ); ?>">
+                                    <?php wp_nonce_field( 'morpher_redeploy' ); ?>
+                                    <?php submit_button( 'Re-deploy', 'secondary small', 'submit', false ); ?>
+                                </form>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
