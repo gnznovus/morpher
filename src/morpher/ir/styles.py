@@ -42,6 +42,10 @@ class DesignStyle:
     text_color: str | None = None
     stroke_color: str | None = None
     stroke_weight: float | None = None
+    border_top_width: float | None = None
+    border_right_width: float | None = None
+    border_bottom_width: float | None = None
+    border_left_width: float | None = None
     border_radius: float | None = None
     layout_direction: LayoutDirection | None = None
     width_mode: SizingMode | None = None
