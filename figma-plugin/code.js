@@ -245,6 +245,24 @@ function findDuplicateWarnings(root) {
   return warnings;
 }
 
+function warningTopic(warning) {
+  if (warning.startsWith("Suspicious overlapping structures:")) {
+    return "Suspicious overlapping structures detected.";
+  }
+  if (warning.startsWith("Possible duplicate layer:")) {
+    return "Possible duplicate layer detected.";
+  }
+  return "Design warning detected.";
+}
+
+function formatWarningNote(warnings) {
+  if (!warnings.length) return "";
+  const topics = warnings.map(
+    (warning, index) => `⚠ [${index + 1}] ${warningTopic(warning)}`
+  );
+  return `\n${topics.join("\n")}\nSee figma-plugin/log/warning.txt for full details.`;
+}
+
 function collectImageRefs(node, refs = new Set(), hiddenAncestor = false) {
   const hidden = hiddenAncestor || isExplicitlyHidden(node);
   if (!hidden && "fills" in node && Array.isArray(node.fills)) {
@@ -381,9 +399,7 @@ figma.ui.onmessage = async (message) => {
       formatSkipStats("non-rendering text outlines", textExport.skipped),
     ].filter(Boolean);
     const skippedNote = skippedNotes.length ? `, ${skippedNotes.join(", ")}` : "";
-    const warningNote = warnings.length
-      ? ` ⚠ ${warnings.length} design warning${warnings.length === 1 ? "" : "s"}; see figma-plugin/log/warning.txt.`
-      : "";
+    const warningNote = formatWarningNote(warnings);
 
     figma.ui.postMessage({
       type: "status",
