@@ -29,24 +29,47 @@ def test_figma_plugin_warns_on_similar_overlapping_visible_structures() -> None:
 
     assert "function findOverlappingStructureWarnings" in plugin_code
     assert "function regionFingerprint" in plugin_code
+    assert "function similarOverlappingPair" in plugin_code
     assert "absoluteRenderBounds" in plugin_code
     assert "overlap < 0.9" in plugin_code
     assert "textSimilarity < 0.75" in plugin_code
     assert "visualSimilarity < 0.7" in plugin_code
     assert "Possible stacked duplicate content" in plugin_code
-    assert "Check these layer paths for duplicated or accidentally stacked sections" in plugin_code
+    assert "Check these layer paths for accidental duplication" in plugin_code
     assert "warnings.push(...findOverlappingStructureWarnings(root))" in plugin_code
 
 
-def test_figma_plugin_overlap_warning_points_to_nested_layer_paths() -> None:
+def test_figma_plugin_clusters_related_stacked_structures_into_one_warning() -> None:
+    plugin_code = _plugin_code()
+
+    assert "function collectCandidateClusters" in plugin_code
+    assert "const adjacency = candidates.map(() => new Set());" in plugin_code
+    assert "adjacency[index].add(otherIndex);" in plugin_code
+    assert "adjacency[otherIndex].add(index);" in plugin_code
+    assert "function formatStackedDuplicateWarning" in plugin_code
+    assert "${count} similar structures occupy the same visible region" in plugin_code
+    assert "Morpher preserved all ${count}." in plugin_code
+    assert "collectCandidateClusters(candidates).map(formatStackedDuplicateWarning)" in plugin_code
+
+
+def test_figma_plugin_overlap_warning_points_to_each_nested_layer_path() -> None:
     plugin_code = _plugin_code()
 
     assert "function formatStructurePath" in plugin_code
     assert 'join(" > ")' in plugin_code
-    assert "!isRoot && bounds" in plugin_code
+    assert "!isRoot && !isTransparentWrapper(node) && bounds" in plugin_code
     assert "visit(root, [], false, true);" in plugin_code
-    assert '"${formatStructurePath(first)}"' in plugin_code
-    assert '"${formatStructurePath(second)}"' in plugin_code
+    assert "cluster.map((candidate) => `- ${formatStructurePath(candidate)}`)" in plugin_code
+
+
+def test_figma_plugin_ignores_single_child_transparent_wrappers_as_overlap_candidates() -> None:
+    plugin_code = _plugin_code()
+
+    assert "function isTransparentWrapper" in plugin_code
+    assert "children.length !== 1" in plugin_code
+    assert "const hasFill" in plugin_code
+    assert "const hasStroke" in plugin_code
+    assert "return !hasFill && !hasStroke;" in plugin_code
 
 
 def test_figma_plugin_surfaces_indexed_warning_topics_in_ui() -> None:
