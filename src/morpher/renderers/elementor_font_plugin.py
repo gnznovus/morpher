@@ -54,11 +54,13 @@ def render_elementor_font_plugin(
     resolver: FontIntentResolver = resolve_font_intent,
     diagnostics: list[str] | None = None,
 ) -> Path:
-    """Update the persistent Morpher WordPress plugin with fonts required by this design.
+    """Update runtime font assets without replacing the Morpher WordPress plugin.
 
-    The plugin directory is intentionally persistent across renders. Each render merges
-    newly resolved faces into a small manifest instead of replacing fonts required by
-    previously generated Elementor pages.
+    The plugin source is persistent application code and may contain deployment,
+    REST, or other runtime features unrelated to fonts. Font rendering therefore
+    owns only ``assets/fonts*``. A minimal plugin file is created only when one does
+    not already exist, preserving backward compatibility for isolated font-plugin
+    tests or standalone output directories.
     """
     assets_dir = output_dir / "assets"
     font_dir = assets_dir / "fonts"
@@ -69,7 +71,8 @@ def render_elementor_font_plugin(
     plugin_path = output_dir / "morpher-plugin.php"
     css_path = assets_dir / "fonts.css"
     manifest_path = assets_dir / "fonts.json"
-    plugin_path.write_text(_PLUGIN_PHP, encoding="utf-8")
+    if not plugin_path.exists():
+        plugin_path.write_text(_PLUGIN_PHP, encoding="utf-8")
 
     manifest = _load_manifest(manifest_path)
     faces: dict[str, dict] = manifest.setdefault("faces", {})
