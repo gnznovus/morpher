@@ -54,7 +54,7 @@ def test_contact_text_wall_is_normalized_into_icon_text_items():
     assert [item.children[1].text for item in items] == ["first", "second", "third\ncontinuation"]
     assert [item.children[0].source_id for item in items] == ["mail", "instagram", "phone"]
     assert all(item.style.layout_direction == "horizontal" for item in items)
-    assert all(item.style.counter_axis_align == "min" for item in items)
+    assert all(item.style.counter_axis_align == "center" for item in items)
     assert all(item.style.gap is not None and item.style.gap >= 0 for item in items)
     assert [item.style.y for item in items] == [3537, 3576, 3616]
     assert all(item.children[0].style.x is None for item in items)
@@ -99,6 +99,7 @@ def test_wrapped_icon_is_stripped_before_pairing():
     assert [item.children[0].source_id for item in items] == ["phone", "fax-glyph", "mail"]
     assert all(child.source_id != "fax-frame" for child in result.children)
     assert items[1].children[0].kind == "icon"
+    assert all(item.style.counter_axis_align == "center" for item in items)
 
 
 def test_non_contact_multiline_text_is_left_alone():
