@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 from morpher.ir.nodes import DesignNode
+from morpher.ir.styles import DesignStyle
 
 
 def _box(node: DesignNode) -> tuple[float, float, float, float] | None:
@@ -84,13 +85,6 @@ def _leading_space_count(line: str) -> int:
 
 
 def _is_contact_visual_anchor(node: DesignNode) -> bool:
-    """Return true for an icon or a wrapper whose descendants are only icon visuals.
-
-    Some Figma exports keep a simple glyph as a direct icon while others wrap the
-    same kind of glyph in a small Frame/Group. The wrapper geometry is the authored
-    row anchor, so contact inference must treat both shapes equivalently without
-    flattening or moving the visual itself.
-    """
     if node.kind == "icon":
         return True
     if node.kind != "container" or not node.children:
@@ -108,6 +102,23 @@ def _is_contact_visual_anchor(node: DesignNode) -> bool:
         return all(visual_only(child) for child in current.children)
 
     return visual_only(node) and found_icon
+
+
+def _contact_visual_leaf(anchor: DesignNode) -> DesignNode:
+    """Strip a redundant visual-only wrapper when it contains one icon leaf."""
+    leaves: list[DesignNode] = []
+
+    def collect(node: DesignNode) -> None:
+        if node.kind == "icon":
+            leaves.append(node)
+            return
+        for child in node.children:
+            collect(child)
+
+    collect(anchor)
+    if len(leaves) == 1:
+        return deepcopy(leaves[0])
+    return deepcopy(anchor)
 
 
 def _contact_icons(parent: DesignNode, text: DesignNode) -> list[DesignNode]:
@@ -137,81 +148,124 @@ def _contact_icons(parent: DesignNode, text: DesignNode) -> list[DesignNode]:
     return icons
 
 
-def _split_spatial_contact_text(parent: DesignNode, text: DesignNode) -> list[DesignNode] | None:
-    if text.kind != "text" or not text.text or not text.source_id:
-        return None
-    lines = [line for line in text.text.replace("\r", "").split("\n") if line.strip()]
-    if len(lines) < 2:
+def _clear_flow_child_geometry(node: DesignNode) -> None:
+    node.style.x = None
+    node.style.y = None
+    node.style.position_mode = None
+    node.style.offset_x = None
+    node.style.offset_y = None
+    node.style.margin_top_percent = None
+    node.style.margin_right_percent = None
+    node.style.margin_bottom_percent = None
+    node.style.margin_left_percent = None
+
+
+def _build_spatial_contact_rows(
+    text: DesignNode,
+    anchors: list[DesignNode],
+) -> list[DesignNode] | None:
+    if not text.text or not text.source_id:
         return None
 
-    icons = _contact_icons(parent, text)
-    if len(icons) < 2 or len(icons) > len(lines):
+    lines = [line for line in text.text.replace("\r", "").split("\n") if line.strip()]
+    if len(lines) < 2 or len(anchors) < 2 or len(anchors) > len(lines):
         return None
 
     text_box = _box(text)
     if text_box is None:
         return None
 
-    base_y = text.style.y
-    if base_y is None:
-        return None
-    line_height = text.style.line_height or text.style.font_size or 16.0
     font_size = text.style.font_size or 16.0
-
+    line_height = text.style.line_height or font_size
     rows: list[DesignNode] = []
-    last_y = base_y
-    for index, line in enumerate(lines):
-        row = deepcopy(text)
-        row.children = []
-        row.source_id = f"{text.source_id}::contact-line-{index + 1}"
-        row.text = line.strip()
-        row.style.height = line_height
-        row.style.width = None
-        row.style.width_percent = None
-        row.style.width_mode = "hug"
-        row.style.text_auto_resize = "WIDTH_AND_HEIGHT"
-        row.style.x = (text.style.x or 0.0) + _leading_space_count(line) * font_size * 0.36
 
-        if index < len(icons):
-            icon_box = _box(icons[index])
-            if icon_box is None:
-                return None
-            # Treat the authored visual as the row's vertical anchor. Elementor's
-            # spatial equivalent of align-self:center is to center the text line box
-            # on the icon/wrapper box rather than aligning their top edges.
-            icon_center_y = (icon_box[1] + icon_box[3]) / 2.0
-            row.style.y = icon_center_y - line_height / 2.0
-            last_y = row.style.y
-        else:
-            row.style.y = last_y + line_height
-            last_y = row.style.y
+    for index, anchor in enumerate(anchors):
+        anchor_box = _box(anchor)
+        if anchor_box is None:
+            return None
+
+        group_lines = [lines[index]]
+        if index == len(anchors) - 1 and len(lines) > len(anchors):
+            group_lines.extend(lines[len(anchors) :])
+
+        leading = _leading_space_count(group_lines[0])
+        text_x = (text.style.x or 0.0) + leading * font_size * 0.36
+        text_height = line_height * len(group_lines)
+        row_left = min(anchor_box[0], text_x)
+        row_top = min(anchor_box[1], (text.style.y or anchor_box[1]) + index * line_height)
+        row_right = max(anchor_box[2], text_box[2])
+        row_height = max(anchor_box[3] - row_top, text_height, anchor_box[3] - anchor_box[1])
+        gap = max(0.0, text_x - anchor_box[2])
+
+        visual = _contact_visual_leaf(anchor)
+        _clear_flow_child_geometry(visual)
+        visual.style.width_mode = "hug"
+        visual.style.height_mode = "hug"
+
+        wording = deepcopy(text)
+        wording.children = []
+        wording.source_id = f"{text.source_id}::contact-wording-{index + 1}"
+        wording.text = "\n".join(line.strip() for line in group_lines)
+        _clear_flow_child_geometry(wording)
+        wording.style.width = None
+        wording.style.width_percent = None
+        wording.style.height = None
+        wording.style.width_mode = "hug"
+        wording.style.height_mode = "hug"
+        wording.style.text_auto_resize = "WIDTH_AND_HEIGHT"
+
+        row = DesignNode(
+            kind="container",
+            name=f"{text.name or 'contact'} row {index + 1}",
+            source_id=f"{text.source_id}::contact-spatial-row-{index + 1}",
+            style=DesignStyle(
+                x=row_left,
+                y=row_top,
+                width=max(0.0, row_right - row_left),
+                height=row_height,
+                layout_direction="horizontal",
+                width_mode="fixed",
+                height_mode="fixed",
+                gap=gap,
+                counter_axis_align="center",
+            ),
+            children=[visual, wording],
+        )
         rows.append(row)
 
     return rows
 
 
 def compile_contact_spatial_layout(root: DesignNode) -> DesignNode:
-    """Preserve contact relationships for Elementor without converting them to flow.
+    """Preserve contact rows as absolute pair containers for Elementor.
 
-    Figma contact blocks are often authored as a vertical icon rail beside one
-    multiline text node. Elementor cannot reproduce Figma paragraph spacing from
-    that single widget, so the text lines drift away from independently positioned
-    icons. Detect that relationship, split only the multiline text into individual
-    spatial text nodes, and keep every authored icon and coordinate in the same
-    free-layout composition. Native keeps the existing flow-oriented contact pass.
+    Each detected visual/text pair becomes one horizontal container positioned by
+    authored source geometry. Its children are normal flex items with center cross-
+    axis alignment, so glyph and wording stay vertically aligned at every scale.
+    Redundant icon-only Figma wrappers are stripped when they contain one icon leaf.
+    Native keeps the existing flow-oriented contact pass below.
     """
     compiled = deepcopy(root)
 
     def visit(parent: DesignNode) -> None:
         replacements: dict[int, list[DesignNode]] = {}
+        consumed_anchor_ids: set[str] = set()
+
         for index, child in enumerate(parent.children):
-            rows = _split_spatial_contact_text(parent, child)
-            if rows is not None:
-                replacements[index] = rows
+            if child.kind != "text":
+                continue
+            anchors = _contact_icons(parent, child)
+            rows = _build_spatial_contact_rows(child, anchors)
+            if rows is None:
+                continue
+            replacements[index] = rows
+            consumed_anchor_ids.update(anchor.source_id for anchor in anchors if anchor.source_id)
 
         if replacements:
             rebuilt: list[DesignNode] = []
             for index, child in enumerate(parent.children):
+                if child.source_id in consumed_anchor_ids:
+                    continue
                 rebuilt.extend(replacements.get(index, [child]))
             parent.children = rebuilt
 
@@ -228,13 +282,6 @@ def _normalize_contact_icon_widths(
     source_by_id: dict[str, DesignNode],
     viewport: float,
 ) -> None:
-    """Give peer contact icons one shared widget width.
-
-    The contact compiler already knows these icons are siblings because it
-    rebuilt them as rows inside one generated contact group. Normalizing only
-    this peer set keeps narrow glyphs (for example a phone icon) centered on
-    the same visual column without introducing global icon rules or wrappers.
-    """
     icons: list[tuple[DesignNode, float]] = []
     for row in group.children:
         for child in row.children:
@@ -264,15 +311,6 @@ def resolve_contact_group_ownership(
     source_root: DesignNode,
     design_viewport_width: float | None,
 ) -> DesignNode:
-    """Attach generated contact rows to the nearby semantic content region.
-
-    Contact lists reconstructed from one multiline Figma text node can be
-    detached from the content region that owns their heading/body. Source
-    geometry is a better ownership signal than source-array order: the nearest
-    horizontally aligned text above owns the list, while the nearest aligned
-    text starting below the list becomes the following sibling. This keeps the
-    relationship in normal flow without absolute positioning or overlap hacks.
-    """
     viewport = design_viewport_width or 0.0
     if viewport <= 0:
         return compiled_root
