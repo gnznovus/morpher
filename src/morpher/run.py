@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
 from morpher.inspect import inspect_path
-from morpher.render import render_path
+from morpher.render import RenderOutputs, render_path
 from morpher.storage.paths import StoragePaths
 from morpher.storage.scanner import scan_sources
 
@@ -16,22 +17,76 @@ class RunResult:
     status: str
     warnings: int = 0
     error: str | None = None
+    outputs: RenderOutputs | None = None
 
 
 def _outputs_exist(source: Path, storage: StoragePaths) -> bool:
-    """A source is processed only when the outputs required today both exist."""
-    return storage.html_output(source).exists() and storage.css_output(source).exists()
+    """A source is processed only when all currently required outputs exist."""
+    return (
+        storage.fidelity_html_output(source).exists()
+        and storage.fidelity_css_output(source).exists()
+        and storage.native_html_output(source).exists()
+        and storage.native_css_output(source).exists()
+        and storage.elementor_output(source).exists()
+    )
+
+
+def _existing_outputs(source: Path, storage: StoragePaths) -> RenderOutputs:
+    return RenderOutputs(
+        fidelity_html=storage.fidelity_html_output(source),
+        fidelity_css=storage.fidelity_css_output(source),
+        native_html=storage.native_html_output(source),
+        native_css=storage.native_css_output(source),
+        elementor=storage.elementor_output(source),
+        warning_count=0,
+    )
+
+
+def _print_outputs(outputs: RenderOutputs) -> None:
+    if outputs.fidelity_html is not None:
+        print(f"  Fidelity HTML: {outputs.fidelity_html}")
+    if outputs.fidelity_css is not None:
+        print(f"  Fidelity CSS:  {outputs.fidelity_css}")
+    if outputs.native_html is not None:
+        print(f"  Native HTML:   {outputs.native_html}")
+    if outputs.native_css is not None:
+        print(f"  Native CSS:    {outputs.native_css}")
+    print(f"  Elementor:     {outputs.elementor}")
+
+
+def clean_outputs(storage: StoragePaths | None = None) -> None:
+    """Delete generated output only; source/import/processed data is never touched."""
+    storage = storage or StoragePaths()
+    output_root = storage.root / "output"
+
+    if output_root.exists():
+        shutil.rmtree(output_root)
+
+    # Recreate the renderer-owned output structure so the workspace is ready
+    # for the next render without touching any source-side storage.
+    storage.output_html_fidelity.mkdir(parents=True, exist_ok=True)
+    storage.output_html_native.mkdir(parents=True, exist_ok=True)
+    storage.output_elementor.mkdir(parents=True, exist_ok=True)
 
 
 def run_source(source: Path, storage: StoragePaths, *, force: bool = False) -> RunResult:
     if not force and _outputs_exist(source, storage):
-        return RunResult(source=source, status="skipped")
+        return RunResult(
+            source=source,
+            status="skipped",
+            outputs=_existing_outputs(source, storage),
+        )
 
     try:
         # Inspect exactly once so the rich diagnostic trace remains the canonical trace.
         inspect_path(source)
-        _, _, warning_count = render_path(source)
-        return RunResult(source=source, status="processed", warnings=warning_count)
+        outputs = render_path(source)
+        return RunResult(
+            source=source,
+            status="processed",
+            warnings=outputs.warning_count,
+            outputs=outputs,
+        )
     except (OSError, ValueError) as exc:
         return RunResult(source=source, status="failed", error=str(exc))
 
@@ -39,6 +94,9 @@ def run_source(source: Path, storage: StoragePaths, *, force: bool = False) -> R
 def run_all(*, force: bool = False, storage: StoragePaths | None = None) -> list[RunResult]:
     storage = storage or StoragePaths()
     storage.ensure()
+
+    # Font discovery is lazy. The font resolver checks the persisted registry
+    # first and only runs the gatherer after a requested face misses the cache.
 
     # Preserved Figma imports have priority; generic input remains the second queue.
     sources = scan_sources(
@@ -55,9 +113,19 @@ def main() -> None:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Reprocess sources even when their HTML/CSS outputs already exist.",
+        help="Reprocess sources even when their required outputs already exist.",
+    )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Delete generated storage/output content only, then exit.",
     )
     args = parser.parse_args()
+
+    if args.clean:
+        clean_outputs()
+        print("CLEAN    storage/output")
+        return
 
     results = run_all(force=args.force)
     if not results:
@@ -67,8 +135,12 @@ def main() -> None:
     for result in results:
         if result.status == "processed":
             print(f"PROCESS  {result.source}  warnings={result.warnings}")
+            if result.outputs is not None:
+                _print_outputs(result.outputs)
         elif result.status == "skipped":
             print(f"SKIP     {result.source}  outputs already exist")
+            if result.outputs is not None:
+                _print_outputs(result.outputs)
         else:
             print(f"FAILED   {result.source}  {result.error}")
 

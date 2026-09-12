@@ -7,12 +7,16 @@ name = "morpher"
 version = "0.1.0"
 description = "Modular design compiler for HTML/CSS and Elementor outputs."
 requires-python = ">=3.11"
+dependencies = [
+    "fonttools[woff]>=4.58",
+]
 
 [project.scripts]
 morpher = "morpher.run:main"
 morpher-listen = "morpher.listener:main"
 morpher-inspect = "morpher.inspect:main"
 morpher-render = "morpher.render:main"
+morpher-fonts = "morpher.fonts.inspect:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

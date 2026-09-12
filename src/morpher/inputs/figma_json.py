@@ -4,6 +4,7 @@ from typing import Any
 
 from morpher.ir.nodes import DesignDocument, DesignNode
 from morpher.ir.styles import DesignStyle
+from morpher.ir.typography import normalize_font_intent
 
 
 _CONTAINER_TYPES = {"FRAME", "GROUP", "SECTION", "COMPONENT", "INSTANCE"}
@@ -31,11 +32,7 @@ class FigmaJsonAdapter:
 
         warnings: list[str] = []
         root = self._normalize_node(document, warnings)
-        return DesignDocument(
-            root=root,
-            warnings=warnings,
-            schema_version=data.get("schemaVersion"),
-        )
+        return DesignDocument(root=root, warnings=warnings, schema_version=data.get("schemaVersion"))
 
     def _normalize_node(self, node: dict[str, Any], warnings: list[str]) -> DesignNode:
         source_type = str(node.get("type", "UNKNOWN"))
@@ -51,7 +48,7 @@ class FigmaJsonAdapter:
             children = [
                 self._normalize_node(child, warnings)
                 for child in node.get("children", [])
-                if isinstance(child, dict)
+                if isinstance(child, dict) and child.get("visible") is not False
             ]
 
         return DesignNode(
@@ -81,13 +78,34 @@ class FigmaJsonAdapter:
 
     @staticmethod
     def _is_vector_composite(node: dict[str, Any]) -> bool:
-        children = node.get("children")
-        return (
-            node.get("type") in _CONTAINER_TYPES
-            and isinstance(children, list)
-            and bool(children)
-            and all(isinstance(child, dict) and child.get("type") == "VECTOR" for child in children)
-        )
+        """Treat vector-dominant authored marks as one atomic graphic.
+
+        Figma artwork is sometimes built from one VECTOR per outlined glyph plus
+        a tiny live-text annotation such as a trademark. That is still one visual
+        object, not a layout container. Keep the older all-vector case, and also
+        accept a strongly vector-dominant container with only a small amount of
+        short annotation text. Ordinary icon/text rows remain containers.
+        """
+        if node.get("type") not in _CONTAINER_TYPES:
+            return False
+        children = [
+            child
+            for child in node.get("children", [])
+            if isinstance(child, dict) and child.get("visible") is not False
+        ]
+        if not children:
+            return False
+        if all(child.get("type") == "VECTOR" for child in children):
+            return True
+
+        vectors = [child for child in children if child.get("type") == "VECTOR"]
+        texts = [child for child in children if child.get("type") == "TEXT"]
+        if len(vectors) < 4 or len(vectors) / len(children) < 0.8:
+            return False
+        if len(vectors) + len(texts) != len(children) or len(texts) > 2:
+            return False
+        annotation = "".join(str(child.get("characters") or "").strip() for child in texts)
+        return len(annotation) <= 8
 
     @staticmethod
     def _image_ref(node: dict[str, Any]) -> str | None:
@@ -112,6 +130,10 @@ class FigmaJsonAdapter:
         layout_mode = node.get("layoutMode")
         source_type = node.get("type")
         solid_color = self._solid_color(node)
+        font_family = text_style.get("fontFamily")
+        font_postscript_name = text_style.get("fontPostScriptName")
+        font_style = text_style.get("fontStyle")
+        font_weight = self._integer(text_style.get("fontWeight"))
 
         return DesignStyle(
             width=self._geometry_number(box.get("width")),
@@ -141,14 +163,16 @@ class FigmaJsonAdapter:
             layout_grow=self._geometry_number(node.get("layoutGrow")),
             constraint_horizontal=constraints.get("horizontal"),
             constraint_vertical=constraints.get("vertical"),
-            font_family=text_style.get("fontFamily"),
-            font_postscript_name=text_style.get("fontPostScriptName"),
-            font_style=text_style.get("fontStyle"),
-            font_weight=self._integer(text_style.get("fontWeight")),
+            font=normalize_font_intent(family=font_family, weight=font_weight, source_style=font_style, postscript_name=font_postscript_name),
+            font_family=font_family,
+            font_postscript_name=font_postscript_name,
+            font_style=font_style,
+            font_weight=font_weight,
             font_size=self._geometry_number(text_style.get("fontSize")),
             letter_spacing=self._geometry_number(text_style.get("letterSpacing")),
             line_height=self._geometry_number(text_style.get("lineHeightPx")),
             text_auto_resize=text_style.get("textAutoResize"),
+            text_case=text_style.get("textCase"),
             text_align_horizontal=text_style.get("textAlignHorizontal"),
             text_align_vertical=text_style.get("textAlignVertical"),
         )
@@ -163,12 +187,7 @@ class FigmaJsonAdapter:
 
     @staticmethod
     def _sizing_mode(value: Any):
-        mapping = {
-            "FIXED": "fixed",
-            "HUG": "hug",
-            "FILL": "fill",
-        }
-        return mapping.get(value)
+        return {"FIXED": "fixed", "HUG": "hug", "FILL": "fill"}.get(value)
 
     @staticmethod
     def _layout_alignment(value: Any) -> str | None:
