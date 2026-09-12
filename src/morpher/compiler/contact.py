@@ -128,12 +128,17 @@ def _contact_icons(parent: DesignNode, text: DesignNode) -> list[DesignNode]:
 
     font_size = text.style.font_size or 16.0
     max_gap = max(font_size * 3.0, (text_box[2] - text_box[0]) * 0.15)
+    max_anchor_size = font_size * 4.0
     icons: list[DesignNode] = []
     for child in parent.children:
         if child is text or not _is_contact_visual_anchor(child):
             continue
         icon_box = _box(child)
         if icon_box is None:
+            continue
+        icon_width = icon_box[2] - icon_box[0]
+        icon_height = icon_box[3] - icon_box[1]
+        if icon_width > max_anchor_size or icon_height > max_anchor_size:
             continue
         vertical_overlap = max(0.0, min(text_box[3], icon_box[3]) - max(text_box[1], icon_box[1]))
         if vertical_overlap <= 0:
