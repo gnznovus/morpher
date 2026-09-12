@@ -160,7 +160,11 @@ def _clear_local_geometry(node: DesignNode) -> None:
     node.style.margin_left_percent = None
 
 
-def _build_contact_items(text: DesignNode, anchors: list[DesignNode]) -> list[DesignNode] | None:
+def _build_contact_items(
+    text: DesignNode,
+    anchors: list[DesignNode],
+    parent_style: DesignStyle,
+) -> list[DesignNode] | None:
     """Turn one multiline text wall plus visual rail into authored item pairs.
 
     The text wall provides one shared wording column, while the visual rail provides
@@ -183,6 +187,8 @@ def _build_contact_items(text: DesignNode, anchors: list[DesignNode]) -> list[De
     line_height = text.style.line_height or font_size
     shared_leading = _leading_space_count(raw_lines[0])
     shared_text_x = (text.style.x or 0.0) + shared_leading * font_size * 0.36
+    parent_x = parent_style.x or 0.0
+    parent_y = parent_style.y or 0.0
     items: list[DesignNode] = []
 
     for index, anchor in enumerate(anchors):
@@ -196,6 +202,7 @@ def _build_contact_items(text: DesignNode, anchors: list[DesignNode]) -> list[De
 
         visual = _contact_visual_leaf(anchor)
         visual_box = _box(visual) or anchor_box
+        item_x = visual_box[0]
         item_y = text.style.y + (anchor_box[1] - first_anchor_box[1])
         gap = max(0.0, shared_text_x - visual_box[2])
 
@@ -222,8 +229,11 @@ def _build_contact_items(text: DesignNode, anchors: list[DesignNode]) -> list[De
             name=f"{text.name or 'contact'} item {index + 1}",
             source_id=f"{text.source_id}::contact-item-{index + 1}",
             style=DesignStyle(
-                x=visual_box[0],
+                x=item_x,
                 y=item_y,
+                position_mode="absolute",
+                offset_x=item_x - parent_x,
+                offset_y=item_y - parent_y,
                 width=None,
                 height=max(text_height, visual_height),
                 layout_direction="horizontal",
@@ -258,7 +268,7 @@ def compile_contact_spatial_layout(root: DesignNode) -> DesignNode:
             if child.kind != "text":
                 continue
             anchors = _contact_icons(parent, child)
-            items = _build_contact_items(child, anchors)
+            items = _build_contact_items(child, anchors, parent.style)
             if items is None:
                 continue
             replacements[index] = items
