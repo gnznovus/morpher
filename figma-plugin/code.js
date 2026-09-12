@@ -20,6 +20,11 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 
+function isNoVisibleLayersExportError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("may not have any visible layers");
+}
+
 function collectImageRefs(node, refs = new Set()) {
   if ("fills" in node && Array.isArray(node.fills)) {
     for (const fill of node.fills) {
@@ -81,24 +86,42 @@ async function exportImageAssets(node) {
 
 async function exportVectorAssets(node) {
   const assets = [];
+  let skipped = 0;
   for (const vector of collectVectorAssets(node)) {
-    const bytes = await vector.exportAsync({ format: "SVG", useAbsoluteBounds: true });
-    assets.push({ sourceId: vector.id, data: bytesToBase64(bytes) });
+    try {
+      const bytes = await vector.exportAsync({ format: "SVG", useAbsoluteBounds: true });
+      assets.push({ sourceId: vector.id, data: bytesToBase64(bytes) });
+    } catch (error) {
+      if (isNoVisibleLayersExportError(error)) {
+        skipped += 1;
+        continue;
+      }
+      throw error;
+    }
   }
-  return assets;
+  return { assets, skipped };
 }
 
 async function exportTextAssets(node) {
   const assets = [];
+  let skipped = 0;
   for (const text of collectTextAssets(node)) {
-    const bytes = await text.exportAsync({
-      format: "SVG",
-      svgOutlineText: true,
-      useAbsoluteBounds: true,
-    });
-    assets.push({ sourceId: text.id, data: bytesToBase64(bytes) });
+    try {
+      const bytes = await text.exportAsync({
+        format: "SVG",
+        svgOutlineText: true,
+        useAbsoluteBounds: true,
+      });
+      assets.push({ sourceId: text.id, data: bytesToBase64(bytes) });
+    } catch (error) {
+      if (isNoVisibleLayersExportError(error)) {
+        skipped += 1;
+        continue;
+      }
+      throw error;
+    }
   }
-  return assets;
+  return { assets, skipped };
 }
 
 figma.ui.onmessage = async (message) => {
@@ -108,8 +131,10 @@ figma.ui.onmessage = async (message) => {
     figma.ui.postMessage({ type: "status", state: "sending", text: `Exporting ${node.name}...` });
     const payload = await node.exportAsync({ format: "JSON_REST_V1" });
     const assets = await exportImageAssets(node);
-    const vectorAssets = await exportVectorAssets(node);
-    const textAssets = await exportTextAssets(node);
+    const vectorExport = await exportVectorAssets(node);
+    const textExport = await exportTextAssets(node);
+    const vectorAssets = vectorExport.assets;
+    const textAssets = textExport.assets;
     const response = await fetch(MORPHER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -117,10 +142,16 @@ figma.ui.onmessage = async (message) => {
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || `Morpher returned HTTP ${response.status}`);
+
+    const skippedNotes = [];
+    if (vectorExport.skipped) skippedNotes.push(`${vectorExport.skipped} non-rendering vectors skipped`);
+    if (textExport.skipped) skippedNotes.push(`${textExport.skipped} non-rendering text outlines skipped`);
+    const skippedNote = skippedNotes.length ? `, ${skippedNotes.join(", ")}` : "";
+
     figma.ui.postMessage({
       type: "status",
       state: "success",
-      text: `Saved as ${result.filename} (${result.assetsSaved || 0} images, ${result.vectorsSaved || 0} vectors, ${result.textsSaved || 0} outlined texts)`,
+      text: `Saved as ${result.filename} (${result.assetsSaved || 0} images, ${result.vectorsSaved || 0} vectors, ${result.textsSaved || 0} outlined texts${skippedNote})`,
     });
   } catch (error) {
     figma.ui.postMessage({
