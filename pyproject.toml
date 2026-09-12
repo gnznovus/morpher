@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 morpher = "morpher.run:main"
+morpher-deploy = "morpher.deploy:main"
 morpher-listen = "morpher.listener:main"
 morpher-inspect = "morpher.inspect:main"
 morpher-render = "morpher.render:main"
