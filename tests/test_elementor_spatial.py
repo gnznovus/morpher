@@ -94,3 +94,40 @@ def test_rotated_vertical_line_is_normalized_for_divider_widget():
     assert settings["_transform_rotate_popover"] == "transform"
     assert abs(settings["_transform_rotateZ_effect"]["size"] - 90) < 1e-6
     assert settings["_element_custom_width"]["size"] == 87 / 1928 * 100
+
+
+def test_compact_overlapping_graphic_and_label_become_one_inline_control():
+    line = DesignNode(
+        kind="icon",
+        source_id="line",
+        style=DesignStyle(x=107, y=1958.91, width=156, height=0),
+    )
+    arrow = DesignNode(
+        kind="icon",
+        source_id="arrow",
+        style=DesignStyle(x=106.14, y=1951.45, width=9.72, height=14.92),
+    )
+    label = DesignNode(
+        kind="text",
+        source_id="label",
+        text="BACK TO STAY",
+        style=DesignStyle(x=278, y=1947.24, width=157, height=22.85, font_size=20),
+    )
+    control = DesignNode(
+        kind="container",
+        source_id="control",
+        style=DesignStyle(x=106.14, y=1947.24, width=328.86, height=22.85),
+        children=[line, arrow, label],
+    )
+
+    result = compile_elementor_spatial_structure(control)
+
+    assert result.style.layout_direction == "horizontal"
+    assert result.style.counter_axis_align == "center"
+    assert len(result.children) == 2
+    graphic, normalized_label = result.children
+    assert graphic.kind == "container"
+    assert [child.source_id for child in graphic.children] == ["line", "arrow"]
+    assert normalized_label.source_id == "label"
+    assert normalized_label.style.width_mode == "hug"
+    assert normalized_label.style.text_auto_resize == "WIDTH_AND_HEIGHT"
