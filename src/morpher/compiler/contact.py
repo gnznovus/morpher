@@ -163,16 +163,16 @@ def _clear_local_geometry(node: DesignNode) -> None:
 def _build_contact_items(text: DesignNode, anchors: list[DesignNode]) -> list[DesignNode] | None:
     """Turn one multiline text wall plus visual rail into authored item pairs.
 
-    The text wall provides content/style/X. The visual rail provides the stable
-    per-item Y rhythm. Each output item owns one icon and one wording node, so the
-    relationship is explicit before Elementor sees it. Continuation lines after the
-    final anchored line remain part of that final wording item.
+    The text wall provides one shared wording column, while the visual rail provides
+    the stable per-item Y rhythm. Each output item owns one icon and one wording
+    node, so the relationship is explicit before Elementor sees it. Continuation
+    lines after the final anchored line remain part of that final wording item.
     """
     if not text.text or not text.source_id:
         return None
 
-    lines = [line for line in text.text.replace("\r", "").split("\n") if line.strip()]
-    if len(lines) < 2 or len(anchors) < 2 or len(anchors) > len(lines):
+    raw_lines = [line for line in text.text.replace("\r", "").split("\n") if line.strip()]
+    if len(raw_lines) < 2 or len(anchors) < 2 or len(anchors) > len(raw_lines):
         return None
 
     first_anchor_box = _box(anchors[0])
@@ -181,6 +181,8 @@ def _build_contact_items(text: DesignNode, anchors: list[DesignNode]) -> list[De
 
     font_size = text.style.font_size or 16.0
     line_height = text.style.line_height or font_size
+    shared_leading = _leading_space_count(raw_lines[0])
+    shared_text_x = (text.style.x or 0.0) + shared_leading * font_size * 0.36
     items: list[DesignNode] = []
 
     for index, anchor in enumerate(anchors):
@@ -188,16 +190,15 @@ def _build_contact_items(text: DesignNode, anchors: list[DesignNode]) -> list[De
         if anchor_box is None:
             return None
 
-        item_lines = [lines[index]]
-        if index == len(anchors) - 1 and len(lines) > len(anchors):
-            item_lines.extend(lines[len(anchors) :])
-
-        leading = _leading_space_count(item_lines[0])
-        text_x = (text.style.x or 0.0) + leading * font_size * 0.36
-        item_y = text.style.y + (anchor_box[1] - first_anchor_box[1])
-        gap = max(0.0, text_x - anchor_box[2])
+        item_lines = [raw_lines[index]]
+        if index == len(anchors) - 1 and len(raw_lines) > len(anchors):
+            item_lines.extend(raw_lines[len(anchors) :])
 
         visual = _contact_visual_leaf(anchor)
+        visual_box = _box(visual) or anchor_box
+        item_y = text.style.y + (anchor_box[1] - first_anchor_box[1])
+        gap = max(0.0, shared_text_x - visual_box[2])
+
         _clear_local_geometry(visual)
         visual.style.width_mode = "fixed"
         visual.style.height_mode = "fixed"
@@ -215,13 +216,13 @@ def _build_contact_items(text: DesignNode, anchors: list[DesignNode]) -> list[De
         wording.style.text_auto_resize = "WIDTH_AND_HEIGHT"
 
         text_height = line_height * len(item_lines)
-        visual_height = anchor_box[3] - anchor_box[1]
+        visual_height = visual_box[3] - visual_box[1]
         item = DesignNode(
             kind="container",
             name=f"{text.name or 'contact'} item {index + 1}",
             source_id=f"{text.source_id}::contact-item-{index + 1}",
             style=DesignStyle(
-                x=anchor_box[0],
+                x=visual_box[0],
                 y=item_y,
                 width=None,
                 height=max(text_height, visual_height),
