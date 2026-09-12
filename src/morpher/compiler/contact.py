@@ -190,13 +190,11 @@ def _build_spatial_contact_rows(
 
         leading = _leading_space_count(group_lines[0])
         text_x = (text.style.x or 0.0) + leading * font_size * 0.36
-        text_height = line_height * len(group_lines)
-        row_left = min(anchor_box[0], text_x)
-        row_top = min(anchor_box[1], (text.style.y or anchor_box[1]) + index * line_height)
-        row_right = max(anchor_box[2], text_box[2])
-        row_height = max(anchor_box[3] - row_top, text_height, anchor_box[3] - anchor_box[1])
         gap = max(0.0, text_x - anchor_box[2])
 
+        # The row owns all authored page-space positioning. Once icon and wording
+        # become children, their old x/y values belong to the previous coordinate
+        # system and must not participate again. Keep only their intrinsic size.
         visual = _contact_visual_leaf(anchor)
         _clear_flow_child_geometry(visual)
         visual.style.width_mode = "hug"
@@ -214,17 +212,22 @@ def _build_spatial_contact_rows(
         wording.style.height_mode = "hug"
         wording.style.text_auto_resize = "WIDTH_AND_HEIGHT"
 
+        text_height = line_height * len(group_lines)
+        visual_height = anchor_box[3] - anchor_box[1]
+        row_height = max(visual_height, text_height)
+        # Anchor the pair to the authored icon position. The text no longer needs
+        # its former page-space Y because flex centering owns the local alignment.
         row = DesignNode(
             kind="container",
             name=f"{text.name or 'contact'} row {index + 1}",
             source_id=f"{text.source_id}::contact-spatial-row-{index + 1}",
             style=DesignStyle(
-                x=row_left,
-                y=row_top,
-                width=max(0.0, row_right - row_left),
+                x=anchor_box[0],
+                y=anchor_box[1],
+                width=None,
                 height=row_height,
                 layout_direction="horizontal",
-                width_mode="fixed",
+                width_mode="hug",
                 height_mode="fixed",
                 gap=gap,
                 counter_axis_align="center",
