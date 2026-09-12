@@ -158,20 +158,30 @@ function collectRegionCandidates(root) {
   const minimumArea = rootBounds ? rootBounds.area * 0.05 : 0;
   const candidates = [];
 
-  function visit(node, hiddenAncestor = false) {
+  function visit(node, path = [], hiddenAncestor = false, isRoot = false) {
     const hidden = hiddenAncestor || isExplicitlyHidden(node);
     if (hidden) return;
     if ("children" in node && node.children.length > 0) {
+      const nodePath = isRoot ? [] : [...path, node.name];
       const bounds = visibleBounds(node);
-      if (bounds && bounds.area >= minimumArea) {
-        candidates.push({ node, bounds, fingerprint: regionFingerprint(node) });
+      if (!isRoot && bounds && bounds.area >= minimumArea) {
+        candidates.push({
+          node,
+          path: nodePath,
+          bounds,
+          fingerprint: regionFingerprint(node),
+        });
       }
-      for (const child of node.children) visit(child, hidden);
+      for (const child of node.children) visit(child, nodePath, hidden, false);
     }
   }
 
-  visit(root);
+  visit(root, [], false, true);
   return candidates;
+}
+
+function formatStructurePath(candidate) {
+  return candidate.path.filter(Boolean).join(" > ") || candidate.node.name;
 }
 
 function findOverlappingStructureWarnings(root) {
@@ -197,7 +207,7 @@ function findOverlappingStructureWarnings(root) {
       if (!sameName && textSimilarity < 0.9) continue;
 
       warnings.push(
-        `Suspicious overlapping structures: "${first.node.name}" (${first.node.id}) and "${second.node.name}" (${second.node.id}) occupy ${Math.round(overlap * 100)}% of the same visible region with similar content (text ${Math.round(textSimilarity * 100)}%, visuals ${Math.round(visualSimilarity * 100)}%). Both were preserved.`
+        `Possible stacked duplicate content: "${formatStructurePath(first)}" and "${formatStructurePath(second)}" overlap ${Math.round(overlap * 100)}% in the same visible area and contain similar content (text ${Math.round(textSimilarity * 100)}%, visuals ${Math.round(visualSimilarity * 100)}%). Check these layer paths for duplicated or accidentally stacked sections. Morpher preserved both.`
       );
     }
   }
@@ -246,8 +256,8 @@ function findDuplicateWarnings(root) {
 }
 
 function warningTopic(warning) {
-  if (warning.startsWith("Suspicious overlapping structures:")) {
-    return "Suspicious overlapping structures detected.";
+  if (warning.startsWith("Possible stacked duplicate content:")) {
+    return "Possible stacked duplicate content detected.";
   }
   if (warning.startsWith("Possible duplicate layer:")) {
     return "Possible duplicate layer detected.";
