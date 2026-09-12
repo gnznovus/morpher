@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 from morpher.ir.nodes import DesignNode
 
 
@@ -75,6 +77,120 @@ def _generated_contact_groups(root: DesignNode) -> list[DesignNode]:
 
     visit(root)
     return groups
+
+
+def _leading_space_count(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _contact_icons(parent: DesignNode, text: DesignNode) -> list[DesignNode]:
+    text_box = _box(text)
+    if text_box is None:
+        return []
+
+    font_size = text.style.font_size or 16.0
+    max_gap = max(font_size * 3.0, (text_box[2] - text_box[0]) * 0.15)
+    icons: list[DesignNode] = []
+    for child in parent.children:
+        if child.kind != "icon" or child is text:
+            continue
+        icon_box = _box(child)
+        if icon_box is None:
+            continue
+        vertical_overlap = max(0.0, min(text_box[3], icon_box[3]) - max(text_box[1], icon_box[1]))
+        if vertical_overlap <= 0:
+            continue
+        horizontal_overlap = max(0.0, min(text_box[2], icon_box[2]) - max(text_box[0], icon_box[0]))
+        horizontal_gap = max(0.0, text_box[0] - icon_box[2])
+        if horizontal_overlap <= 0 and horizontal_gap > max_gap:
+            continue
+        icons.append(child)
+
+    icons.sort(key=lambda node: (_box(node) or (0.0, 0.0, 0.0, 0.0))[1])
+    return icons
+
+
+def _split_spatial_contact_text(parent: DesignNode, text: DesignNode) -> list[DesignNode] | None:
+    if text.kind != "text" or not text.text or not text.source_id:
+        return None
+    lines = [line for line in text.text.replace("\r", "").split("\n") if line.strip()]
+    if len(lines) < 2:
+        return None
+
+    icons = _contact_icons(parent, text)
+    if len(icons) < 2 or len(icons) > len(lines):
+        return None
+
+    text_box = _box(text)
+    first_icon_box = _box(icons[0])
+    if text_box is None or first_icon_box is None:
+        return None
+
+    base_y = text.style.y
+    if base_y is None:
+        return None
+    line_height = text.style.line_height or text.style.font_size or 16.0
+    font_size = text.style.font_size or 16.0
+
+    rows: list[DesignNode] = []
+    last_y = base_y
+    for index, line in enumerate(lines):
+        row = deepcopy(text)
+        row.children = []
+        row.source_id = f"{text.source_id}::contact-line-{index + 1}"
+        row.text = line.strip()
+        row.style.height = line_height
+        row.style.width = None
+        row.style.width_percent = None
+        row.style.width_mode = "hug"
+        row.style.text_auto_resize = "WIDTH_AND_HEIGHT"
+        row.style.x = (text.style.x or 0.0) + _leading_space_count(line) * font_size * 0.36
+
+        if index < len(icons):
+            icon_box = _box(icons[index])
+            if icon_box is None:
+                return None
+            row.style.y = base_y + (icon_box[1] - first_icon_box[1])
+            last_y = row.style.y
+        else:
+            row.style.y = last_y + line_height
+            last_y = row.style.y
+        rows.append(row)
+
+    return rows
+
+
+def compile_contact_spatial_layout(root: DesignNode) -> DesignNode:
+    """Preserve contact relationships for Elementor without converting them to flow.
+
+    Figma contact blocks are often authored as a vertical icon rail beside one
+    multiline text node. Elementor cannot reproduce Figma paragraph spacing from
+    that single widget, so the text lines drift away from independently positioned
+    icons. Detect that relationship, split only the multiline text into individual
+    spatial text nodes, and keep every authored icon and coordinate in the same
+    free-layout composition. Native keeps the existing flow-oriented contact pass.
+    """
+    compiled = deepcopy(root)
+
+    def visit(parent: DesignNode) -> None:
+        replacements: dict[int, list[DesignNode]] = {}
+        for index, child in enumerate(parent.children):
+            rows = _split_spatial_contact_text(parent, child)
+            if rows is not None:
+                replacements[index] = rows
+
+        if replacements:
+            rebuilt: list[DesignNode] = []
+            for index, child in enumerate(parent.children):
+                rebuilt.extend(replacements.get(index, [child]))
+            parent.children = rebuilt
+
+        for child in parent.children:
+            if child.kind == "container":
+                visit(child)
+
+    visit(compiled)
+    return compiled
 
 
 def _normalize_contact_icon_widths(
@@ -167,9 +283,6 @@ def resolve_contact_group_ownership(
         owner_box = _box(owner_source)
         if owner_box is not None:
             detached_group.style.margin_top_percent = max(0.0, contact_box[1] - owner_box[3]) / viewport * 100.0
-        # Horizontal placement belongs to the same semantic column as the
-        # owning text. If the owner itself carries a flow offset, inherit it;
-        # when the parent region already owns the column this remains None.
         detached_group.style.margin_left_percent = owner.style.margin_left_percent
         detached_group.style.margin_right_percent = owner.style.margin_right_percent
         detached_group.style.position_mode = None
