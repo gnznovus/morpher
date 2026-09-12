@@ -96,27 +96,27 @@ def test_rotated_vertical_line_is_normalized_for_divider_widget():
     assert settings["_element_custom_width"]["size"] == 87 / 1928 * 100
 
 
-def test_compact_overlapping_graphic_and_label_become_one_inline_control():
+def test_compact_graphics_and_short_label_become_atomic_layout_group():
     line = DesignNode(
         kind="icon",
         source_id="line",
-        style=DesignStyle(x=107, y=1958.91, width=156, height=0),
+        style=DesignStyle(x=10212, y=1970.587, width=156, height=0),
     )
     arrow = DesignNode(
         kind="icon",
         source_id="arrow",
-        style=DesignStyle(x=106.14, y=1951.45, width=9.72, height=14.92),
+        style=DesignStyle(x=10211.140625, y=1963.1255, width=9.72, height=14.923),
     )
     label = DesignNode(
         kind="text",
         source_id="label",
         text="BACK TO STAY",
-        style=DesignStyle(x=278, y=1947.24, width=157, height=22.85, font_size=20),
+        style=DesignStyle(x=10383, y=1958.9102, width=157, height=22.8496, font_size=20),
     )
     control = DesignNode(
         kind="container",
         source_id="control",
-        style=DesignStyle(x=106.14, y=1947.24, width=328.86, height=22.85),
+        style=DesignStyle(x=10211.140625, y=1958.9101, width=328.8594, height=22.8497),
         children=[line, arrow, label],
     )
 
@@ -129,5 +129,32 @@ def test_compact_overlapping_graphic_and_label_become_one_inline_control():
     assert graphic.kind == "container"
     assert [child.source_id for child in graphic.children] == ["line", "arrow"]
     assert normalized_label.source_id == "label"
-    assert normalized_label.style.width_mode == "hug"
-    assert normalized_label.style.text_auto_resize == "WIDTH_AND_HEIGHT"
+    assert normalized_label.style.width_mode == "fixed"
+    assert normalized_label.style.text_auto_resize is None
+    assert normalized_label.style.width == 167
+    assert abs(result.style.width - 338.8594) < 1e-6
+
+
+def test_large_content_region_is_not_collapsed_as_atomic_layout_group():
+    icon = DesignNode(
+        kind="icon",
+        source_id="icon",
+        style=DesignStyle(x=0, y=0, width=40, height=40),
+    )
+    label = DesignNode(
+        kind="text",
+        source_id="label",
+        text="A short heading",
+        style=DesignStyle(x=80, y=20, width=180, height=24, font_size=20),
+    )
+    region = DesignNode(
+        kind="container",
+        source_id="region",
+        style=DesignStyle(x=0, y=0, width=600, height=300),
+        children=[icon, label],
+    )
+
+    result = compile_elementor_spatial_structure(region)
+
+    assert result.style.layout_direction is None
+    assert [child.source_id for child in result.children] == ["icon", "label"]
