@@ -194,8 +194,11 @@ def _build_spatial_contact_rows(
 
         visual = _contact_visual_leaf(anchor)
         _clear_flow_child_geometry(visual)
-        visual.style.width_mode = "hug"
-        visual.style.height_mode = "hug"
+        # Elementor image widgets can collapse to their intrinsic SVG size when
+        # placed inside a fixed flex slot with auto/hug width. Preserve the authored
+        # icon box explicitly; the row wrapper owns position, not size.
+        visual.style.width_mode = "fixed"
+        visual.style.height_mode = "fixed"
 
         # The icon slot represents exactly one text line. The icon is centered
         # inside that slot, while the wording begins at the row top. This keeps
