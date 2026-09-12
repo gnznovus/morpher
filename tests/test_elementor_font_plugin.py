@@ -21,7 +21,7 @@ def _missing_resolution(intent: FontIntent) -> FontResolution:
         status="missing",
         request=FontRequest(intent.family, intent.weight, intent.style, intent.flavor),
         face=None,
-        provenance="unavailable",
+        provenance="missing_after_refresh",
     )
 
 
