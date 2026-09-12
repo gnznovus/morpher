@@ -41,8 +41,11 @@ def test_figma_fill_image_keeps_authored_frame_and_cover_crop_in_elementor():
     )["content"][0]["elements"][0]
     settings = rendered["settings"]
 
+    authored_width_vw = 425 / 1920 * 100
     assert settings["_element_custom_width"]["unit"] == "vw"
-    assert abs(settings["_element_custom_width"]["size"] - 425 / 1920 * 100) < 1e-9
+    assert abs(settings["_element_custom_width"]["size"] - authored_width_vw) < 1e-9
+    assert settings["width"]["unit"] == "vw"
+    assert abs(settings["width"]["size"] - authored_width_vw) < 1e-9
     assert settings["height"] == {"unit": "custom", "size": f"{306 / 1920 * 100:g}vw", "sizes": []}
     assert settings["object-fit"] == "cover"
 
@@ -80,5 +83,6 @@ def test_non_fill_image_does_not_force_cover_crop():
     )["content"][0]["elements"][0]
     settings = rendered["settings"]
 
+    assert "width" not in settings
     assert "height" not in settings
     assert "object-fit" not in settings
