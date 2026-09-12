@@ -31,13 +31,13 @@ def test_rotated_text_preserves_figma_rotation_in_elementor():
 
     settings = render_elementor(root)["content"][0]["elements"][0]["settings"]
 
-    assert settings["_transform_rotate_popover"] == "yes"
+    assert settings["_transform_rotate_popover"] == "transform"
     assert settings["_transform_rotateZ_effect"]["unit"] == "deg"
     assert abs(settings["_transform_rotateZ_effect"]["size"] + 90) < 1e-6
     assert settings["_element_width"] == "auto"
 
 
-def test_vertical_figma_line_renders_as_vertical_elementor_surface():
+def test_vertical_figma_line_renders_as_thin_spacer_surface():
     root = DesignNode(
         kind="container",
         source_id="root",
@@ -62,9 +62,10 @@ def test_vertical_figma_line_renders_as_vertical_elementor_surface():
     divider = render_elementor(root)["content"][0]["elements"][0]
     settings = divider["settings"]
 
-    assert divider["elType"] == "container"
-    assert "widgetType" not in divider
-    assert settings["position"] == "absolute"
-    assert settings["width"] == {"unit": "px", "size": 1, "sizes": []}
-    assert settings["min_height"] == {"unit": "vw", "size": 4.512448132780083, "sizes": []}
+    assert divider["elType"] == "widget"
+    assert divider["widgetType"] == "spacer"
+    assert settings["_position"] == "absolute"
+    assert settings["_element_width"] == "initial"
+    assert settings["_element_custom_width"] == {"unit": "px", "size": 1, "sizes": []}
+    assert settings["space"] == {"unit": "custom", "size": "4.51245vw", "sizes": []}
     assert settings["background_color"] == "rgba(255, 255, 255, 0.5)"
