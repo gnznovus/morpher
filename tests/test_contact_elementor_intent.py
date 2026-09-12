@@ -4,7 +4,7 @@ from morpher.ir.styles import DesignStyle
 from morpher.renderers.elementor_overrides import render_elementor_with_ir_overrides
 
 
-def test_contact_pair_keeps_start_alignment_and_centers_itself_as_item():
+def test_contact_owner_centers_items_while_pair_keeps_start_alignment():
     item = DesignNode(
         kind="container",
         source_id="contact::contact-item-1",
@@ -25,12 +25,15 @@ def test_contact_pair_keeps_start_alignment_and_centers_itself_as_item():
 
     apply_contact_elementor_intent(root)
     elementor = render_elementor_with_ir_overrides(root)
-    rendered_item = elementor["content"][0]["elements"][0]
+    rendered_root = elementor["content"][0]
+    rendered_item = rendered_root["elements"][0]
 
-    assert item.style.layout_align == "center"
+    assert root.style.counter_axis_align == "center"
     assert item.style.counter_axis_align == "min"
+    assert item.style.layout_align is None
+    assert rendered_root["settings"]["flex_align_items"] == "center"
     assert rendered_item["settings"]["flex_align_items"] == "flex-start"
-    assert rendered_item["settings"]["align_self"] == "center"
+    assert "align_self" not in rendered_item["settings"]
 
 
 def test_submit_box_omits_only_bottom_border():
