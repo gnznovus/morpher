@@ -148,7 +148,7 @@ def _contact_icons(parent: DesignNode, text: DesignNode) -> list[DesignNode]:
     return icons
 
 
-def _clear_flow_child_geometry(node: DesignNode) -> None:
+def _clear_local_geometry(node: DesignNode) -> None:
     node.style.x = None
     node.style.y = None
     node.style.position_mode = None
@@ -160,10 +160,14 @@ def _clear_flow_child_geometry(node: DesignNode) -> None:
     node.style.margin_left_percent = None
 
 
-def _build_spatial_contact_rows(
-    text: DesignNode,
-    anchors: list[DesignNode],
-) -> list[DesignNode] | None:
+def _build_contact_items(text: DesignNode, anchors: list[DesignNode]) -> list[DesignNode] | None:
+    """Turn one multiline text wall plus visual rail into authored item pairs.
+
+    The text wall provides content/style/X. The visual rail provides the stable
+    per-item Y rhythm. Each output item owns one icon and one wording node, so the
+    relationship is explicit before Elementor sees it. Continuation lines after the
+    final anchored line remain part of that final wording item.
+    """
     if not text.text or not text.source_id:
         return None
 
@@ -171,61 +175,41 @@ def _build_spatial_contact_rows(
     if len(lines) < 2 or len(anchors) < 2 or len(anchors) > len(lines):
         return None
 
-    text_box = _box(text)
-    if text_box is None:
+    first_anchor_box = _box(anchors[0])
+    if first_anchor_box is None or text.style.y is None:
         return None
 
     font_size = text.style.font_size or 16.0
     line_height = text.style.line_height or font_size
-    rows: list[DesignNode] = []
+    items: list[DesignNode] = []
 
     for index, anchor in enumerate(anchors):
         anchor_box = _box(anchor)
         if anchor_box is None:
             return None
 
-        group_lines = [lines[index]]
+        item_lines = [lines[index]]
         if index == len(anchors) - 1 and len(lines) > len(anchors):
-            group_lines.extend(lines[len(anchors) :])
+            item_lines.extend(lines[len(anchors) :])
 
-        leading = _leading_space_count(group_lines[0])
+        leading = _leading_space_count(item_lines[0])
         text_x = (text.style.x or 0.0) + leading * font_size * 0.36
+        item_y = text.style.y + (anchor_box[1] - first_anchor_box[1])
+        icon_local_y = anchor_box[1] - item_y
         gap = max(0.0, text_x - anchor_box[2])
 
         visual = _contact_visual_leaf(anchor)
-        _clear_flow_child_geometry(visual)
-        # Elementor image widgets can collapse to their intrinsic SVG size when
-        # placed inside a fixed flex slot with auto/hug width. Preserve the authored
-        # icon box explicitly; the row wrapper owns position, not size.
+        _clear_local_geometry(visual)
         visual.style.width_mode = "fixed"
         visual.style.height_mode = "fixed"
-
-        # The icon slot represents exactly one text line. The icon is centered
-        # inside that slot, while the wording begins at the row top. This keeps
-        # multiline contact values aligned to their first line rather than to the
-        # center of the entire wording block.
-        anchor_width = anchor_box[2] - anchor_box[0]
-        icon_slot = DesignNode(
-            kind="container",
-            name=f"{text.name or 'contact'} icon slot {index + 1}",
-            source_id=f"{text.source_id}::contact-icon-slot-{index + 1}",
-            style=DesignStyle(
-                width=anchor_width,
-                height=line_height,
-                layout_direction="vertical",
-                width_mode="fixed",
-                height_mode="fixed",
-                primary_axis_align="center",
-                counter_axis_align="center",
-            ),
-            children=[visual],
-        )
+        if icon_local_y > 0:
+            visual.style.margin_top_percent = icon_local_y
 
         wording = deepcopy(text)
         wording.children = []
         wording.source_id = f"{text.source_id}::contact-wording-{index + 1}"
-        wording.text = "\n".join(line.strip() for line in group_lines)
-        _clear_flow_child_geometry(wording)
+        wording.text = "\n".join(line.strip() for line in item_lines)
+        _clear_local_geometry(wording)
         wording.style.width = None
         wording.style.width_percent = None
         wording.style.height = None
@@ -233,38 +217,38 @@ def _build_spatial_contact_rows(
         wording.style.height_mode = "hug"
         wording.style.text_auto_resize = "WIDTH_AND_HEIGHT"
 
-        text_height = line_height * len(group_lines)
-        row_height = max(line_height, text_height)
-        row = DesignNode(
+        text_height = line_height * len(item_lines)
+        visual_height = (anchor_box[3] - anchor_box[1]) + max(0.0, icon_local_y)
+        item = DesignNode(
             kind="container",
-            name=f"{text.name or 'contact'} row {index + 1}",
-            source_id=f"{text.source_id}::contact-spatial-row-{index + 1}",
+            name=f"{text.name or 'contact'} item {index + 1}",
+            source_id=f"{text.source_id}::contact-item-{index + 1}",
             style=DesignStyle(
                 x=anchor_box[0],
-                y=anchor_box[1],
+                y=item_y,
                 width=None,
-                height=row_height,
+                height=max(text_height, visual_height),
                 layout_direction="horizontal",
                 width_mode="hug",
                 height_mode="fixed",
                 gap=gap,
                 counter_axis_align="min",
             ),
-            children=[icon_slot, wording],
+            children=[visual, wording],
         )
-        rows.append(row)
+        items.append(item)
 
-    return rows
+    return items
 
 
 def compile_contact_spatial_layout(root: DesignNode) -> DesignNode:
-    """Preserve contact rows as absolute pair containers for Elementor.
+    """Normalize contact text walls into explicit absolute icon/text items.
 
-    Each detected contact pair becomes one absolute row. A one-line icon slot
-    centers the visual against the first wording line, while the wording itself
-    remains top-aligned so multiline continuations extend downward naturally.
-    Redundant icon-only Figma wrappers are stripped when they contain one icon leaf.
-    Native keeps the existing flow-oriented contact pass below.
+    Figma often exports several logical contact items as one multiline text node
+    beside a separate icon rail. Recover those item boundaries before rendering,
+    strip redundant single-icon wrappers, and keep every reconstructed item on the
+    existing free-layout/Fluid Absolute path. Native keeps the older flow-oriented
+    contact ownership pass below.
     """
     compiled = deepcopy(root)
 
@@ -276,10 +260,10 @@ def compile_contact_spatial_layout(root: DesignNode) -> DesignNode:
             if child.kind != "text":
                 continue
             anchors = _contact_icons(parent, child)
-            rows = _build_spatial_contact_rows(child, anchors)
-            if rows is None:
+            items = _build_contact_items(child, anchors)
+            if items is None:
                 continue
-            replacements[index] = rows
+            replacements[index] = items
             consumed_anchor_ids.update(anchor.source_id for anchor in anchors if anchor.source_id)
 
         if replacements:
