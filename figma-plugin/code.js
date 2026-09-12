@@ -199,6 +199,17 @@ function formatStructurePath(candidate) {
   return candidate.path.filter(Boolean).join(" > ") || candidate.node.name;
 }
 
+function isGenericStructureName(name) {
+  const normalized = normalizedText(name);
+  return !normalized
+    || normalized === "frame"
+    || normalized === "group"
+    || normalized === "container"
+    || normalized === "section"
+    || /^frame \d+$/.test(normalized)
+    || /^group \d+$/.test(normalized);
+}
+
 function similarOverlappingPair(first, second) {
   const overlap = overlapRatio(first.bounds, second.bounds);
   if (overlap < 0.9) return false;
@@ -210,6 +221,13 @@ function similarOverlappingPair(first, second) {
   const visualSimilarity = countSimilarity(first.fingerprint.visuals, second.fingerprint.visuals);
   const containerSimilarity = countSimilarity(first.fingerprint.containers, second.fingerprint.containers);
   const sameName = normalizedText(first.node.name) === normalizedText(second.node.name);
+  const sameMeaningfulName = sameName && !isGenericStructureName(first.node.name);
+
+  // Nested copies often contain another full copy of themselves, so their visual and
+  // container counts can differ sharply even when the rendered region and text match.
+  // A meaningful shared layer name plus strong geometry/text evidence is enough to link
+  // those structures without teaching Morpher anything about specific design semantics.
+  if (sameMeaningfulName && textSimilarity >= 0.75) return true;
 
   if (textSimilarity < 0.75 || visualSimilarity < 0.7 || containerSimilarity < 0.7) return false;
   if (!sameName && textSimilarity < 0.9) return false;
