@@ -4,7 +4,18 @@ from morpher.ir.styles import DesignStyle
 from morpher.renderers.elementor_overrides import render_elementor_with_ir_overrides
 
 
-def test_contact_owner_centers_items_while_pair_keeps_start_alignment():
+def test_contact_pair_centers_items_and_keeps_child_alignment_start():
+    icon = DesignNode(
+        kind="icon",
+        source_id="contact-icon",
+        style=DesignStyle(width=20, height=20),
+    )
+    wording = DesignNode(
+        kind="text",
+        source_id="contact-wording",
+        text="hello",
+        style=DesignStyle(width=120, height=20, text_align_horizontal="LEFT"),
+    )
     item = DesignNode(
         kind="container",
         source_id="contact::contact-item-1",
@@ -15,6 +26,7 @@ def test_contact_owner_centers_items_while_pair_keeps_start_alignment():
             width_mode="hug",
             counter_axis_align="min",
         ),
+        children=[icon, wording],
     )
     root = DesignNode(
         kind="container",
@@ -28,12 +40,13 @@ def test_contact_owner_centers_items_while_pair_keeps_start_alignment():
     rendered_root = elementor["content"][0]
     rendered_item = rendered_root["elements"][0]
 
-    assert root.style.counter_axis_align == "center"
-    assert item.style.counter_axis_align == "min"
+    assert root.style.counter_axis_align == "min"
+    assert item.style.counter_axis_align == "center"
     assert item.style.layout_align is None
-    assert rendered_root["settings"]["flex_align_items"] == "center"
-    assert rendered_item["settings"]["flex_align_items"] == "flex-start"
+    assert rendered_root["settings"]["flex_align_items"] == "flex-start"
+    assert rendered_item["settings"]["flex_align_items"] == "center"
     assert "align_self" not in rendered_item["settings"]
+    assert [child["settings"]["align"] for child in rendered_item["elements"]] == ["left", "left"]
 
 
 def test_submit_box_omits_only_bottom_border():
