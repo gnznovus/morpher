@@ -2,7 +2,7 @@ import base64
 import json
 from pathlib import Path
 
-from morpher.deploy import DeploymentService, build_deployment_package, deploy_all, resolve_template_target
+from morpher.deploy import DeploymentError, DeploymentService, build_deployment_package, deploy_all, resolve_template_target
 from morpher.storage.paths import StoragePaths
 
 
@@ -79,7 +79,7 @@ def test_target_cannot_escape_elementor_output(tmp_path, monkeypatch):
 
     try:
         resolve_template_target(outside, storage)
-    except ValueError as exc:
+    except DeploymentError as exc:
         assert "under" in str(exc)
     else:
         raise AssertionError("outside template should not resolve")
