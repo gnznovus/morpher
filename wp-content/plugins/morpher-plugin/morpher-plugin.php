@@ -13,6 +13,7 @@ $morpher_root = plugin_dir_path( __FILE__ );
 
 require_once $morpher_root . 'includes/class-morpher-deployment.php';
 require_once $morpher_root . 'includes/class-morpher-assets.php';
+require_once $morpher_root . 'includes/class-morpher-diagnostics.php';
 require_once $morpher_root . 'includes/class-morpher-admin.php';
 require_once $morpher_root . 'includes/class-morpher-plugin.php';
 
