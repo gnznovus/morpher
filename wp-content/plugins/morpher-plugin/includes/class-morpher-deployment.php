@@ -117,7 +117,7 @@ class Morpher_Deployment {
         );
     }
 
-    public function process_all() {
+    public function process_all( $force_override = false ) {
         if ( ! current_user_can( 'manage_options' ) || ! is_dir( $this->root ) ) {
             return;
         }
@@ -128,7 +128,7 @@ class Morpher_Deployment {
         }
 
         foreach ( $directories as $directory ) {
-            $this->import( $directory );
+            $this->import( $directory, $force_override );
         }
     }
 
