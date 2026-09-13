@@ -1,0 +1,29 @@
+{% if result %}
+<div class="pairing-message">
+    {{ result.status|upper }} — {{ result.title }} — ID {{ result.template_id }} — {{ result.ref_no }}
+</div>
+{% endif %}
+
+{% if error %}
+<div class="pairing-error">{{ error }}</div>
+{% endif %}
+
+{% if templates %}
+    {% for template in templates %}
+    <article class="deployment-row">
+        <div>
+            <h3>{{ template.title }}</h3>
+            <p class="muted pairing-url">{{ template.name }} · {{ template.slug }}</p>
+        </div>
+        <button
+            class="button"
+            type="button"
+            hx-post="/deployment/templates/{{ template.name }}"
+            hx-target="#deployment-templates"
+            hx-swap="innerHTML"
+        >Send template</button>
+    </article>
+    {% endfor %}
+{% else %}
+<p class="muted">No generated Elementor templates found in Morpher output.</p>
+{% endif %}
