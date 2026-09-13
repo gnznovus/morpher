@@ -14,7 +14,7 @@ class Morpher_Plugin {
         $diagnostics  = new Morpher_Diagnostics( $deployments, $root );
         $this->assets = new Morpher_Assets( $plugin_file, $root );
         $this->admin  = new Morpher_Admin( $deployments, $diagnostics, $plugin_file );
-        $this->rest   = new Morpher_REST();
+        $this->rest   = new Morpher_REST( $deployments );
     }
 
     public function register() {
