@@ -18,6 +18,7 @@ require_once $morpher_root . 'includes/class-morpher-assets.php';
 require_once $morpher_root . 'includes/class-morpher-diagnostics.php';
 require_once $morpher_root . 'includes/class-morpher-auth.php';
 require_once $morpher_root . 'includes/class-morpher-acknowledgements.php';
+require_once $morpher_root . 'includes/class-morpher-rest-template-deployment.php';
 require_once $morpher_root . 'includes/class-morpher-rest.php';
 require_once $morpher_root . 'includes/class-morpher-admin.php';
 require_once $morpher_root . 'includes/class-morpher-pairing-admin.php';
