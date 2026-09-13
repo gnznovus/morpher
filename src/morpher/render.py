@@ -15,6 +15,8 @@ from morpher.compiler.normalizer import normalize
 from morpher.compiler.responsive import compile_for_responsive_render
 from morpher.inputs.figma_json import FigmaJsonAdapter
 from morpher.ir.nodes import DesignNode
+from morpher.ir.reporting import write_ir_validation_log
+from morpher.ir.validation import IRValidationError, validate_design_ir
 from morpher.renderers.css import render_css
 from morpher.renderers.elementor_font_plugin import render_elementor_font_plugin
 from morpher.renderers.elementor_overrides import render_elementor_with_ir_overrides
@@ -176,11 +178,27 @@ def render_path(
     fidelity: bool = True,
     native: bool = True,
 ) -> RenderOutputs:
-    adapter = FigmaJsonAdapter()
-    document = normalize(adapter.load(path))
-
     storage = StoragePaths()
     storage.ensure()
+
+    adapter = FigmaJsonAdapter()
+    try:
+        document = normalize(adapter.load(path))
+    except IRValidationError as exc:
+        write_ir_validation_log(
+            path,
+            exc.validation,
+            storage.ir_diagnostics_output(path),
+        )
+        raise
+
+    ir_validation = validate_design_ir(document)
+    write_ir_validation_log(
+        path,
+        ir_validation,
+        storage.ir_diagnostics_output(path),
+    )
+
     elementor_path = storage.elementor_output(path)
 
     fidelity_html_path: Path | None = None
