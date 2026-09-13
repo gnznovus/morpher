@@ -97,6 +97,8 @@ class WordPressClient:
         build_hash: str,
         template: dict[str, object],
         ref_no: str = "",
+        asset_root: str = "",
+        assets: list[dict[str, str]] | None = None,
     ) -> dict[str, object]:
         if not slug.strip():
             raise ValueError("Deployment slug is required.")
@@ -105,16 +107,22 @@ class WordPressClient:
         if not isinstance(template.get("content"), list):
             raise ValueError("Elementor template content is required.")
 
+        payload: dict[str, object] = {
+            "slug": slug.strip(),
+            "title": title.strip(),
+            "build_hash": build_hash.strip(),
+            "ref_no": ref_no.strip(),
+            "template": template,
+        }
+        if asset_root:
+            payload["asset_root"] = asset_root.strip("/")
+        if assets:
+            payload["assets"] = assets
+
         return self._request_json(
             "POST",
             "/wp-json/morpher/v1/deployments/template",
-            payload={
-                "slug": slug.strip(),
-                "title": title.strip(),
-                "build_hash": build_hash.strip(),
-                "ref_no": ref_no.strip(),
-                "template": template,
-            },
+            payload=payload,
             authenticated=True,
         )
 
