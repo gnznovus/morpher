@@ -186,6 +186,44 @@ def build_deployment_package(
     )
 
 
+class DeploymentService:
+    """Single deployment path shared by the CLI and dashboard."""
+
+    def __init__(
+        self,
+        target_url: str,
+        *,
+        storage: StoragePaths | None = None,
+        credentials: CredentialStore | None = None,
+        client_factory=WordPressClient,
+    ) -> None:
+        self.target_url = target_url
+        self.storage = storage or StoragePaths()
+        self.credentials = credentials or KeyringCredentialStore()
+        self.client_factory = client_factory
+
+    def templates(self) -> tuple[DeploymentCandidate, ...]:
+        return deployment_candidates(self.storage)
+
+    def deploy(self, template_name: str | Path, *, force: bool = False) -> DeployResult:
+        try:
+            template = resolve_template_target(template_name, self.storage)
+        except DeploymentError as exc:
+            return DeployResult(template=Path(template_name), status="failed", error=str(exc))
+        return stage_template(
+            template,
+            self.target_url,
+            self.storage,
+            force=force,
+            credentials=self.credentials,
+            client_factory=self.client_factory,
+        )
+
+    def deploy_all(self, *, force: bool = False) -> list[DeployResult]:
+        self.storage.ensure()
+        return [self.deploy(path, force=force) for path in discover_templates(self.storage)]
+
+
 def stage_template(
     template: Path,
     target_url: str,
@@ -227,23 +265,15 @@ def deploy_all(
     credentials: CredentialStore | None = None,
     client_factory=WordPressClient,
 ) -> list[DeployResult]:
-    storage = storage or StoragePaths()
-    storage.ensure()
-    try:
-        templates = [resolve_template_target(target, storage)] if target is not None else discover_templates(storage)
-    except DeploymentError as exc:
-        return [DeployResult(template=Path(target or ""), status="failed", error=str(exc))]
-    return [
-        stage_template(
-            template,
-            target_url,
-            storage,
-            force=force,
-            credentials=credentials,
-            client_factory=client_factory,
-        )
-        for template in templates
-    ]
+    service = DeploymentService(
+        target_url,
+        storage=storage,
+        credentials=credentials,
+        client_factory=client_factory,
+    )
+    if target is None:
+        return service.deploy_all(force=force)
+    return [service.deploy(target, force=force)]
 
 
 def main(argv: list[str] | None = None) -> None:
