@@ -1,6 +1,6 @@
 {% if result %}
 <div class="pairing-message">
-    {{ result.status|upper }} — {{ result.title }} — ID {{ result.template_id }} — {{ result.ref_no }} — assets {{ result.asset_count }}
+    {{ result.status|upper }} — {{ result.template.name }} — {{ result.ref_no }}
 </div>
 {% endif %}
 
@@ -21,7 +21,7 @@
             hx-post="/deployment/templates/{{ template.name }}"
             hx-target="#deployment-templates"
             hx-swap="innerHTML"
-        >Send template + assets</button>
+        >Stage deployment</button>
     </article>
     {% endfor %}
 {% else %}
