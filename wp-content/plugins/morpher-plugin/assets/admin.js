@@ -18,6 +18,18 @@
 
     let currentSearch = '';
 
+    const scheduleNoticeDismiss = ( element ) => {
+        if ( ! element ) {
+            return;
+        }
+
+        window.setTimeout( () => {
+            element.remove();
+        }, 10000 );
+    };
+
+    root.querySelectorAll( '.notice-success' ).forEach( scheduleNoticeDismiss );
+
     const setActiveTab = ( tabName ) => {
         tabs.forEach( ( tab ) => {
             const active = tab.dataset.tab === tabName;
@@ -34,6 +46,10 @@
 
         notice.innerHTML = '<div class="notice notice-' + type + ' is-dismissible inline"><p></p></div>';
         notice.querySelector( 'p' ).textContent = message;
+
+        if ( 'success' === type ) {
+            scheduleNoticeDismiss( notice.querySelector( '.notice-success' ) );
+        }
     };
 
     const ajaxRequest = async ( action, extra = {} ) => {
