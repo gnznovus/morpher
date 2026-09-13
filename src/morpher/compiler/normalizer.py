@@ -2,19 +2,14 @@ from typing import Any
 
 from morpher.inputs.figma_json import FigmaJsonAdapter
 from morpher.ir.nodes import DesignDocument
-from morpher.ir.validation import validate_design_ir
+from morpher.ir.validation import IRValidationError, validate_design_ir
 
 
 def _require_valid(document: DesignDocument) -> DesignDocument:
     validation = validate_design_ir(document)
-    if not validation.errors:
-        return document
-
-    details = "; ".join(
-        f"{item.code} at {item.path_string}: {item.message}"
-        for item in validation.errors
-    )
-    raise ValueError(f"Design IR validation failed: {details}")
+    if validation.errors:
+        raise IRValidationError(validation)
+    return document
 
 
 def normalize(source: dict[str, Any] | DesignDocument) -> DesignDocument:
