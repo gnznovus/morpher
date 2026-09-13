@@ -41,6 +41,26 @@
 <section class="card pairing-card">
     <div class="card-head">
         <div>
+            <p class="eyebrow">REST deployment test</p>
+            <h2>Send a real Elementor template</h2>
+        </div>
+        <span class="pill">Template only · no assets</span>
+    </div>
+    <p class="muted">Reads directly from Morpher's generated Elementor output and sends the real payload through the authenticated WordPress REST connection.</p>
+    <div
+        id="deployment-templates"
+        class="deployment-list"
+        hx-get="/deployment/templates"
+        hx-trigger="load"
+        hx-swap="innerHTML"
+    >
+        <p class="muted">Loading generated templates...</p>
+    </div>
+</section>
+
+<section class="card pairing-card">
+    <div class="card-head">
+        <div>
             <p class="eyebrow">Connection requests</p>
             <h2>Who is poking Morpher?</h2>
         </div>
