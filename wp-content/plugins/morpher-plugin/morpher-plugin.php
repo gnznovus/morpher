@@ -19,6 +19,7 @@ require_once $morpher_root . 'includes/class-morpher-diagnostics.php';
 require_once $morpher_root . 'includes/class-morpher-auth.php';
 require_once $morpher_root . 'includes/class-morpher-rest.php';
 require_once $morpher_root . 'includes/class-morpher-admin.php';
+require_once $morpher_root . 'includes/class-morpher-pairing-admin.php';
 require_once $morpher_root . 'includes/class-morpher-plugin.php';
 
 $morpher_plugin = new Morpher_Plugin( __FILE__, $morpher_root );
