@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from morpher.remote_deploy import RemoteTemplateDeploymentService
 from morpher.storage.paths import StoragePaths
+from morpher.wordpress import WordPressClient
 
 
 class MemoryCredentials:
@@ -44,6 +47,20 @@ class FakeClient:
         }
 
 
+class FakeResponse:
+    def __init__(self, payload: object) -> None:
+        self.body = json.dumps(payload).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return None
+
+    def read(self) -> bytes:
+        return self.body
+
+
 def test_remote_deploy_sends_generated_elementor_template(tmp_path: Path) -> None:
     storage = StoragePaths(root=tmp_path / "storage", project_root=tmp_path)
     storage.output_elementor.mkdir(parents=True)
@@ -75,3 +92,46 @@ def test_remote_deploy_sends_generated_elementor_template(tmp_path: Path) -> Non
     assert FakeClient.seen["slug"] == "happennings"
     assert FakeClient.seen["template"] == payload
     assert str(FakeClient.seen["ref_no"]).startswith("MRF-")
+
+
+def test_wordpress_client_posts_template_with_bearer(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, object] = {}
+    template = {"title": "Happennings", "content": [{"id": "node"}]}
+
+    def fake_urlopen(request, *, timeout):
+        seen["url"] = request.full_url
+        seen["method"] = request.get_method()
+        seen["authorization"] = request.get_header("Authorization")
+        seen["payload"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse(
+            {
+                "status": "updated",
+                "ref_no": "MRF-ABCD-12",
+                "slug": "happennings",
+                "title": "Happennings",
+                "template_id": 188,
+                "build_hash": "hash-1",
+            }
+        )
+
+    monkeypatch.setattr("morpher.wordpress.client.urlopen", fake_urlopen)
+
+    result = WordPressClient("http://localhost:8080", token="t" * 43).deploy_template(
+        slug="happennings",
+        title="Happennings",
+        build_hash="hash-1",
+        template=template,
+        ref_no="MRF-ABCD-12",
+    )
+
+    assert seen["url"] == "http://localhost:8080/wp-json/morpher/v1/deployments/template"
+    assert seen["method"] == "POST"
+    assert seen["authorization"] == f"Bearer {'t' * 43}"
+    assert seen["payload"] == {
+        "slug": "happennings",
+        "title": "Happennings",
+        "build_hash": "hash-1",
+        "ref_no": "MRF-ABCD-12",
+        "template": template,
+    }
+    assert result["template_id"] == 188
