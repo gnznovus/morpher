@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 
 from morpher.connections import ConnectionRecord, ConnectionStore
-from morpher.credentials import CredentialStore
+from morpher.credentials import CredentialStore, CredentialStoreError
 from morpher.targets import normalize_target_url
 from morpher.wordpress import WordPressClient, WordPressClientError
 
@@ -79,7 +79,10 @@ class PairingService:
         if existing is not None:
             return existing
 
-        token = self.credentials.get(self.expected_site_url)
+        try:
+            token = self.credentials.get(self.expected_site_url)
+        except CredentialStoreError:
+            return None
         if not token:
             return None
 
@@ -148,7 +151,13 @@ class PairingService:
         request = self._require_pending(request_id)
         token = secrets.token_urlsafe(32)
 
-        self.credentials.set(request.site_url, token)
+        try:
+            self.credentials.set(request.site_url, token)
+        except (ValueError, CredentialStoreError) as exc:
+            failed = replace(request, status="error", error=str(exc))
+            self.store.replace(failed)
+            raise PairingError(str(exc)) from exc
+
         client = self.client_factory(request.site_url, token=token)
 
         try:
