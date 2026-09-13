@@ -1,0 +1,78 @@
+.morpher-admin-header {
+    margin-bottom: 18px;
+}
+
+.morpher-admin-header p {
+    max-width: 760px;
+    color: #646970;
+}
+
+.morpher-tabs {
+    margin-bottom: 0;
+}
+
+.morpher-tab-panel {
+    max-width: 1100px;
+    min-height: 120px;
+    padding-top: 18px;
+}
+
+.morpher-tab-panel.is-loading {
+    opacity: 0.72;
+}
+
+.morpher-loading {
+    color: #646970;
+}
+
+.morpher-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.morpher-toolbar h2 {
+    margin: 0;
+}
+
+.morpher-deployment-table {
+    max-width: 1100px;
+}
+
+.morpher-empty-state {
+    padding: 24px;
+    border: 1px solid #dcdcde;
+    background: #fff;
+}
+
+.morpher-empty-state h2 {
+    margin-top: 0;
+}
+
+.morpher-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #f0f0f1;
+    font-size: 12px;
+    line-height: 1.8;
+    text-transform: capitalize;
+}
+
+.morpher-status--imported,
+.morpher-status--updated {
+    background: #edfaef;
+    color: #116329;
+}
+
+.morpher-status--failed {
+    background: #fcf0f1;
+    color: #8a2424;
+}
+
+.morpher-status--skipped {
+    background: #f0f6fc;
+    color: #135e96;
+}
