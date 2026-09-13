@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from morpher.credentials import KeyringCredentialStore
 from morpher.pairing import PairingError, PairingService
+from morpher.remote_deploy import RemoteDeploymentError, RemoteTemplateDeploymentService
 from morpher.wordpress import WordPressClient, WordPressClientError
 
 ClientFactory = Callable[[str], WordPressClient]
@@ -42,6 +43,7 @@ def create_dashboard_app(
     *,
     client_factory: ClientFactory = WordPressClient,
     pairing_service: PairingService | None = None,
+    deployment_service: RemoteTemplateDeploymentService | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Morpher Dashboard", docs_url=None, redoc_url=None)
     app.state.target = target
@@ -49,6 +51,10 @@ def create_dashboard_app(
     app.state.pairing = pairing_service or PairingService(
         target,
         KeyringCredentialStore(),
+        client_factory=client_factory,
+    )
+    app.state.deployments = deployment_service or RemoteTemplateDeploymentService(
+        target,
         client_factory=client_factory,
     )
     app.state.wordpress_origin = _origin(target)
@@ -76,6 +82,17 @@ def create_dashboard_app(
             context={
                 "pairing_requests": app.state.pairing.list_requests(),
                 "message": message,
+            },
+        )
+
+    def render_deployment_templates(request: Request, *, result=None, error: str = "") -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(
+            request=request,
+            name="partials/deployment_templates.html",
+            context={
+                "templates": app.state.deployments.templates(),
+                "result": result,
+                "error": error,
             },
         )
 
@@ -148,5 +165,17 @@ def create_dashboard_app(
         except PairingError as exc:
             message = str(exc)
         return render_pairing_requests(request, message=message)
+
+    @app.get("/deployment/templates", response_class=HTMLResponse)
+    def deployment_templates(request: Request) -> HTMLResponse:
+        return render_deployment_templates(request)
+
+    @app.post("/deployment/templates/{template_name}", response_class=HTMLResponse)
+    def deploy_template(template_name: str, request: Request) -> HTMLResponse:
+        try:
+            result = app.state.deployments.deploy(template_name)
+            return render_deployment_templates(request, result=result)
+        except RemoteDeploymentError as exc:
+            return render_deployment_templates(request, error=str(exc))
 
     return app
