@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -38,12 +39,14 @@ class FakeClient:
             **payload,
         }
         return {
-            "status": "updated",
+            "status": "imported",
             "ref_no": payload["ref_no"],
             "slug": payload["slug"],
             "title": payload["title"],
-            "template_id": 188,
+            "template_id": 205,
             "build_hash": payload["build_hash"],
+            "asset_count": len(payload.get("assets") or []),
+            "asset_url": "http://localhost:8080/wp-content/uploads/morpher-assets/happennings",
         }
 
 
@@ -61,17 +64,28 @@ class FakeResponse:
         return self.body
 
 
-def test_remote_deploy_sends_generated_elementor_template(tmp_path: Path) -> None:
+def test_remote_deploy_sends_generated_elementor_template_and_assets(tmp_path: Path) -> None:
     storage = StoragePaths(root=tmp_path / "storage", project_root=tmp_path)
     storage.output_elementor.mkdir(parents=True)
     template_path = storage.output_elementor / "happennings_template.json"
     payload = {
         "title": "Happennings",
         "type": "container",
-        "content": [{"id": "real-node", "elType": "container", "settings": {}}],
+        "content": [
+            {
+                "id": "real-node",
+                "elType": "container",
+                "settings": {"background_image": {"url": "assets/happennings/photo.webp"}},
+            }
+        ],
         "page_settings": [],
     }
     template_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    asset_dir = storage.output_elementor / "assets" / "happennings"
+    asset_dir.mkdir(parents=True)
+    asset_bytes = b"real-asset-bytes"
+    (asset_dir / "photo.webp").write_bytes(asset_bytes)
 
     service = RemoteTemplateDeploymentService(
         "http://localhost:8080",
@@ -86,17 +100,24 @@ def test_remote_deploy_sends_generated_elementor_template(tmp_path: Path) -> Non
 
     result = service.deploy("happennings_template.json")
 
-    assert result.status == "updated"
-    assert result.template_id == 188
+    assert result.status == "imported"
+    assert result.template_id == 205
+    assert result.asset_count == 1
     assert FakeClient.seen["token"] == "t" * 43
     assert FakeClient.seen["slug"] == "happennings"
     assert FakeClient.seen["template"] == payload
+    assert FakeClient.seen["asset_root"] == "assets/happennings"
+    assets = FakeClient.seen["assets"]
+    assert isinstance(assets, list)
+    assert assets[0]["path"] == "photo.webp"
+    assert base64.b64decode(assets[0]["content"]) == asset_bytes
     assert str(FakeClient.seen["ref_no"]).startswith("MRF-")
 
 
-def test_wordpress_client_posts_template_with_bearer(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_wordpress_client_posts_template_assets_with_bearer(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict[str, object] = {}
     template = {"title": "Happennings", "content": [{"id": "node"}]}
+    assets = [{"path": "photo.webp", "sha256": "abc", "content": "cmVhbA=="}]
 
     def fake_urlopen(request, *, timeout):
         seen["url"] = request.full_url
@@ -105,12 +126,13 @@ def test_wordpress_client_posts_template_with_bearer(monkeypatch: pytest.MonkeyP
         seen["payload"] = json.loads(request.data.decode("utf-8"))
         return FakeResponse(
             {
-                "status": "updated",
+                "status": "imported",
                 "ref_no": "MRF-ABCD-12",
                 "slug": "happennings",
                 "title": "Happennings",
-                "template_id": 188,
+                "template_id": 205,
                 "build_hash": "hash-1",
+                "asset_count": 1,
             }
         )
 
@@ -122,6 +144,8 @@ def test_wordpress_client_posts_template_with_bearer(monkeypatch: pytest.MonkeyP
         build_hash="hash-1",
         template=template,
         ref_no="MRF-ABCD-12",
+        asset_root="assets/happennings",
+        assets=assets,
     )
 
     assert seen["url"] == "http://localhost:8080/wp-json/morpher/v1/deployments/template"
@@ -133,5 +157,7 @@ def test_wordpress_client_posts_template_with_bearer(monkeypatch: pytest.MonkeyP
         "build_hash": "hash-1",
         "ref_no": "MRF-ABCD-12",
         "template": template,
+        "asset_root": "assets/happennings",
+        "assets": assets,
     }
-    assert result["template_id"] == 188
+    assert result["template_id"] == 205
