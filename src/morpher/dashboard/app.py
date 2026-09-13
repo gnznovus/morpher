@@ -12,8 +12,8 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from morpher.credentials import KeyringCredentialStore
+from morpher.deploy import DeploymentService
 from morpher.pairing import PairingError, PairingService
-from morpher.remote_deploy import RemoteDeploymentError, RemoteTemplateDeploymentService
 from morpher.wordpress import WordPressClient, WordPressClientError
 
 ClientFactory = Callable[[str], WordPressClient]
@@ -43,7 +43,7 @@ def create_dashboard_app(
     *,
     client_factory: ClientFactory = WordPressClient,
     pairing_service: PairingService | None = None,
-    deployment_service: RemoteTemplateDeploymentService | None = None,
+    deployment_service: DeploymentService | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Morpher Dashboard", docs_url=None, redoc_url=None)
     app.state.target = target
@@ -53,7 +53,7 @@ def create_dashboard_app(
         KeyringCredentialStore(),
         client_factory=client_factory,
     )
-    app.state.deployments = deployment_service or RemoteTemplateDeploymentService(
+    app.state.deployments = deployment_service or DeploymentService(
         target,
         client_factory=client_factory,
     )
@@ -172,10 +172,9 @@ def create_dashboard_app(
 
     @app.post("/deployment/templates/{template_name}", response_class=HTMLResponse)
     def deploy_template(template_name: str, request: Request) -> HTMLResponse:
-        try:
-            result = app.state.deployments.deploy(template_name)
-            return render_deployment_templates(request, result=result)
-        except RemoteDeploymentError as exc:
-            return render_deployment_templates(request, error=str(exc))
+        result = app.state.deployments.deploy(template_name)
+        if result.status == "failed":
+            return render_deployment_templates(request, error=result.error or "Deployment staging failed.")
+        return render_deployment_templates(request, result=result)
 
     return app
