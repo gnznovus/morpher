@@ -64,6 +64,7 @@ class Morpher_REST {
             'connection' => array(
                 'paired' => $this->auth->is_connected(),
                 'ref_no' => $this->auth->connection_ref_no(),
+                'metadata' => $this->auth->connection_metadata(),
                 'latest_acknowledgement' => $this->acknowledgements->latest(),
             ),
             'capabilities' => array( 'health', 'pairing', 'acknowledge', 'deployments:list' ),
@@ -96,6 +97,7 @@ class Morpher_REST {
             'api_version' => 'v1',
             'request_id' => $request_id,
             'ref_no' => $this->auth->connection_ref_no(),
+            'connection' => $this->auth->connection_metadata(),
         ) );
     }
 
