@@ -46,6 +46,8 @@ def test_dashboard_app_exposes_local_dashboard_routes() -> None:
     assert "/pairing/requests" in paths
     assert "/pairing/requests/{request_id}/accept" in paths
     assert "/pairing/requests/{request_id}/reject" in paths
+    assert "/deployment/templates" in paths
+    assert "/deployment/templates/{template_name}" in paths
     assert "/static" in paths
     assert "/docs" not in paths
     assert "/redoc" not in paths
