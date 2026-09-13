@@ -14,7 +14,7 @@ class Morpher_Plugin {
         $diagnostics  = new Morpher_Diagnostics( $deployments, $root );
         $auth         = new Morpher_Auth();
         $this->assets = new Morpher_Assets( $plugin_file, $root );
-        $this->admin  = new Morpher_Admin( $deployments, $diagnostics, $plugin_file );
+        $this->admin  = new Morpher_Admin( $deployments, $diagnostics, $auth, $plugin_file );
         $this->rest   = new Morpher_REST( $deployments, $auth );
     }
 
