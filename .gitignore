@@ -27,6 +27,7 @@ storage/fonts/*
 storage/font-registry.json
 storage/log/*
 storage/output/*
+logs/*
 
 # Keep storage directories if placeholder files are used
 !storage/**/.gitkeep
