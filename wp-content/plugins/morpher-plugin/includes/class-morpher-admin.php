@@ -17,6 +17,7 @@ class Morpher_Admin {
         add_action( 'admin_menu', array( $this, 'register_menu' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
         add_action( 'wp_ajax_morpher_load_tab', array( $this, 'handle_load_tab' ) );
+        add_action( 'wp_ajax_morpher_process_deployments', array( $this, 'handle_ajax_process' ) );
         add_action( 'wp_ajax_morpher_redeploy', array( $this, 'handle_ajax_redeploy' ) );
         add_action( 'wp_ajax_morpher_redeploy_all', array( $this, 'handle_ajax_redeploy_all' ) );
         add_action( 'admin_post_morpher_process_deployments', array( $this, 'handle_manual_process' ) );
@@ -87,6 +88,12 @@ class Morpher_Admin {
                 'html' => $html,
             )
         );
+    }
+
+    public function handle_ajax_process() {
+        $this->guard_ajax();
+        $this->deployments->process_all();
+        $this->send_deployments_tab( 'Processed staged Morpher deployments.' );
     }
 
     public function handle_ajax_redeploy() {
@@ -197,11 +204,7 @@ class Morpher_Admin {
             </div>
             <div class="morpher-toolbar-actions">
                 <button type="button" class="button morpher-redeploy-all" <?php disabled( empty( $rows ) ); ?>>Re-deploy all</button>
-                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-                    <input type="hidden" name="action" value="morpher_process_deployments">
-                    <?php wp_nonce_field( 'morpher_process_deployments' ); ?>
-                    <?php submit_button( 'Process staged deployments', 'primary', 'submit', false ); ?>
-                </form>
+                <button type="button" class="button button-primary morpher-process-staged">Process staged deployments</button>
             </div>
         </div>
 
