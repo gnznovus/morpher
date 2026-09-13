@@ -1,0 +1,48 @@
+{% if message %}
+<div class="pairing-message">{{ message }}</div>
+{% endif %}
+
+{% if pairing_requests %}
+    {% for pairing in pairing_requests %}
+    <article class="pairing-request {{ pairing.status }}">
+        <div class="pairing-request-head">
+            <div>
+                <p class="eyebrow">{{ pairing.status }}</p>
+                <h3>{{ pairing.site_name }}</h3>
+                <p class="muted pairing-url">{{ pairing.site_url }}</p>
+            </div>
+            <span class="ref-no">{{ pairing.ref_no }}</span>
+        </div>
+
+        <dl class="pairing-facts">
+            <div><dt>WordPress</dt><dd>{{ pairing.wordpress_version or "unknown" }}</dd></div>
+            <div><dt>Morpher Plugin</dt><dd>{{ pairing.plugin_version or "unknown" }}</dd></div>
+        </dl>
+
+        {% if pairing.error %}
+        <p class="pairing-error">{{ pairing.error }}</p>
+        {% endif %}
+
+        {% if pairing.status == "pending" %}
+        <div class="pairing-actions">
+            <button
+                class="button secondary"
+                type="button"
+                hx-post="/pairing/requests/{{ pairing.request_id }}/reject"
+                hx-target="#pairing-requests"
+                hx-swap="innerHTML"
+            >Reject</button>
+            <button
+                class="button"
+                type="button"
+                hx-post="/pairing/requests/{{ pairing.request_id }}/accept"
+                hx-target="#pairing-requests"
+                hx-swap="innerHTML"
+            >Accept</button>
+        </div>
+        {% endif %}
+    </article>
+    {% endfor %}
+{% else %}
+<p class="muted">No pairing requests yet. Start pairing from the Morpher Connection screen in WordPress.</p>
+{% endif %}

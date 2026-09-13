@@ -1,21 +1,46 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import re
-import shutil
+import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
+from morpher.credentials import CredentialStore, CredentialStoreError, KeyringCredentialStore
 from morpher.storage.paths import StoragePaths
+from morpher.targets import resolve_target_url
+from morpher.wordpress import WordPressClient, WordPressClientError
+
+
+class DeploymentError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class DeploymentCandidate:
+    name: str
+    path: Path
+    title: str
+    slug: str
+
+
+@dataclass(frozen=True)
+class DeploymentPackage:
+    ref_no: str
+    manifest: dict[str, object]
+    template: dict[str, object]
+    assets: list[dict[str, str]]
 
 
 @dataclass(frozen=True)
 class DeployResult:
     template: Path
     status: str
-    deployment: Path | None = None
+    ref_no: str = ""
+    deployment: str = ""
     error: str | None = None
 
 
@@ -24,15 +49,20 @@ def _slugify(value: str) -> str:
     return slug or "morpher-template"
 
 
-def _template_identity(path: Path) -> tuple[str, str]:
+def _ref_no() -> str:
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    raw = "".join(secrets.choice(alphabet) for _ in range(6))
+    return f"MRF-{raw[:4]}-{raw[4:]}"
+
+
+def _template_payload(path: Path) -> dict[str, object]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Could not read Elementor template {path}: {exc}") from exc
-
-    title = str(payload.get("title") or path.stem.removesuffix("_template"))
-    slug = _slugify(path.stem.removesuffix("_template"))
-    return title, slug
+        raise DeploymentError(f"Could not read Elementor template {path}: {exc}") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("content"), list):
+        raise DeploymentError(f"Invalid Elementor template payload: {path}")
+    return payload
 
 
 def _candidate_names(value: str) -> tuple[str, ...]:
@@ -46,7 +76,6 @@ def _candidate_names(value: str) -> tuple[str, ...]:
 
 
 def resolve_template_target(value: str | Path, storage: StoragePaths | None = None) -> Path:
-    """Resolve a filename or path to one template inside output/elementor only."""
     storage = storage or StoragePaths()
     root = storage.output_elementor.resolve()
     raw = Path(value)
@@ -66,7 +95,7 @@ def resolve_template_target(value: str | Path, storage: StoragePaths | None = No
         if resolved.is_file():
             return resolved
 
-    raise ValueError(f"Elementor template not found under {storage.output_elementor}: {value}")
+    raise DeploymentError(f"Elementor template not found under {storage.output_elementor}: {value}")
 
 
 def discover_templates(storage: StoragePaths | None = None) -> list[Path]:
@@ -80,115 +109,210 @@ def discover_templates(storage: StoragePaths | None = None) -> list[Path]:
     )
 
 
+def deployment_candidates(storage: StoragePaths | None = None) -> tuple[DeploymentCandidate, ...]:
+    storage = storage or StoragePaths()
+    items: list[DeploymentCandidate] = []
+    for path in discover_templates(storage):
+        try:
+            payload = _template_payload(path)
+        except DeploymentError:
+            continue
+        stem = path.stem.removesuffix("_template")
+        items.append(
+            DeploymentCandidate(
+                name=path.name,
+                path=path,
+                title=str(payload.get("title") or stem),
+                slug=_slugify(stem),
+            )
+        )
+    return tuple(items)
+
+
 def _asset_dir_for_template(template: Path, storage: StoragePaths) -> Path:
     stem = template.stem.removesuffix("_template")
     return storage.output_elementor / "assets" / stem
 
 
-def _build_hash(template: Path, asset_dir: Path) -> str:
-    digest = hashlib.sha256()
-    digest.update(template.read_bytes())
-    if asset_dir.exists():
-        for asset in sorted(path for path in asset_dir.rglob("*") if path.is_file()):
-            digest.update(asset.relative_to(asset_dir).as_posix().encode("utf-8"))
-            digest.update(asset.read_bytes())
-    return digest.hexdigest()
+def _asset_payload(asset_dir: Path) -> list[dict[str, str]]:
+    if not asset_dir.exists():
+        return []
+    assets: list[dict[str, str]] = []
+    for path in sorted(item for item in asset_dir.rglob("*") if item.is_file()):
+        raw = path.read_bytes()
+        assets.append(
+            {
+                "path": path.relative_to(asset_dir).as_posix(),
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "content": base64.b64encode(raw).decode("ascii"),
+            }
+        )
+    return assets
 
 
-def _deployment_root(storage: StoragePaths) -> Path:
-    return storage.elementor_font_plugin / "deployments"
-
-
-def stage_template(
+def build_deployment_package(
     template: Path,
     storage: StoragePaths | None = None,
     *,
     force: bool = False,
+) -> DeploymentPackage:
+    storage = storage or StoragePaths()
+    payload = _template_payload(template)
+    stem = template.stem.removesuffix("_template")
+    slug = _slugify(stem)
+    title = str(payload.get("title") or stem)
+    asset_dir = _asset_dir_for_template(template, storage)
+    assets = _asset_payload(asset_dir)
+
+    digest = hashlib.sha256(template.read_bytes())
+    for asset in assets:
+        digest.update(asset["path"].encode("utf-8"))
+        digest.update(asset["sha256"].encode("ascii"))
+
+    manifest: dict[str, object] = {
+        "schema_version": 1,
+        "title": title,
+        "slug": slug,
+        "type": str(payload.get("type") or "container"),
+        "build_hash": digest.hexdigest(),
+        "force": force,
+        "asset_root": f"assets/{stem}",
+    }
+    return DeploymentPackage(
+        ref_no=_ref_no(),
+        manifest=manifest,
+        template=payload,
+        assets=assets,
+    )
+
+
+class DeploymentService:
+    """Single deployment path shared by the CLI and dashboard."""
+
+    def __init__(
+        self,
+        target_url: str,
+        *,
+        storage: StoragePaths | None = None,
+        credentials: CredentialStore | None = None,
+        client_factory=WordPressClient,
+    ) -> None:
+        self.target_url = target_url
+        self.storage = storage or StoragePaths()
+        self.credentials = credentials or KeyringCredentialStore()
+        self.client_factory = client_factory
+
+    def templates(self) -> tuple[DeploymentCandidate, ...]:
+        return deployment_candidates(self.storage)
+
+    def deploy(self, template_name: str | Path, *, force: bool = False) -> DeployResult:
+        try:
+            template = resolve_template_target(template_name, self.storage)
+        except DeploymentError as exc:
+            return DeployResult(template=Path(template_name), status="failed", error=str(exc))
+        return stage_template(
+            template,
+            self.target_url,
+            self.storage,
+            force=force,
+            credentials=self.credentials,
+            client_factory=self.client_factory,
+        )
+
+    def deploy_all(self, *, force: bool = False) -> list[DeployResult]:
+        self.storage.ensure()
+        return [self.deploy(path, force=force) for path in discover_templates(self.storage)]
+
+
+def stage_template(
+    template: Path,
+    target_url: str,
+    storage: StoragePaths | None = None,
+    *,
+    force: bool = False,
+    credentials: CredentialStore | None = None,
+    client_factory=WordPressClient,
 ) -> DeployResult:
     storage = storage or StoragePaths()
+    credentials = credentials or KeyringCredentialStore()
     try:
-        title, slug = _template_identity(template)
-        asset_dir = _asset_dir_for_template(template, storage)
-        build_hash = _build_hash(template, asset_dir)
-        deployment = _deployment_root(storage) / slug
-        manifest_path = deployment / "manifest.json"
-
-        if not force and manifest_path.exists():
-            try:
-                current = json.loads(manifest_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                current = {}
-            if current.get("build_hash") == build_hash:
-                return DeployResult(template=template, status="skipped", deployment=deployment)
-
-        if deployment.exists():
-            shutil.rmtree(deployment)
-        deployment.mkdir(parents=True, exist_ok=True)
-
-        shutil.copy2(template, deployment / "template.json")
-        if asset_dir.exists():
-            shutil.copytree(asset_dir, deployment / "assets")
-
-        asset_root = f"assets/{template.stem.removesuffix('_template')}"
-        manifest = {
-            "schema_version": 1,
-            "title": title,
-            "slug": slug,
-            "type": "container",
-            "build_hash": build_hash,
-            "force": force,
-            "asset_root": asset_root,
-        }
-        manifest_path.write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
+        package = build_deployment_package(template, storage, force=force)
+        token = credentials.get(target_url)
+        if not token:
+            raise DeploymentError("This WordPress site is not paired with Morpher.")
+        result = client_factory(target_url, token=token).stage_deployment(
+            ref_no=package.ref_no,
+            manifest=package.manifest,
+            template=package.template,
+            assets=package.assets,
         )
-        return DeployResult(template=template, status="staged", deployment=deployment)
-    except (OSError, ValueError) as exc:
+        return DeployResult(
+            template=template,
+            status=str(result.get("status") or "staged"),
+            ref_no=str(result.get("ref_no") or package.ref_no),
+            deployment=str(result.get("deployment") or package.manifest["slug"]),
+        )
+    except (DeploymentError, CredentialStoreError, ValueError, WordPressClientError, OSError) as exc:
         return DeployResult(template=template, status="failed", error=str(exc))
 
 
 def deploy_all(
     target: str | Path | None = None,
     *,
+    target_url: str,
     force: bool = False,
     storage: StoragePaths | None = None,
+    credentials: CredentialStore | None = None,
+    client_factory=WordPressClient,
 ) -> list[DeployResult]:
-    storage = storage or StoragePaths()
-    storage.ensure()
-    try:
-        templates = [resolve_template_target(target, storage)] if target is not None else discover_templates(storage)
-    except ValueError as exc:
-        return [DeployResult(template=Path(target or ""), status="failed", error=str(exc))]
-    return [stage_template(template, storage, force=force) for template in templates]
+    service = DeploymentService(
+        target_url,
+        storage=storage,
+        credentials=credentials,
+        client_factory=client_factory,
+    )
+    if target is None:
+        return service.deploy_all(force=force)
+    return [service.deploy(target, force=force)]
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Stage Morpher Elementor templates and assets for WordPress deployment."
+        description="Stage Morpher Elementor templates and assets through the WordPress REST connection."
     )
     parser.add_argument(
         "target",
         nargs="?",
-        help="Elementor template filename, basename, or path under output/elementor. Omit for bulk deploy.",
+        help="Elementor template filename, basename, or path under output/elementor. Omit for bulk staging.",
+    )
+    parser.add_argument(
+        "--site",
+        dest="site_url",
+        help="Connected WordPress site URL. Required until a working site is configured.",
     )
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Restage templates even when the same build is already staged/deployed.",
+        help="Stage the deployment even when it has the same build hash as an existing staged package.",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    results = deploy_all(args.target, force=args.force)
+    try:
+        target_url = resolve_target_url(args.site_url)
+    except ValueError as exc:
+        parser.error(str(exc))
+        return
+
+    results = deploy_all(args.target, target_url=target_url, force=args.force)
     if not results:
         print("No Elementor templates found.")
         return
 
     for result in results:
         if result.status == "staged":
-            print(f"DEPLOY   {result.template}  staged for WordPress")
+            print(f"STAGED   {result.template}  {result.ref_no}")
         elif result.status == "skipped":
-            print(f"SKIP     {result.template}  already staged/deployed")
+            print(f"SKIP     {result.template}  already staged")
         else:
             print(f"FAILED   {result.template}  {result.error}")
 

@@ -8,9 +8,13 @@ version = "0.1.0"
 description = "Modular design compiler for HTML/CSS and Elementor outputs."
 requires-python = ">=3.11"
 dependencies = [
+    "fastapi>=0.115,<1",
     "fonttools[woff]>=4.58",
+    "Jinja2>=3.1,<4",
+    "keyring>=25,<26",
     "Pillow>=10",
     "resvg_py>=0.5,<0.6",
+    "uvicorn>=0.30,<1",
 ]
 
 [project.scripts]
@@ -24,6 +28,9 @@ morpher-rm = "morpher.remove:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"morpher.dashboard" = ["templates/*.html", "templates/partials/*.html", "static/*.css"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

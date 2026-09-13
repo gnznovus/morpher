@@ -1,8 +1,39 @@
+import base64
 import json
 from pathlib import Path
 
-from morpher.deploy import deploy_all, resolve_template_target, stage_template
+from morpher.deploy import DeploymentError, DeploymentService, build_deployment_package, deploy_all, resolve_template_target
 from morpher.storage.paths import StoragePaths
+
+
+class MemoryCredentials:
+    def __init__(self, token: str | None = "t" * 43) -> None:
+        self.token = token
+
+    def get(self, site_url: str) -> str | None:
+        return self.token
+
+    def set(self, site_url: str, token: str) -> None:
+        self.token = token
+
+    def delete(self, site_url: str) -> None:
+        self.token = None
+
+
+class FakeClient:
+    seen: list[dict[str, object]] = []
+
+    def __init__(self, base_url: str, *, token: str | None = None) -> None:
+        self.base_url = base_url
+        self.token = token
+
+    def stage_deployment(self, **payload):
+        self.__class__.seen.append({"base_url": self.base_url, "token": self.token, **payload})
+        return {
+            "status": "staged",
+            "ref_no": payload["ref_no"],
+            "deployment": payload["manifest"]["slug"],
+        }
 
 
 def _storage(tmp_path: Path) -> StoragePaths:
@@ -16,15 +47,7 @@ def _write_template(storage: StoragePaths, name: str = "Stay-Residences") -> Pat
     template.write_text(
         json.dumps(
             {
-                "content": [
-                    {
-                        "id": "root",
-                        "elType": "container",
-                        "settings": {},
-                        "elements": [],
-                        "isInner": False,
-                    }
-                ],
+                "content": [{"id": "root", "elType": "container", "settings": {}, "elements": [], "isInner": False}],
                 "page_settings": [],
                 "version": "0.4",
                 "title": "Stay > Residences",
@@ -44,14 +67,8 @@ def test_target_filename_and_path_resolve_to_same_elementor_template(tmp_path, m
     storage = _storage(tmp_path)
     template = _write_template(storage)
 
-    by_name = resolve_template_target("Stay-Residences.json", storage)
-    by_path = resolve_template_target(
-        storage.output_elementor / "Stay-Residences_template.json",
-        storage,
-    )
-
-    assert by_name == template.resolve()
-    assert by_path == template.resolve()
+    assert resolve_template_target("Stay-Residences.json", storage) == template.resolve()
+    assert resolve_template_target(storage.output_elementor / "Stay-Residences_template.json", storage) == template.resolve()
 
 
 def test_target_cannot_escape_elementor_output(tmp_path, monkeypatch):
@@ -62,54 +79,68 @@ def test_target_cannot_escape_elementor_output(tmp_path, monkeypatch):
 
     try:
         resolve_template_target(outside, storage)
-    except ValueError as exc:
+    except DeploymentError as exc:
         assert "under" in str(exc)
     else:
         raise AssertionError("outside template should not resolve")
 
 
-def test_stage_copies_template_assets_and_manifest_then_skips_same_build(tmp_path, monkeypatch):
+def test_package_reuses_template_and_asset_discovery(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     storage = _storage(tmp_path)
     template = _write_template(storage)
 
-    first = stage_template(template, storage)
-    assert first.status == "staged"
-    assert first.deployment is not None
-    assert (first.deployment / "template.json").is_file()
-    assert (first.deployment / "assets" / "hero.webp").read_bytes() == b"webp"
+    package = build_deployment_package(template, storage)
 
-    manifest = json.loads((first.deployment / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["slug"] == "stay-residences"
-    assert manifest["title"] == "Stay > Residences"
-    assert manifest["asset_root"] == "assets/Stay-Residences"
-    assert manifest["force"] is False
-    assert len(manifest["build_hash"]) == 64
-
-    second = stage_template(template, storage)
-    assert second.status == "skipped"
+    assert package.manifest["slug"] == "stay-residences"
+    assert package.manifest["title"] == "Stay > Residences"
+    assert package.manifest["asset_root"] == "assets/Stay-Residences"
+    assert package.manifest["force"] is False
+    assert len(str(package.manifest["build_hash"])) == 64
+    assert package.assets[0]["path"] == "hero.webp"
+    assert base64.b64decode(package.assets[0]["content"]) == b"webp"
 
 
-def test_force_restages_same_build(tmp_path, monkeypatch):
+def test_deployment_service_stages_package_over_rest(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     storage = _storage(tmp_path)
-    template = _write_template(storage)
-    assert stage_template(template, storage).status == "staged"
+    _write_template(storage)
+    FakeClient.seen = []
 
-    forced = stage_template(template, storage, force=True)
-    assert forced.status == "staged"
-    manifest = json.loads((forced.deployment / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["force"] is True
+    service = DeploymentService(
+        "http://localhost:8080",
+        storage=storage,
+        credentials=MemoryCredentials(),
+        client_factory=FakeClient,
+    )
+    result = service.deploy("Stay-Residences")
+
+    assert result.status == "staged"
+    assert result.deployment == "stay-residences"
+    assert result.ref_no.startswith("MRF-")
+    sent = FakeClient.seen[0]
+    assert sent["base_url"] == "http://localhost:8080"
+    assert sent["token"] == "t" * 43
+    assert sent["manifest"]["slug"] == "stay-residences"
+    assert sent["template"]["title"] == "Stay > Residences"
+    assert sent["assets"][0]["path"] == "hero.webp"
 
 
-def test_bulk_deploy_only_reads_elementor_templates(tmp_path, monkeypatch):
+def test_bulk_deploy_uses_same_service_path(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     storage = _storage(tmp_path)
     _write_template(storage, "One")
     _write_template(storage, "Two")
     (storage.output_elementor / "ignore.json").write_text("{}", encoding="utf-8")
+    FakeClient.seen = []
 
-    results = deploy_all(storage=storage)
+    results = deploy_all(
+        target_url="http://localhost:8080",
+        storage=storage,
+        credentials=MemoryCredentials(),
+        client_factory=FakeClient,
+    )
 
     assert [result.template.name for result in results] == ["One_template.json", "Two_template.json"]
     assert all(result.status == "staged" for result in results)
+    assert len(FakeClient.seen) == 2

@@ -224,6 +224,42 @@ def _health_main(argv: list[str]) -> None:
     print(f"  API:            {health.api_version}")
 
 
+def _dashboard_main(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(
+        prog="morpher dashboard",
+        description="Launch the local Morpher dashboard.",
+    )
+    parser.add_argument(
+        "target",
+        nargs="?",
+        help="Target WordPress site URL. Omit only when a working site is configured.",
+    )
+    parser.add_argument("--host", default="127.0.0.1", help=argparse.SUPPRESS)
+    parser.add_argument("--port", type=int, default=8765, help="Local dashboard port.")
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Start the dashboard without opening a browser window.",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        target = resolve_target_url(args.target)
+    except TargetResolutionError as exc:
+        parser.error(str(exc))
+
+    from morpher.dashboard import run_dashboard
+
+    print(f"DASHBOARD http://{args.host}:{args.port}")
+    print(f"  Target: {target}")
+    run_dashboard(
+        target,
+        host=args.host,
+        port=args.port,
+        open_browser=not args.no_browser,
+    )
+
+
 def _render_main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(
         prog="morpher",
@@ -297,6 +333,9 @@ def main(argv: list[str] | None = None) -> None:
     args = list(sys.argv[1:] if argv is None else argv)
     if args and args[0] == "health":
         _health_main(args[1:])
+        return
+    if args and args[0] == "dashboard":
+        _dashboard_main(args[1:])
         return
     _render_main(args)
 

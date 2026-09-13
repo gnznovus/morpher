@@ -5,31 +5,40 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 class Morpher_Auth {
-    const TOKEN_OPTION      = 'morpher_connection_token_hash';
-    const PAIRING_TRANSIENT = 'morpher_pairing_session';
-    const PAIRING_TTL       = 300;
-    const MAX_ATTEMPTS      = 5;
+    const TOKEN_OPTION            = 'morpher_connection_token_hash';
+    const REF_OPTION              = 'morpher_connection_ref_no';
+    const CONNECTION_OPTION       = 'morpher_connection_metadata';
+    const PAIRING_TRANSIENT       = 'morpher_pairing_session';
+    const PAIRING_TTL             = 300;
+    const MAX_ATTEMPTS            = 5;
 
     public function start_pairing() {
-        $code = str_pad( (string) random_int( 0, 999999 ), 6, '0', STR_PAD_LEFT );
+        $code       = str_pad( (string) random_int( 0, 999999 ), 6, '0', STR_PAD_LEFT );
+        $request_id = wp_generate_uuid4();
+        $raw_ref    = strtoupper( wp_generate_password( 6, false, false ) );
+        $ref_no     = 'MRF-' . substr( $raw_ref, 0, 4 ) . '-' . substr( $raw_ref, 4, 2 );
 
         set_transient(
             self::PAIRING_TRANSIENT,
             array(
-                'code_hash'  => wp_hash_password( $code ),
-                'attempts'   => 0,
-                'expires_at' => time() + self::PAIRING_TTL,
+                'code_hash'   => wp_hash_password( $code ),
+                'request_id'  => $request_id,
+                'ref_no'      => $ref_no,
+                'attempts'    => 0,
+                'expires_at'  => time() + self::PAIRING_TTL,
             ),
             self::PAIRING_TTL
         );
 
         return array(
             'code'       => $code,
+            'request_id' => $request_id,
+            'ref_no'     => $ref_no,
             'expires_in' => self::PAIRING_TTL,
         );
     }
 
-    public function complete_pairing( $code, $token ) {
+    public function complete_pairing( $code, $token, $request_id = '', $ref_no = '' ) {
         $session = get_transient( self::PAIRING_TRANSIENT );
 
         if ( ! is_array( $session ) || empty( $session['code_hash'] ) ) {
@@ -37,6 +46,22 @@ class Morpher_Auth {
                 'morpher_pairing_unavailable',
                 'No active Morpher pairing session was found.',
                 array( 'status' => 400 )
+            );
+        }
+
+        if ( '' !== $request_id && ! hash_equals( (string) $session['request_id'], (string) $request_id ) ) {
+            return new WP_Error(
+                'morpher_pairing_request_invalid',
+                'The Morpher pairing request ID is invalid.',
+                array( 'status' => 401 )
+            );
+        }
+
+        if ( '' !== $ref_no && ! hash_equals( (string) $session['ref_no'], strtoupper( (string) $ref_no ) ) ) {
+            return new WP_Error(
+                'morpher_pairing_ref_invalid',
+                'The Morpher pairing Ref No. is invalid.',
+                array( 'status' => 401 )
             );
         }
 
@@ -57,7 +82,7 @@ class Morpher_Auth {
         if ( ! wp_check_password( (string) $code, (string) $session['code_hash'] ) ) {
             return new WP_Error(
                 'morpher_pairing_code_invalid',
-                'The Morpher pairing code is invalid.',
+                'The Morpher pairing proof is invalid.',
                 array( 'status' => 401 )
             );
         }
@@ -70,7 +95,15 @@ class Morpher_Auth {
             );
         }
 
+        $connection = array(
+            'ref_no'     => (string) $session['ref_no'],
+            'request_id' => (string) $session['request_id'],
+            'paired_at'  => gmdate( 'c' ),
+        );
+
         update_option( self::TOKEN_OPTION, wp_hash_password( (string) $token ), false );
+        update_option( self::REF_OPTION, (string) $session['ref_no'], false );
+        update_option( self::CONNECTION_OPTION, $connection, false );
         delete_transient( self::PAIRING_TRANSIENT );
 
         return true;
@@ -109,12 +142,23 @@ class Morpher_Auth {
 
     public function revoke() {
         delete_option( self::TOKEN_OPTION );
+        delete_option( self::REF_OPTION );
+        delete_option( self::CONNECTION_OPTION );
         delete_transient( self::PAIRING_TRANSIENT );
     }
 
     public function is_connected() {
         $stored_hash = get_option( self::TOKEN_OPTION, '' );
         return is_string( $stored_hash ) && '' !== $stored_hash;
+    }
+
+    public function connection_ref_no() {
+        return (string) get_option( self::REF_OPTION, '' );
+    }
+
+    public function connection_metadata() {
+        $metadata = get_option( self::CONNECTION_OPTION, array() );
+        return is_array( $metadata ) ? $metadata : array();
     }
 
     private function is_valid_token( $token ) {

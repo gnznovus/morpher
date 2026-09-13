@@ -13,6 +13,7 @@ class WordPressPluginHealth:
 class WordPressSiteHealth:
     version: str
     site_url: str
+    site_name: str
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,8 @@ class WordPressIntegrationsHealth:
 @dataclass(frozen=True)
 class WordPressConnectionHealth:
     paired: bool
+    ref_no: str
+    metadata: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,7 @@ class WordPressHealth:
         elementor = integrations.get("elementor") or {}
         connection = payload.get("connection") or {}
         capabilities = payload.get("capabilities") or []
+        metadata = connection.get("metadata") or {}
 
         return cls(
             status=str(payload.get("status") or ""),
@@ -61,6 +65,7 @@ class WordPressHealth:
             wordpress=WordPressSiteHealth(
                 version=str(wordpress.get("version") or ""),
                 site_url=str(wordpress.get("site_url") or ""),
+                site_name=str(wordpress.get("site_name") or "WordPress"),
             ),
             integrations=WordPressIntegrationsHealth(
                 elementor=ElementorHealth(
@@ -70,6 +75,8 @@ class WordPressHealth:
             ),
             connection=WordPressConnectionHealth(
                 paired=bool(connection.get("paired", False)),
+                ref_no=str(connection.get("ref_no") or "").strip().upper(),
+                metadata=dict(metadata) if isinstance(metadata, dict) else {},
             ),
             capabilities=tuple(str(value) for value in capabilities),
         )
