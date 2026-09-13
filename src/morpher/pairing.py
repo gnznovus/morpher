@@ -73,6 +73,39 @@ class PairingService:
         self.connections = connections or ConnectionStore()
         self.client_factory = client_factory
 
+    def restore_existing_connection(self) -> ConnectionRecord | None:
+        existing = self.connections.get(self.expected_site_url)
+        if existing is not None:
+            return existing
+
+        token = self.credentials.get(self.expected_site_url)
+        if not token:
+            return None
+
+        try:
+            health = self.client_factory(self.expected_site_url, token=token).health()
+        except (ValueError, WordPressClientError):
+            return None
+
+        if not health.connection.paired or not health.connection.ref_no:
+            return None
+
+        paired_at = time.time()
+        raw_paired_at = health.connection.metadata.get("paired_at")
+        if isinstance(raw_paired_at, (int, float)):
+            paired_at = float(raw_paired_at)
+
+        record = ConnectionRecord(
+            site_url=self.expected_site_url,
+            site_name=health.wordpress.site_name,
+            ref_no=health.connection.ref_no,
+            plugin_version=health.plugin.version or "",
+            wordpress_version=health.wordpress.version,
+            paired_at=paired_at,
+            credential_key=self.expected_site_url,
+        )
+        return self.connections.upsert(record)
+
     def receive(self, payload: dict[str, object]) -> PendingPairingRequest:
         request_id = str(payload.get("request_id") or "").strip()
         ref_no = str(payload.get("ref_no") or "").strip().upper()
@@ -109,7 +142,6 @@ class PairingService:
         request = self._require_pending(request_id)
         token = secrets.token_urlsafe(32)
 
-        # Store first so a lost network response cannot strand a token that WordPress accepted.
         self.credentials.set(request.site_url, token)
         client = self.client_factory(request.site_url, token=token)
 
