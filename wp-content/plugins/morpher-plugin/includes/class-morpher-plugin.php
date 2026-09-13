@@ -10,8 +10,9 @@ class Morpher_Plugin {
 
     public function __construct( $plugin_file, $root ) {
         $deployments  = new Morpher_Deployment( trailingslashit( $root ) . 'deployments' );
+        $diagnostics  = new Morpher_Diagnostics( $deployments, $root );
         $this->assets = new Morpher_Assets( $plugin_file, $root );
-        $this->admin  = new Morpher_Admin( $deployments, $plugin_file );
+        $this->admin  = new Morpher_Admin( $deployments, $diagnostics, $plugin_file );
     }
 
     public function register() {
