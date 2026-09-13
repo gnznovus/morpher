@@ -89,6 +89,35 @@ class WordPressClient:
             authenticated=True,
         )
 
+    def deploy_template(
+        self,
+        *,
+        slug: str,
+        title: str,
+        build_hash: str,
+        template: dict[str, object],
+        ref_no: str = "",
+    ) -> dict[str, object]:
+        if not slug.strip():
+            raise ValueError("Deployment slug is required.")
+        if not build_hash.strip():
+            raise ValueError("Deployment build hash is required.")
+        if not isinstance(template.get("content"), list):
+            raise ValueError("Elementor template content is required.")
+
+        return self._request_json(
+            "POST",
+            "/wp-json/morpher/v1/deployments/template",
+            payload={
+                "slug": slug.strip(),
+                "title": title.strip(),
+                "build_hash": build_hash.strip(),
+                "ref_no": ref_no.strip(),
+                "template": template,
+            },
+            authenticated=True,
+        )
+
     def deployments(self) -> tuple[WordPressDeployment, ...]:
         payload = self._request_json(
             "GET",
