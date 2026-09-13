@@ -5,10 +5,123 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 class Morpher_Deployment {
+    const MAX_ASSET_BYTES = 26214400;
+
     private $root;
 
     public function __construct( $root ) {
         $this->root = untrailingslashit( $root );
+    }
+
+    public function stage_payload( $payload ) {
+        if ( ! is_array( $payload ) ) {
+            return new WP_Error( 'morpher_deployment_invalid', 'Deployment payload must be an object.', array( 'status' => 400 ) );
+        }
+
+        $ref_no   = strtoupper( sanitize_text_field( isset( $payload['ref_no'] ) ? (string) $payload['ref_no'] : '' ) );
+        $manifest = isset( $payload['manifest'] ) && is_array( $payload['manifest'] ) ? $payload['manifest'] : null;
+        $template = isset( $payload['template'] ) && is_array( $payload['template'] ) ? $payload['template'] : null;
+        $assets   = isset( $payload['assets'] ) && is_array( $payload['assets'] ) ? $payload['assets'] : array();
+
+        if ( ! is_array( $manifest ) || ! is_array( $template ) || ! isset( $template['content'] ) || ! is_array( $template['content'] ) ) {
+            return new WP_Error( 'morpher_deployment_invalid', 'A manifest and valid Elementor template are required.', array( 'status' => 400 ) );
+        }
+
+        $slug       = sanitize_title( isset( $manifest['slug'] ) ? (string) $manifest['slug'] : '' );
+        $build_hash = sanitize_text_field( isset( $manifest['build_hash'] ) ? (string) $manifest['build_hash'] : '' );
+        if ( '' === $slug || '' === $build_hash || '' === $ref_no ) {
+            return new WP_Error( 'morpher_deployment_invalid', 'Deployment slug, build hash, and Ref No. are required.', array( 'status' => 400 ) );
+        }
+
+        $manifest['slug']       = $slug;
+        $manifest['build_hash'] = $build_hash;
+        $manifest['ref_no']     = $ref_no;
+        $manifest['staged_at']  = gmdate( 'c' );
+
+        if ( ! wp_mkdir_p( $this->root ) ) {
+            return new WP_Error( 'morpher_deployment_stage_failed', 'Could not create Morpher deployment staging.', array( 'status' => 500 ) );
+        }
+
+        $directory = $this->directory( $slug );
+        $temporary = $directory . '.incoming-' . wp_generate_password( 8, false, false );
+        if ( ! wp_mkdir_p( $temporary ) ) {
+            return new WP_Error( 'morpher_deployment_stage_failed', 'Could not create temporary deployment staging.', array( 'status' => 500 ) );
+        }
+
+        $result = $this->write_staged_package( $temporary, $manifest, $template, $assets );
+        if ( is_wp_error( $result ) ) {
+            $this->remove_directory( $temporary );
+            return $result;
+        }
+
+        if ( is_dir( $directory ) && ! $this->remove_directory( $directory ) ) {
+            $this->remove_directory( $temporary );
+            return new WP_Error( 'morpher_deployment_stage_failed', 'Could not replace the existing staged deployment.', array( 'status' => 500 ) );
+        }
+
+        if ( ! rename( $temporary, $directory ) ) {
+            $this->remove_directory( $temporary );
+            return new WP_Error( 'morpher_deployment_stage_failed', 'Could not activate the staged deployment.', array( 'status' => 500 ) );
+        }
+
+        return array(
+            'status'      => 'staged',
+            'ref_no'      => $ref_no,
+            'deployment'  => $slug,
+            'slug'        => $slug,
+            'title'       => isset( $manifest['title'] ) ? (string) $manifest['title'] : $slug,
+            'build_hash'  => $build_hash,
+            'asset_count' => count( $assets ),
+        );
+    }
+
+    private function write_staged_package( $directory, $manifest, $template, $assets ) {
+        $manifest_json = wp_json_encode( $manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+        $template_json = wp_json_encode( $template, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+        if ( false === $manifest_json || false === $template_json ) {
+            return new WP_Error( 'morpher_deployment_stage_failed', 'Could not encode the deployment package.', array( 'status' => 500 ) );
+        }
+
+        if ( false === file_put_contents( trailingslashit( $directory ) . 'manifest.json', $manifest_json . "\n" ) ||
+            false === file_put_contents( trailingslashit( $directory ) . 'template.json', $template_json . "\n" ) ) {
+            return new WP_Error( 'morpher_deployment_stage_failed', 'Could not write the staged deployment.', array( 'status' => 500 ) );
+        }
+
+        $total = 0;
+        foreach ( $assets as $asset ) {
+            if ( ! is_array( $asset ) ) {
+                return new WP_Error( 'morpher_asset_invalid', 'Asset entries must be objects.', array( 'status' => 400 ) );
+            }
+
+            $relative = isset( $asset['path'] ) ? str_replace( '\\', '/', trim( (string) $asset['path'] ) ) : '';
+            $encoded  = isset( $asset['content'] ) ? (string) $asset['content'] : '';
+            $expected = strtolower( isset( $asset['sha256'] ) ? trim( (string) $asset['sha256'] ) : '' );
+
+            if ( '' === $relative || str_starts_with( $relative, '/' ) || false !== strpos( $relative, '../' ) || '..' === $relative ) {
+                return new WP_Error( 'morpher_asset_path_invalid', 'Morpher asset path is invalid.', array( 'status' => 400 ) );
+            }
+
+            $raw = base64_decode( $encoded, true );
+            if ( false === $raw ) {
+                return new WP_Error( 'morpher_asset_invalid', 'Morpher asset content is not valid base64.', array( 'status' => 400 ) );
+            }
+
+            $total += strlen( $raw );
+            if ( $total > self::MAX_ASSET_BYTES ) {
+                return new WP_Error( 'morpher_assets_too_large', 'Morpher deployment assets exceed the v1 size limit.', array( 'status' => 413 ) );
+            }
+
+            if ( '' !== $expected && ! hash_equals( $expected, hash( 'sha256', $raw ) ) ) {
+                return new WP_Error( 'morpher_asset_hash_mismatch', 'Morpher asset integrity check failed.', array( 'status' => 400 ) );
+            }
+
+            $target = trailingslashit( $directory ) . 'assets/' . $relative;
+            if ( ! wp_mkdir_p( dirname( $target ) ) || false === file_put_contents( $target, $raw ) ) {
+                return new WP_Error( 'morpher_deployment_stage_failed', 'Could not write a staged Morpher asset.', array( 'status' => 500 ) );
+            }
+        }
+
+        return true;
     }
 
     public function import( $directory, $force_override = false ) {
@@ -103,6 +216,9 @@ class Morpher_Deployment {
         }
         update_post_meta( $template_id, '_morpher_slug', $slug );
         update_post_meta( $template_id, '_morpher_build_hash', $manifest['build_hash'] );
+        if ( ! empty( $manifest['ref_no'] ) ) {
+            update_post_meta( $template_id, '_morpher_last_ref_no', sanitize_text_field( $manifest['ref_no'] ) );
+        }
 
         clean_post_cache( $template_id );
 
@@ -221,6 +337,29 @@ class Morpher_Deployment {
         }
 
         return true;
+    }
+
+    private function remove_directory( $directory ) {
+        if ( ! is_dir( $directory ) ) {
+            return true;
+        }
+
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator( $directory, FilesystemIterator::SKIP_DOTS ),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+
+        foreach ( $iterator as $item ) {
+            if ( $item->isDir() ) {
+                if ( ! rmdir( $item->getPathname() ) ) {
+                    return false;
+                }
+            } elseif ( ! unlink( $item->getPathname() ) ) {
+                return false;
+            }
+        }
+
+        return rmdir( $directory );
     }
 
     private function rewrite_asset_urls( $value, $asset_root, $asset_url ) {
