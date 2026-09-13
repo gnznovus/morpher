@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Morpher Dashboard{% endblock %}
+
+{% block content %}
+<header class="topbar">
+    <div>
+        <p class="eyebrow">Morpher</p>
+        <h1>Dashboard</h1>
+    </div>
+    <span class="pill">Local</span>
+</header>
+
+<section class="grid">
+    <article class="card">
+        <div class="card-head">
+            <div>
+                <p class="eyebrow">Current site</p>
+                <h2>{{ target }}</h2>
+            </div>
+            <button
+                class="button"
+                type="button"
+                hx-get="/health"
+                hx-target="#health-card"
+                hx-swap="outerHTML"
+            >Check health</button>
+        </div>
+        <div id="health-card" class="health-panel muted">
+            Run a health check to read the live WordPress connection.
+        </div>
+    </article>
+
+    <article class="card compact">
+        <p class="eyebrow">Deployments</p>
+        <h2>Coming next</h2>
+        <p class="muted">This foundation only wires the dashboard to the existing live health client.</p>
+    </article>
+</section>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% if error %}
+<div id="health-card" class="health-panel error">
+    <div class="status-row">
+        <strong>Connection failed</strong>
+        <span class="status-dot"></span>
+    </div>
+    <p>{{ error }}</p>
+</div>
+{% else %}
+<div id="health-card" class="health-panel success">
+    <div class="status-row">
+        <strong>{{ health.status|upper }}</strong>
+        <span class="status-dot"></span>
+    </div>
+    <dl class="facts">
+        <div><dt>WordPress</dt><dd>{{ health.wordpress.version }}</dd></div>
+        <div><dt>Morpher Plugin</dt><dd>{{ health.plugin.version or "unknown" }}</dd></div>
+        <div><dt>Elementor</dt><dd>{{ health.integrations.elementor.version or "unknown" }}</dd></div>
+        <div><dt>Elementor Ready</dt><dd>{{ "Yes" if health.integrations.elementor.ready else "No" }}</dd></div>
+        <div><dt>Paired</dt><dd>{{ "Yes" if health.connection.paired else "No" }}</dd></div>
+        <div><dt>API</dt><dd>{{ health.api_version }}</dd></div>
+    </dl>
+</div>
+{% endif %}
