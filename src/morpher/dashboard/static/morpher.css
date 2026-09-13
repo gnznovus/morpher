@@ -30,7 +30,9 @@ textarea {
 
 .topbar,
 .card-head,
-.status-row {
+.status-row,
+.pairing-request-head,
+.pairing-actions {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -43,6 +45,7 @@ textarea {
 
 h1,
 h2,
+h3,
 p {
     margin-top: 0;
 }
@@ -59,6 +62,11 @@ h2 {
     overflow-wrap: anywhere;
 }
 
+h3 {
+    margin-bottom: 4px;
+    font-size: 1rem;
+}
+
 .eyebrow {
     margin-bottom: 6px;
     color: #8f98aa;
@@ -68,7 +76,8 @@ h2 {
     text-transform: uppercase;
 }
 
-.pill {
+.pill,
+.ref-no {
     display: inline-flex;
     align-items: center;
     min-height: 30px;
@@ -78,6 +87,12 @@ h2 {
     background: #171a20;
     color: #b8c0cf;
     font-size: 0.82rem;
+}
+
+.ref-no {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-weight: 700;
+    letter-spacing: 0.05em;
 }
 
 .grid {
@@ -98,6 +113,10 @@ h2 {
     align-self: start;
 }
 
+.pairing-card {
+    margin-top: 18px;
+}
+
 .button {
     flex: 0 0 auto;
     border: 1px solid #343b47;
@@ -111,6 +130,15 @@ h2 {
 
 .button:hover {
     background: #ffffff;
+}
+
+.button.secondary {
+    background: #1a1f27;
+    color: #dbe1eb;
+}
+
+.button.secondary:hover {
+    background: #222832;
 }
 
 .health-panel {
@@ -152,27 +180,80 @@ h2 {
     background: #e46c78;
 }
 
-.facts {
+.facts,
+.pairing-facts {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
     margin: 16px 0 0;
 }
 
-.facts div {
+.facts div,
+.pairing-facts div {
     border-top: 1px solid #242a33;
     padding-top: 10px;
 }
 
-.facts dt {
+.facts dt,
+.pairing-facts dt {
     margin-bottom: 4px;
     color: #7f899a;
     font-size: 0.78rem;
 }
 
-.facts dd {
+.facts dd,
+.pairing-facts dd {
     margin: 0;
     font-weight: 700;
+}
+
+.pairing-list {
+    margin-top: 20px;
+}
+
+.pairing-request {
+    border: 1px solid #2b313c;
+    border-radius: 14px;
+    padding: 16px;
+    background: #101319;
+}
+
+.pairing-request + .pairing-request {
+    margin-top: 12px;
+}
+
+.pairing-request.connected {
+    border-color: #28523a;
+}
+
+.pairing-request.rejected,
+.pairing-request.expired,
+.pairing-request.error {
+    border-color: #63353b;
+}
+
+.pairing-url {
+    margin-bottom: 0;
+    overflow-wrap: anywhere;
+}
+
+.pairing-actions {
+    justify-content: flex-end;
+    margin-top: 16px;
+}
+
+.pairing-message {
+    margin-bottom: 12px;
+    border: 1px solid #334054;
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: #121821;
+    color: #c8d3e5;
+}
+
+.pairing-error {
+    margin: 14px 0 0;
+    color: #f0a6ad;
 }
 
 @media (max-width: 760px) {
@@ -185,12 +266,14 @@ h2 {
         grid-template-columns: 1fr;
     }
 
-    .card-head {
+    .card-head,
+    .pairing-request-head {
         align-items: flex-start;
         flex-direction: column;
     }
 
-    .facts {
+    .facts,
+    .pairing-facts {
         grid-template-columns: 1fr;
     }
 }

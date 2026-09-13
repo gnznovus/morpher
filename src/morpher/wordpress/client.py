@@ -32,18 +32,62 @@ class WordPressClient:
         return WordPressHealth.from_dict(payload)
 
     def pair(self, code: str) -> str:
-        code = code.strip()
-        if len(code) != 6 or not code.isdigit():
-            raise ValueError("Morpher pairing code must contain exactly six digits.")
-
         token = secrets.token_urlsafe(32)
-        self._request_json(
-            "POST",
-            "/wp-json/morpher/v1/pairing/complete",
-            payload={"code": code, "token": token},
-        )
+        self.complete_pairing(code, token)
         self.token = token
         return token
+
+    def complete_pairing(
+        self,
+        code: str,
+        token: str,
+        *,
+        request_id: str | None = None,
+        ref_no: str | None = None,
+    ) -> dict[str, object]:
+        code = code.strip()
+        token = token.strip()
+        if len(code) != 6 or not code.isdigit():
+            raise ValueError("Morpher pairing code must contain exactly six digits.")
+        if not token:
+            raise ValueError("Morpher pairing token is required.")
+
+        payload: dict[str, object] = {"code": code, "token": token}
+        if request_id:
+            payload["request_id"] = request_id
+        if ref_no:
+            payload["ref_no"] = ref_no
+
+        result = self._request_json(
+            "POST",
+            "/wp-json/morpher/v1/pairing/complete",
+            payload=payload,
+        )
+        self.token = token
+        return result
+
+    def acknowledge(
+        self,
+        ref_no: str,
+        *,
+        event: str,
+        status: str = "acknowledged",
+        metadata: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "ref_no": ref_no.strip(),
+            "event": event.strip(),
+            "status": status.strip(),
+        }
+        if metadata:
+            payload["metadata"] = metadata
+
+        return self._request_json(
+            "POST",
+            "/wp-json/morpher/v1/acknowledge",
+            payload=payload,
+            authenticated=True,
+        )
 
     def deployments(self) -> tuple[WordPressDeployment, ...]:
         payload = self._request_json(

@@ -32,9 +32,29 @@
     </article>
 
     <article class="card compact">
-        <p class="eyebrow">Deployments</p>
-        <h2>Coming next</h2>
-        <p class="muted">This foundation only wires the dashboard to the existing live health client.</p>
+        <p class="eyebrow">Pairing</p>
+        <h2>Incoming requests</h2>
+        <p class="muted">WordPress can now poke this dashboard. You still decide whether the site is accepted.</p>
     </article>
+</section>
+
+<section class="card pairing-card">
+    <div class="card-head">
+        <div>
+            <p class="eyebrow">Connection requests</p>
+            <h2>Who is poking Morpher?</h2>
+        </div>
+        <span class="pill">Human approval required</span>
+    </div>
+
+    <div
+        id="pairing-requests"
+        class="pairing-list"
+        hx-get="/pairing/requests"
+        hx-trigger="load, every 2s"
+        hx-swap="innerHTML"
+    >
+        <p class="muted">Waiting for a WordPress pairing request...</p>
+    </div>
 </section>
 {% endblock %}

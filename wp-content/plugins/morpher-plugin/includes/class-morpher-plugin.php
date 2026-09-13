@@ -11,13 +11,14 @@ class Morpher_Plugin {
     private $rest;
 
     public function __construct( $plugin_file, $root ) {
-        $deployments         = new Morpher_Deployment( trailingslashit( $root ) . 'deployments' );
-        $diagnostics         = new Morpher_Diagnostics( $deployments, $root );
-        $auth                = new Morpher_Auth();
-        $this->assets        = new Morpher_Assets( $plugin_file, $root );
-        $this->admin         = new Morpher_Admin( $deployments, $diagnostics, $plugin_file );
-        $this->pairing_admin = new Morpher_Pairing_Admin( $auth );
-        $this->rest          = new Morpher_REST( $deployments, $auth );
+        $deployments          = new Morpher_Deployment( trailingslashit( $root ) . 'deployments' );
+        $diagnostics          = new Morpher_Diagnostics( $deployments, $root );
+        $auth                 = new Morpher_Auth();
+        $acknowledgements     = new Morpher_Acknowledgements();
+        $this->assets         = new Morpher_Assets( $plugin_file, $root );
+        $this->admin          = new Morpher_Admin( $deployments, $diagnostics, $plugin_file );
+        $this->pairing_admin  = new Morpher_Pairing_Admin( $auth );
+        $this->rest           = new Morpher_REST( $deployments, $auth, $acknowledgements );
     }
 
     public function register() {

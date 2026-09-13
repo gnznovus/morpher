@@ -11,6 +11,7 @@ dependencies = [
     "fastapi>=0.115,<1",
     "fonttools[woff]>=4.58",
     "Jinja2>=3.1,<4",
+    "keyring>=25,<26",
     "Pillow>=10",
     "resvg_py>=0.5,<0.6",
     "uvicorn>=0.30,<1",
