@@ -7,6 +7,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Morpher_Auth {
     const TOKEN_OPTION            = 'morpher_connection_token_hash';
     const REF_OPTION              = 'morpher_connection_ref_no';
+    const CONNECTION_OPTION       = 'morpher_connection_metadata';
     const PAIRING_TRANSIENT       = 'morpher_pairing_session';
     const PAIRING_TTL             = 300;
     const MAX_ATTEMPTS            = 5;
@@ -94,8 +95,15 @@ class Morpher_Auth {
             );
         }
 
+        $connection = array(
+            'ref_no'     => (string) $session['ref_no'],
+            'request_id' => (string) $session['request_id'],
+            'paired_at'  => gmdate( 'c' ),
+        );
+
         update_option( self::TOKEN_OPTION, wp_hash_password( (string) $token ), false );
         update_option( self::REF_OPTION, (string) $session['ref_no'], false );
+        update_option( self::CONNECTION_OPTION, $connection, false );
         delete_transient( self::PAIRING_TRANSIENT );
 
         return true;
@@ -135,6 +143,7 @@ class Morpher_Auth {
     public function revoke() {
         delete_option( self::TOKEN_OPTION );
         delete_option( self::REF_OPTION );
+        delete_option( self::CONNECTION_OPTION );
         delete_transient( self::PAIRING_TRANSIENT );
     }
 
@@ -145,6 +154,11 @@ class Morpher_Auth {
 
     public function connection_ref_no() {
         return (string) get_option( self::REF_OPTION, '' );
+    }
+
+    public function connection_metadata() {
+        $metadata = get_option( self::CONNECTION_OPTION, array() );
+        return is_array( $metadata ) ? $metadata : array();
     }
 
     private function is_valid_token( $token ) {
