@@ -18,23 +18,15 @@
                 <p class="eyebrow">Current site</p>
                 <h2>{{ target }}</h2>
             </div>
-            <button
-                class="button"
-                type="button"
-                hx-get="/health"
-                hx-target="#health-card"
-                hx-swap="outerHTML"
-            >Check health</button>
+            <button class="button" type="button" hx-get="/health" hx-target="#health-card" hx-swap="outerHTML">Check health</button>
         </div>
-        <div id="health-card" class="health-panel muted">
-            Run a health check to read the live WordPress connection.
-        </div>
+        <div id="health-card" class="health-panel muted">Run a health check to read the live WordPress connection.</div>
     </article>
 
     <article class="card compact">
         <p class="eyebrow">Pairing</p>
         <h2>Incoming requests</h2>
-        <p class="muted">WordPress can now poke this dashboard. You still decide whether the site is accepted.</p>
+        <p class="muted">WordPress can poke this dashboard. You still decide whether the site is accepted.</p>
     </article>
 </section>
 
@@ -46,14 +38,8 @@
         </div>
         <span class="pill">No Elementor mutation</span>
     </div>
-    <p class="muted">Uses the same deployment service as morpher-deploy. Template and assets are sent through REST into plugin-owned staging, then WordPress admin approval decides when Elementor is touched.</p>
-    <div
-        id="deployment-templates"
-        class="deployment-list"
-        hx-get="/deployment/templates"
-        hx-trigger="load"
-        hx-swap="innerHTML"
-    >
+    <p class="muted">Dashboard and morpher-deploy use the same deployment service. The plugin stages the template and assets; WordPress approval is required before Elementor is touched.</p>
+    <div id="deployment-templates" class="deployment-list" hx-get="/deployment/templates" hx-trigger="load" hx-swap="innerHTML">
         <p class="muted">Loading generated templates...</p>
     </div>
 </section>
@@ -67,13 +53,7 @@
         <span class="pill">Human approval required</span>
     </div>
 
-    <div
-        id="pairing-requests"
-        class="pairing-list"
-        hx-get="/pairing/requests"
-        hx-trigger="load, every 2s"
-        hx-swap="innerHTML"
-    >
+    <div id="pairing-requests" class="pairing-list" hx-get="/pairing/requests" hx-trigger="load, every 2s" hx-swap="innerHTML">
         <p class="muted">Waiting for a WordPress pairing request...</p>
     </div>
 </section>
