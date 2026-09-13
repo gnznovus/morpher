@@ -78,7 +78,7 @@ class Morpher_REST {
                 'metadata' => $this->auth->connection_metadata(),
                 'latest_acknowledgement' => $this->acknowledgements->latest(),
             ),
-            'capabilities' => array( 'health', 'pairing', 'acknowledge', 'deployments:list', 'deployments:template' ),
+            'capabilities' => array( 'health', 'pairing', 'acknowledge', 'deployments:list', 'deployments:template', 'deployments:assets' ),
         ) );
     }
 
