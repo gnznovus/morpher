@@ -6,10 +6,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class Morpher_Admin {
     private $deployments;
+    private $diagnostics;
     private $plugin_file;
 
-    public function __construct( Morpher_Deployment $deployments, $plugin_file ) {
+    public function __construct( Morpher_Deployment $deployments, Morpher_Diagnostics $diagnostics, $plugin_file ) {
         $this->deployments = $deployments;
+        $this->diagnostics = $diagnostics;
         $this->plugin_file = $plugin_file;
     }
 
@@ -255,11 +257,70 @@ class Morpher_Admin {
     }
 
     private function render_diagnostics_tab() {
+        $system       = $this->diagnostics->system_checks();
+        $integrations = $this->diagnostics->integration_checks();
+        $issues       = $this->diagnostics->recent_issues();
         ?>
-        <div class="morpher-empty-state">
-            <h2>Diagnostics</h2>
-            <p>No plugin diagnostics are available yet.</p>
+        <div class="morpher-toolbar">
+            <div>
+                <h2>Diagnostics</h2>
+                <p class="description">Check whether Morpher can deploy safely into this WordPress environment.</p>
+            </div>
+            <div class="morpher-toolbar-actions">
+                <button type="button" class="button morpher-refresh-diagnostics">Refresh checks</button>
+            </div>
         </div>
+
+        <div class="morpher-diagnostics-grid">
+            <?php $this->render_diagnostic_group( 'System Health', $system ); ?>
+            <?php $this->render_diagnostic_group( 'Integration', $integrations ); ?>
+        </div>
+
+        <section class="morpher-diagnostic-section morpher-issues">
+            <div class="morpher-diagnostic-section-header">
+                <h3>Recent Issues</h3>
+                <span class="morpher-issue-count"><?php echo esc_html( count( $issues ) ); ?></span>
+            </div>
+
+            <?php if ( ! $issues ) : ?>
+                <div class="morpher-diagnostic-ok">
+                    <span class="dashicons dashicons-yes-alt" aria-hidden="true"></span>
+                    <span>No deployment issues detected.</span>
+                </div>
+            <?php else : ?>
+                <div class="morpher-issue-list">
+                    <?php foreach ( $issues as $issue ) : ?>
+                        <div class="morpher-issue-item">
+                            <strong><?php echo esc_html( $issue['title'] ); ?></strong>
+                            <code><?php echo esc_html( $issue['slug'] ); ?></code>
+                            <p><?php echo esc_html( $issue['message'] ); ?></p>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </section>
+        <?php
+    }
+
+    private function render_diagnostic_group( $title, $checks ) {
+        ?>
+        <section class="morpher-diagnostic-section">
+            <h3><?php echo esc_html( $title ); ?></h3>
+            <div class="morpher-diagnostic-list">
+                <?php foreach ( $checks as $check ) : ?>
+                    <div class="morpher-diagnostic-row">
+                        <span class="morpher-health-dot morpher-health-dot--<?php echo esc_attr( $check['status'] ); ?>" aria-hidden="true"></span>
+                        <div class="morpher-diagnostic-copy">
+                            <strong><?php echo esc_html( $check['label'] ); ?></strong>
+                            <span><?php echo esc_html( $check['detail'] ); ?></span>
+                        </div>
+                        <span class="morpher-health-label morpher-health-label--<?php echo esc_attr( $check['status'] ); ?>">
+                            <?php echo esc_html( 'healthy' === $check['status'] ? 'Healthy' : ( 'error' === $check['status'] ? 'Error' : 'Not configured' ) ); ?>
+                        </span>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </section>
         <?php
     }
 
