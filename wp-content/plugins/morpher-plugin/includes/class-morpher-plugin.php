@@ -7,12 +7,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Morpher_Plugin {
     private $assets;
     private $admin;
+    private $rest;
 
     public function __construct( $plugin_file, $root ) {
         $deployments  = new Morpher_Deployment( trailingslashit( $root ) . 'deployments' );
         $diagnostics  = new Morpher_Diagnostics( $deployments, $root );
         $this->assets = new Morpher_Assets( $plugin_file, $root );
         $this->admin  = new Morpher_Admin( $deployments, $diagnostics, $plugin_file );
+        $this->rest   = new Morpher_REST();
     }
 
     public function register() {
@@ -22,5 +24,6 @@ class Morpher_Plugin {
         add_action( 'elementor/preview/enqueue_styles', array( $this->assets, 'enqueue_fonts' ), 1 );
 
         $this->admin->register();
+        $this->rest->register();
     }
 }
