@@ -4,7 +4,7 @@
 
 - Project name: **Morpher**.
 - Morpher is a **design compiler**, not a converter tied to one builder or framework.
-- Core architecture stays compiler-style: input adapter → Design IR → compiler → output renderer.
+- Core architecture stays compiler-style: input adapter → Design IR → validation → compiler → output renderer.
 - Design IR and compiler behavior stay independent from Elementor, WordPress, and any single output target.
 - Development rule: **small verified slice → real fixture → trace → render → compare → expand**.
 - Elementor is the primary WordPress production target.
@@ -13,6 +13,8 @@
 - The WordPress importer has one canonical processing path. Manual admin processing remains a fallback/debug path; future automation should call the same importer rather than duplicate it.
 - Whole-page understanding includes **Header Section**, **Body**, and **Footer Section**.
 - A Header Section is not the same thing as Navigation; Navigation is a component within it.
+- Figma exporter behavior and Elementor production rendering are considered stable checkpoints for the current phase. New work should focus on Morpher's shared IR/compiler core unless a proven regression requires target-specific changes.
+- Diagnostics should distinguish **error**, **warning**, and **info** so invalid structure, suspicious-but-compilable structure, and normal compiler decisions are not conflated.
 
 ### Responsive principles
 
@@ -31,6 +33,8 @@ Input adapter
         ↓
 Design IR
         ↓
+IR validation + diagnostics
+        ↓
 Fidelity
 visual validation + responsive triage
         ↓
@@ -47,6 +51,41 @@ Elementor Library
 ```
 
 Renderer-specific behavior must not dictate shared compiler architecture.
+
+## Design IR Validation — CURRENT PHASE
+
+The next Morpher-core upgrade is a first-class validation pass over Design IR before target-specific compilation.
+
+Goals:
+
+- [ ] Validate every IR tree through one shared validator.
+- [ ] Produce deterministic diagnostics with severity: `error`, `warning`, `info`.
+- [ ] Preserve source identity/path context so diagnostics point to the exact IR node.
+- [ ] Treat hard structural contradictions as errors that can stop unsafe compilation.
+- [ ] Treat suspicious but still compilable states as warnings.
+- [ ] Keep normal normalization/compiler decisions as info rather than warnings.
+- [ ] Keep validation independent from Elementor, WordPress, and any one renderer.
+- [ ] Add regression coverage for malformed dimensions, invalid layout state, unsupported node relationships, and duplicate/conflicting source identity where it is unsafe.
+- [ ] Integrate validation results into Morpher's existing reporting/CLI flow without duplicating diagnostics logic.
+
+Initial architecture:
+
+```text
+Input adapter
+    ↓
+Design IR
+    ↓
+validate_design_ir()
+    ↓
+ValidationResult
+├─ errors
+├─ warnings
+└─ info
+    ↓
+compiler passes
+```
+
+The validator should remain conservative: it verifies invariants Morpher actually depends on, not arbitrary design-style preferences.
 
 ## Elementor Production Milestones
 
@@ -155,16 +194,16 @@ morpher
 
 ## Responsive Compilation
 
-Current verified section work includes Discovery and Destination, with Offers substantially validated apart from deferred margin polish. Happenings remains active responsive-structure work.
+Current verified section work includes Discovery and Destination, with Offers substantially validated apart from deferred margin polish. Happenings is paused while Morpher's shared IR/validation layer is strengthened.
 
-Important current principle from Happenings investigation:
+Important principle from Happenings investigation:
 
 > Backing-surface geometry may define a visual region without participating as semantic collision/flow content.
 
 - [x] Discovery responsive section validation.
 - [x] Destination responsive section validation.
 - [x] Offers responsive section validation, excluding deferred margin polish.
-- [ ] Resume Happenings structural reconstruction using backing-surface-as-region behavior.
+- [ ] Resume Happenings structural reconstruction after the IR validation slice.
 - [ ] Harden responsive classification against diverse real fixtures.
 - [ ] Preserve source relationships when simple adaptation is sufficient.
 - [ ] Promote layouts to structural responsive behavior where required.
@@ -184,6 +223,8 @@ Important current principle from Happenings investigation:
 - [x] Free-layout and Auto Layout foundations.
 - [x] Style, clipping, rotation, image scale mode, stroke, ellipse, paragraph spacing, and typography metadata used by verified fixtures.
 - [x] Hidden source subtrees pruned from IR.
+- [ ] First-class Design IR invariant validation.
+- [ ] Shared structured diagnostics across validation/compiler/reporting.
 
 ### Fidelity
 
@@ -202,8 +243,8 @@ Important current principle from Happenings investigation:
 - [x] Exact-font WordPress bridge foundation.
 - [x] Contact/amenity marker-row reconstruction.
 - [x] Local WordPress deployment MVP verified end-to-end.
-- [ ] Continue validating generated output against real Elementor behavior.
-- [ ] Reduce unnecessary structural reconstruction.
+- [x] Figma exporter diagnostics/visibility behavior hardened against real malformed layer stacks.
+- [ ] Keep current production behavior stable during Morpher-core validation work.
 - [ ] Automate deployment triggering after staging.
 
 ### Semantic / framework-neutral output
@@ -215,13 +256,13 @@ Important current principle from Happenings investigation:
 
 ## Immediate Sequence
 
-1. **Rest / checkpoint after deployment + image + amenities milestone.**
-2. **Resume Happenings responsive structure** with backing surfaces defining regions without contaminating semantic flow.
-3. **Add re-deploy behavior** to the Morpher WordPress admin workflow.
-4. **Automate `morpher-deploy` import triggering** while keeping the manual button as fallback.
-5. **Continue real-design Elementor validation** and only generalize fidelity issues when repeated evidence supports it.
-6. **Expand whole-page understanding** across Header Section, Body, and Footer Section.
-7. **Harden identity, fonts, assets, and output validation** across targets.
+1. **Implement Design IR validation foundation** with structured severity and node/source context.
+2. **Integrate validation into Morpher reporting/CLI** without renderer-specific coupling.
+3. **Add focused malformed-IR regression tests** and run existing fixtures through the validator.
+4. **Expand the shared compiler diagnostics model** only where real compiler decisions need structured reporting.
+5. **Resume Happenings responsive structure** after the validation layer is stable.
+6. **Harden Native/semantic validation** as the framework-neutral target matures.
+7. **Return to deployment/runtime hardening** after the Morpher-core validation slice.
 
 ## Later / Optional
 
@@ -236,9 +277,11 @@ Important current principle from Happenings investigation:
 
 Morpher should currently be described as an **advanced prototype / early product foundation**.
 
-The project can transport, normalize, inspect, compile, package, stage, and deploy real design input through meaningful parts of the production workflow. The local WordPress/Elementor deployment path is now empirically proven, including automatic asset relocation and complete template assembly after insertion.
+The project can transport, normalize, inspect, compile, package, stage, and deploy real design input through meaningful parts of the production workflow. The local WordPress/Elementor deployment path is empirically proven, including automatic asset relocation and complete template assembly after insertion.
 
-It is not production-ready yet because responsive compilation, whole-page understanding, automated deployment transport, and broader production-target hardening remain active work.
+The current engineering focus is moving inward: strengthen the shared Design IR contract and diagnostics before expanding target-specific behavior further.
+
+It is not production-ready yet because IR validation, responsive compilation, whole-page understanding, automated deployment transport, and broader production-target hardening remain active work.
 
 The guiding compiler behavior remains conservative:
 
