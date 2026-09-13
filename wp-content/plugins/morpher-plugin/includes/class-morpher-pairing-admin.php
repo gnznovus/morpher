@@ -46,8 +46,9 @@ class Morpher_Pairing_Admin {
             }
         }
 
-        $connected     = $this->auth->is_connected();
-        $dashboard_url = apply_filters( 'morpher_dashboard_url', 'http://127.0.0.1:8765' );
+        $connected       = $this->auth->is_connected();
+        $connection      = $this->auth->connection_metadata();
+        $dashboard_url   = apply_filters( 'morpher_dashboard_url', 'http://127.0.0.1:8765' );
         ?>
         <div class="wrap">
             <h1>Morpher Connection</h1>
@@ -71,6 +72,12 @@ class Morpher_Pairing_Admin {
                     <tr>
                         <th scope="row">Ref No.</th>
                         <td><code><?php echo esc_html( $this->auth->connection_ref_no() ); ?></code></td>
+                    </tr>
+                    <?php endif; ?>
+                    <?php if ( ! empty( $connection['paired_at'] ) ) : ?>
+                    <tr>
+                        <th scope="row">Paired at</th>
+                        <td><?php echo esc_html( (string) $connection['paired_at'] ); ?></td>
                     </tr>
                     <?php endif; ?>
                 </tbody>
