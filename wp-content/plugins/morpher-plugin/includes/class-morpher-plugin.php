@@ -15,10 +15,11 @@ class Morpher_Plugin {
         $diagnostics          = new Morpher_Diagnostics( $deployments, $root );
         $auth                 = new Morpher_Auth();
         $acknowledgements     = new Morpher_Acknowledgements();
+        $rest_templates       = new Morpher_REST_Template_Deployment();
         $this->assets         = new Morpher_Assets( $plugin_file, $root );
         $this->admin          = new Morpher_Admin( $deployments, $diagnostics, $plugin_file );
         $this->pairing_admin  = new Morpher_Pairing_Admin( $auth );
-        $this->rest           = new Morpher_REST( $deployments, $auth, $acknowledgements );
+        $this->rest           = new Morpher_REST( $deployments, $auth, $acknowledgements, $rest_templates );
     }
 
     public function register() {
