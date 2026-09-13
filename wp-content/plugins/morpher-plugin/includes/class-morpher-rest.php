@@ -10,13 +10,11 @@ class Morpher_REST {
     private $deployments;
     private $auth;
     private $acknowledgements;
-    private $rest_templates;
 
-    public function __construct( Morpher_Deployment $deployments, Morpher_Auth $auth, Morpher_Acknowledgements $acknowledgements, Morpher_REST_Template_Deployment $rest_templates ) {
-        $this->deployments       = $deployments;
-        $this->auth              = $auth;
-        $this->acknowledgements  = $acknowledgements;
-        $this->rest_templates    = $rest_templates;
+    public function __construct( Morpher_Deployment $deployments, Morpher_Auth $auth, Morpher_Acknowledgements $acknowledgements ) {
+        $this->deployments      = $deployments;
+        $this->auth             = $auth;
+        $this->acknowledgements = $acknowledgements;
     }
 
     public function register() {
@@ -49,9 +47,9 @@ class Morpher_REST {
             'callback' => array( $this, 'deployments' ),
             'permission_callback' => array( $this, 'morpher_auth_permission' ),
         ) );
-        register_rest_route( self::NAMESPACE, '/deployments/template', array(
+        register_rest_route( self::NAMESPACE, '/deployments/stage', array(
             'methods' => WP_REST_Server::CREATABLE,
-            'callback' => array( $this, 'deploy_template' ),
+            'callback' => array( $this, 'stage_deployment' ),
             'permission_callback' => array( $this, 'morpher_auth_permission' ),
         ) );
     }
@@ -78,7 +76,7 @@ class Morpher_REST {
                 'metadata' => $this->auth->connection_metadata(),
                 'latest_acknowledgement' => $this->acknowledgements->latest(),
             ),
-            'capabilities' => array( 'health', 'pairing', 'acknowledge', 'deployments:list', 'deployments:template', 'deployments:assets' ),
+            'capabilities' => array( 'health', 'pairing', 'acknowledge', 'deployments:list', 'deployments:stage' ),
         ) );
     }
 
@@ -138,8 +136,8 @@ class Morpher_REST {
         return rest_ensure_response( array( 'deployments' => array_values( $items ) ) );
     }
 
-    public function deploy_template( WP_REST_Request $request ) {
-        $result = $this->rest_templates->import( $request->get_json_params() );
+    public function stage_deployment( WP_REST_Request $request ) {
+        $result = $this->deployments->stage_payload( $request->get_json_params() );
         return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
     }
 
