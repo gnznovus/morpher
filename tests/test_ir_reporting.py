@@ -1,7 +1,12 @@
 from pathlib import Path
 
+import pytest
+
+import morpher.render as render_module
+from morpher.ir.nodes import DesignDocument, DesignNode
 from morpher.ir.reporting import format_ir_validation_report, write_ir_validation_log
-from morpher.ir.validation import IRDiagnostic, ValidationResult
+from morpher.ir.styles import DesignStyle
+from morpher.ir.validation import IRDiagnostic, IRValidationError, ValidationResult
 from morpher.storage.paths import StoragePaths
 
 
@@ -67,3 +72,33 @@ def test_clean_validation_removes_stale_ir_log(tmp_path: Path) -> None:
 
     assert written is None
     assert not target.exists()
+
+
+def test_render_path_writes_blocking_ir_failure_to_root_logs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage = StoragePaths(tmp_path / "storage", tmp_path)
+    invalid = DesignDocument(
+        root=DesignNode(
+            kind="container",
+            name="Broken",
+            source_id="broken",
+            source_type="FRAME",
+            style=DesignStyle(width=-1),
+        )
+    )
+
+    monkeypatch.setattr(render_module, "StoragePaths", lambda: storage)
+    monkeypatch.setattr(render_module.FigmaJsonAdapter, "load", lambda self, path: invalid)
+
+    source = tmp_path / "Contact.json"
+    with pytest.raises(IRValidationError):
+        render_module.render_path(source, fidelity=False, native=False)
+
+    report_path = tmp_path / "logs" / "Contact-ir.txt"
+    assert report_path.is_file()
+    report = report_path.read_text(encoding="utf-8")
+    assert "Status: INVALID" in report
+    assert "ir.negative_size" in report
+    assert "name='Broken'" in report
