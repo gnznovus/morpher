@@ -27,12 +27,25 @@ def test_health_reads_morpher_wordpress_handshake(monkeypatch: pytest.MonkeyPatc
         "status": "ok",
         "service": "morpher-wordpress",
         "api_version": "v1",
-        "plugin": {"version": "0.4.0"},
-        "wordpress": {"version": "7.1", "site_url": "http://localhost:8080"},
+        "plugin": {"version": "0.5.0"},
+        "wordpress": {
+            "version": "7.1",
+            "site_url": "http://localhost:8080",
+            "site_name": "Morpher Test Site",
+        },
         "integrations": {
             "elementor": {"ready": True, "version": "4.2.4"},
         },
-        "capabilities": ["health"],
+        "connection": {
+            "paired": True,
+            "ref_no": "MRF-TEST-01",
+            "metadata": {
+                "ref_no": "MRF-TEST-01",
+                "request_id": "request-1",
+                "paired_at": "2026-09-13T03:00:00+00:00",
+            },
+        },
+        "capabilities": ["health", "pairing", "acknowledge"],
     }
     seen: dict[str, object] = {}
 
@@ -54,13 +67,16 @@ def test_health_reads_morpher_wordpress_handshake(monkeypatch: pytest.MonkeyPatc
     assert health.status == "ok"
     assert health.service == "morpher-wordpress"
     assert health.api_version == "v1"
-    assert health.plugin.version == "0.4.0"
+    assert health.plugin.version == "0.5.0"
     assert health.wordpress.version == "7.1"
     assert health.wordpress.site_url == "http://localhost:8080"
+    assert health.wordpress.site_name == "Morpher Test Site"
     assert health.integrations.elementor.ready is True
     assert health.integrations.elementor.version == "4.2.4"
-    assert health.connection.paired is False
-    assert health.capabilities == ("health",)
+    assert health.connection.paired is True
+    assert health.connection.ref_no == "MRF-TEST-01"
+    assert health.connection.metadata["request_id"] == "request-1"
+    assert health.capabilities == ("health", "pairing", "acknowledge")
 
 
 def test_pair_generates_token_and_sends_pairing_payload(monkeypatch: pytest.MonkeyPatch) -> None:
