@@ -8,9 +8,11 @@ class Morpher_REST {
     const NAMESPACE = 'morpher/v1';
 
     private $deployments;
+    private $auth;
 
-    public function __construct( Morpher_Deployment $deployments ) {
+    public function __construct( Morpher_Deployment $deployments, Morpher_Auth $auth ) {
         $this->deployments = $deployments;
+        $this->auth        = $auth;
     }
 
     public function register() {
@@ -30,11 +32,31 @@ class Morpher_REST {
 
         register_rest_route(
             self::NAMESPACE,
+            '/pairing/start',
+            array(
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => array( $this, 'pairing_start' ),
+                'permission_callback' => array( $this, 'manage_options_permission' ),
+            )
+        );
+
+        register_rest_route(
+            self::NAMESPACE,
+            '/pairing/complete',
+            array(
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => array( $this, 'pairing_complete' ),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+        register_rest_route(
+            self::NAMESPACE,
             '/deployments',
             array(
                 'methods'             => WP_REST_Server::READABLE,
                 'callback'            => array( $this, 'deployments' ),
-                'permission_callback' => array( $this, 'manage_options_permission' ),
+                'permission_callback' => array( $this, 'morpher_auth_permission' ),
             )
         );
     }
@@ -60,10 +82,45 @@ class Morpher_REST {
                         'version' => defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : null,
                     ),
                 ),
+                'connection'   => array(
+                    'paired' => $this->auth->is_connected(),
+                ),
                 'capabilities' => array(
                     'health',
+                    'pairing',
                     'deployments:list',
                 ),
+            )
+        );
+    }
+
+    public function pairing_start() {
+        return rest_ensure_response( $this->auth->start_pairing() );
+    }
+
+    public function pairing_complete( WP_REST_Request $request ) {
+        $params = $request->get_json_params();
+        $code   = isset( $params['code'] ) ? trim( (string) $params['code'] ) : '';
+        $token  = isset( $params['token'] ) ? trim( (string) $params['token'] ) : '';
+
+        if ( ! preg_match( '/^\d{6}$/', $code ) ) {
+            return new WP_Error(
+                'morpher_pairing_code_invalid',
+                'A six-digit Morpher pairing code is required.',
+                array( 'status' => 400 )
+            );
+        }
+
+        $result = $this->auth->complete_pairing( $code, $token );
+        if ( is_wp_error( $result ) ) {
+            return $result;
+        }
+
+        return rest_ensure_response(
+            array(
+                'status'    => 'connected',
+                'site_url'  => get_site_url(),
+                'api_version' => 'v1',
             )
         );
     }
@@ -90,6 +147,10 @@ class Morpher_REST {
         );
     }
 
+    public function morpher_auth_permission( WP_REST_Request $request ) {
+        return $this->auth->authenticate_request( $request );
+    }
+
     public function manage_options_permission() {
         if ( current_user_can( 'manage_options' ) ) {
             return true;
@@ -97,7 +158,7 @@ class Morpher_REST {
 
         return new WP_Error(
             'morpher_rest_forbidden',
-            'You are not allowed to manage Morpher deployments.',
+            'You are not allowed to manage Morpher pairing.',
             array( 'status' => rest_authorization_required_code() )
         );
     }
