@@ -140,6 +140,140 @@
     color: #135e96;
 }
 
+.morpher-diagnostics-grid {
+    display: grid;
+    grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.morpher-diagnostic-section {
+    border: 1px solid #dcdcde;
+    background: #fff;
+}
+
+.morpher-diagnostic-section > h3,
+.morpher-diagnostic-section-header {
+    margin: 0;
+    padding: 14px 16px;
+    border-bottom: 1px solid #dcdcde;
+}
+
+.morpher-diagnostic-section > h3,
+.morpher-diagnostic-section-header h3 {
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.morpher-diagnostic-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.morpher-diagnostic-section-header h3 {
+    margin: 0;
+}
+
+.morpher-diagnostic-row {
+    display: grid;
+    grid-template-columns: 10px minmax( 0, 1fr ) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 16px;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.morpher-diagnostic-row:last-child {
+    border-bottom: 0;
+}
+
+.morpher-diagnostic-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.morpher-diagnostic-copy span {
+    color: #646970;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.morpher-health-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #a7aaad;
+}
+
+.morpher-health-dot--healthy {
+    background: #00a32a;
+}
+
+.morpher-health-dot--error {
+    background: #d63638;
+}
+
+.morpher-health-label,
+.morpher-issue-count {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #f0f0f1;
+    color: #50575e;
+    font-size: 11px;
+    line-height: 1.8;
+    white-space: nowrap;
+}
+
+.morpher-health-label--healthy {
+    background: #edfaef;
+    color: #116329;
+}
+
+.morpher-health-label--error {
+    background: #fcf0f1;
+    color: #8a2424;
+}
+
+.morpher-diagnostic-ok {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 18px 16px;
+    color: #116329;
+}
+
+.morpher-diagnostic-ok .dashicons {
+    color: #00a32a;
+}
+
+.morpher-issue-list {
+    max-height: 320px;
+    overflow: auto;
+}
+
+.morpher-issue-item {
+    display: grid;
+    grid-template-columns: minmax( 140px, 1fr ) minmax( 120px, auto ) 2fr;
+    gap: 14px;
+    align-items: start;
+    padding: 14px 16px;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.morpher-issue-item:last-child {
+    border-bottom: 0;
+}
+
+.morpher-issue-item p {
+    margin: 0;
+    color: #8a2424;
+}
+
 @media ( max-width: 782px ) {
     .morpher-toolbar {
         align-items: stretch;
@@ -163,5 +297,23 @@
 
     .morpher-table-scroll {
         max-height: 65vh;
+    }
+
+    .morpher-diagnostics-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .morpher-diagnostic-row {
+        grid-template-columns: 10px minmax( 0, 1fr );
+    }
+
+    .morpher-health-label {
+        grid-column: 2;
+        justify-self: start;
+    }
+
+    .morpher-issue-item {
+        grid-template-columns: 1fr;
+        gap: 6px;
     }
 }
