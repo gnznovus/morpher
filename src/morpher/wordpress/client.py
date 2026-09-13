@@ -14,6 +14,8 @@ class WordPressClientError(RuntimeError):
 
 class WordPressClient:
     def __init__(self, base_url: str, *, timeout: float = 5.0) -> None:
+        if not base_url.strip():
+            raise ValueError("WordPress base URL is required.")
         self.base_url = normalize_target_url(base_url)
         self.timeout = timeout
 
