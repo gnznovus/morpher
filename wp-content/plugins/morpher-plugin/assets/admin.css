@@ -25,6 +25,10 @@
     color: #646970;
 }
 
+.morpher-ajax-notice .notice {
+    margin: 12px 0 0;
+}
+
 .morpher-toolbar {
     display: flex;
     align-items: center;
@@ -37,8 +41,67 @@
     margin: 0;
 }
 
+.morpher-toolbar .description {
+    margin: 4px 0 0;
+}
+
+.morpher-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.morpher-search-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.morpher-template-search {
+    width: min( 360px, 100% );
+}
+
+.morpher-search-count {
+    color: #646970;
+    font-size: 12px;
+}
+
+.morpher-table-scroll {
+    max-height: 560px;
+    overflow: auto;
+    border: 1px solid #c3c4c7;
+    background: #fff;
+}
+
 .morpher-deployment-table {
-    max-width: 1100px;
+    max-width: none;
+    border: 0;
+}
+
+.morpher-deployment-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #fff;
+    box-shadow: 0 1px 0 #c3c4c7;
+}
+
+.morpher-deployment-table td,
+.morpher-deployment-table th {
+    vertical-align: middle;
+}
+
+.morpher-deployment-table td:last-child,
+.morpher-deployment-table th:last-child {
+    width: 110px;
+    white-space: nowrap;
+}
+
+.morpher-no-results {
+    margin: 12px 0 0;
+    color: #646970;
 }
 
 .morpher-empty-state {
@@ -75,4 +138,30 @@
 .morpher-status--skipped {
     background: #f0f6fc;
     color: #135e96;
+}
+
+@media ( max-width: 782px ) {
+    .morpher-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .morpher-toolbar-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .morpher-toolbar-actions .button,
+    .morpher-template-search {
+        width: 100%;
+    }
+
+    .morpher-search-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .morpher-table-scroll {
+        max-height: 65vh;
+    }
 }
