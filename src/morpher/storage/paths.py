@@ -32,6 +32,10 @@ class StoragePaths:
         return self.root / "log"
 
     @property
+    def root_logs(self) -> Path:
+        return self.project_root / "logs"
+
+    @property
     def output_html(self) -> Path:
         return self.root / "output" / "html"
 
@@ -110,6 +114,9 @@ class StoragePaths:
 
     def trace_output(self, source: Path) -> Path:
         return self.log / f"{source.stem}.txt"
+
+    def ir_diagnostics_output(self, source: Path) -> Path:
+        return self.root_logs / f"{source.stem}-ir.txt"
 
     def processed_output(self, source: Path) -> Path:
         return self.processed / f"{source.stem}_P{source.suffix}"
