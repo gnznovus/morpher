@@ -27,6 +27,11 @@ class WordPressIntegrationsHealth:
 
 
 @dataclass(frozen=True)
+class WordPressConnectionHealth:
+    paired: bool
+
+
+@dataclass(frozen=True)
 class WordPressHealth:
     status: str
     service: str
@@ -34,6 +39,7 @@ class WordPressHealth:
     plugin: WordPressPluginHealth
     wordpress: WordPressSiteHealth
     integrations: WordPressIntegrationsHealth
+    connection: WordPressConnectionHealth
     capabilities: tuple[str, ...]
 
     @classmethod
@@ -42,6 +48,7 @@ class WordPressHealth:
         wordpress = payload.get("wordpress") or {}
         integrations = payload.get("integrations") or {}
         elementor = integrations.get("elementor") or {}
+        connection = payload.get("connection") or {}
         capabilities = payload.get("capabilities") or []
 
         return cls(
@@ -61,5 +68,29 @@ class WordPressHealth:
                     version=str(elementor["version"]) if elementor.get("version") is not None else None,
                 ),
             ),
+            connection=WordPressConnectionHealth(
+                paired=bool(connection.get("paired", False)),
+            ),
             capabilities=tuple(str(value) for value in capabilities),
+        )
+
+
+@dataclass(frozen=True)
+class WordPressDeployment:
+    deployment: str
+    slug: str
+    title: str
+    status: str
+    template_id: int
+    error: str
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "WordPressDeployment":
+        return cls(
+            deployment=str(payload.get("deployment") or ""),
+            slug=str(payload.get("slug") or ""),
+            title=str(payload.get("title") or ""),
+            status=str(payload.get("status") or ""),
+            template_id=int(payload.get("template_id") or 0),
+            error=str(payload.get("error") or ""),
         )
