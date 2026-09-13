@@ -56,7 +56,11 @@ class Morpher_REST {
             'service' => 'morpher-wordpress',
             'api_version' => 'v1',
             'plugin' => array( 'version' => defined( 'MORPHER_PLUGIN_VERSION' ) ? MORPHER_PLUGIN_VERSION : null ),
-            'wordpress' => array( 'version' => get_bloginfo( 'version' ), 'site_url' => get_site_url() ),
+            'wordpress' => array(
+                'version' => get_bloginfo( 'version' ),
+                'site_url' => get_site_url(),
+                'site_name' => get_bloginfo( 'name' ),
+            ),
             'integrations' => array( 'elementor' => array(
                 'ready' => $elementor_ready,
                 'version' => defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : null,
