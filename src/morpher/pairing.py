@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 import time
 from dataclasses import dataclass, replace
+from datetime import datetime
 
 from morpher.connections import ConnectionRecord, ConnectionStore
 from morpher.credentials import CredentialStore
@@ -94,6 +95,11 @@ class PairingService:
         raw_paired_at = health.connection.metadata.get("paired_at")
         if isinstance(raw_paired_at, (int, float)):
             paired_at = float(raw_paired_at)
+        elif isinstance(raw_paired_at, str) and raw_paired_at.strip():
+            try:
+                paired_at = datetime.fromisoformat(raw_paired_at.replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                pass
 
         record = ConnectionRecord(
             site_url=self.expected_site_url,
