@@ -4,6 +4,7 @@ import json
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from morpher.targets import normalize_target_url
 from morpher.wordpress.models import WordPressHealth
 
 
@@ -13,10 +14,7 @@ class WordPressClientError(RuntimeError):
 
 class WordPressClient:
     def __init__(self, base_url: str, *, timeout: float = 5.0) -> None:
-        base_url = base_url.strip().rstrip("/")
-        if not base_url:
-            raise ValueError("WordPress base URL is required.")
-        self.base_url = base_url
+        self.base_url = normalize_target_url(base_url)
         self.timeout = timeout
 
     def health(self) -> WordPressHealth:
