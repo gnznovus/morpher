@@ -46,6 +46,18 @@ class ValidationResult:
         return not self.errors
 
 
+class IRValidationError(ValueError):
+    """Raised when Design IR contains compiler-blocking validation errors."""
+
+    def __init__(self, validation: ValidationResult) -> None:
+        self.validation = validation
+        details = "; ".join(
+            f"{item.code} at {item.path_string}: {item.message}"
+            for item in validation.errors
+        )
+        super().__init__(f"Design IR validation failed: {details}")
+
+
 _NON_NEGATIVE_STYLE_FIELDS = (
     "width",
     "height",
