@@ -2,13 +2,13 @@
 
 Morpher is a modular **design compiler** that transforms Figma and other supported design inputs into editable production output while preserving the source design as closely as possible.
 
-The project is built around shared intermediate representations so input formats, responsive interpretation, and output targets can evolve independently. Elementor is the primary WordPress production target, not the architecture boundary.
+The project is built around shared intermediate representations so input formats, responsive interpretation, validation, and output targets can evolve independently. Elementor is the primary WordPress production target, not the architecture boundary.
 
 > Design in. Structure out.
 
 ## Current Status
 
-Morpher is an **advanced prototype / early product foundation**. The project now compiles real design input into editable Elementor templates and includes a working local WordPress deployment path. Fidelity contracts, responsive behavior, semantic output, and production integration are still being hardened.
+Morpher is an **advanced prototype / early product foundation**. The project now compiles real design input into editable Elementor templates and includes a working local WordPress deployment path. The current core-hardening phase is adding first-class Design IR validation and shared diagnostics before expanding target-specific behavior further.
 
 The primary development and product path is:
 
@@ -18,6 +18,8 @@ Design input
 Input adapter
     ↓
 Design IR
+    ↓
+IR validation
     ↓
 Fidelity
     ↓
@@ -41,6 +43,8 @@ Input adapter
         ↓
 Design IR
         ↓
+IR validation + diagnostics
+        ↓
 Fidelity
 visual validation + responsive triage
         ↓
@@ -52,9 +56,21 @@ editable WordPress production output
 Morpher deployment
 ```
 
-Morpher is responsible for understanding the design, preserving its visual relationships, and determining where stronger responsive structure is required. Elementor provides the editable WordPress destination.
+Morpher is responsible for understanding the design, preserving its visual relationships, validating shared structural invariants, and determining where stronger responsive structure is required. Elementor provides the editable WordPress destination.
 
 Native remains available as a secondary, framework-neutral semantic/reference output rather than the primary WordPress path.
+
+## Design IR Validation
+
+Design IR is the shared contract between input adapters and Morpher's compiler/rendering layers. Morpher validates that contract independently from any specific production target.
+
+Validation diagnostics use three severities:
+
+- **error** — the IR violates an invariant Morpher depends on and unsafe compilation should stop;
+- **warning** — the structure is suspicious or incomplete but still compilable;
+- **info** — a normal normalization/compiler decision that is useful to report without implying a problem.
+
+The initial validator covers renderer-independent invariants such as invalid numeric geometry, impossible opacity values, tree cycles, malformed sizing state, unsupported nodes, missing content/asset references, and duplicate source identity. Target-specific assumptions remain outside this shared layer.
 
 ## Responsive Layout Strategy
 
@@ -103,7 +119,7 @@ Fidelity is Morpher's **visual reference and responsive-triage target**. It pres
 
 Elementor is Morpher's **primary WordPress production target**.
 
-Morpher prioritizes preserving the original visual composition while producing editable Elementor content. Verified compiler behavior now includes production image-frame cropping for source fill images, rotated text/divider normalization, vector-derived production assets, exact-font integration, and reconstruction of repeated visual-marker/text rows such as contact information and amenity lists.
+Morpher prioritizes preserving the original visual composition while producing editable Elementor content. Verified compiler behavior includes production image-frame cropping for source fill images, rotated text/divider normalization, vector-derived production assets, exact-font integration, and reconstruction of repeated visual-marker/text rows such as contact information and amenity lists.
 
 Renderer-specific behavior remains isolated from shared compiler architecture.
 
@@ -166,6 +182,8 @@ A **Header Section is not the same thing as Navigation**. Navigation is one poss
 
 > **Structural and spatial responsive behavior can coexist within the same section.**
 
+> **Validate shared IR invariants before target-specific compilation.**
+
 > **Fidelity validates the design and helps determine responsive requirements.**
 
 > **Fidelity → Elementor is Morpher's primary WordPress production path.**
@@ -209,13 +227,13 @@ Source scan priority is `figma-import/` then `input/`. Preserved imports are rep
 
 ## Engineering Direction
 
-Near-term work follows the primary Fidelity → Elementor → WordPress path:
+Near-term work is focused on Morpher's shared compiler core:
 
-1. continue validating generated Elementor output against diverse real designs;
-2. harden responsive classification and hybrid structural/spatial sections;
-3. improve whole-page understanding across Header Section, Body, and Footer Section;
-4. automate the currently manual WordPress import trigger without duplicating importer logic;
-5. continue deterministic identity, typography, assets, and output validation;
-6. keep semantic/framework-neutral output independent from production-target internals.
+1. establish first-class Design IR invariant validation;
+2. integrate structured validation diagnostics into Morpher reporting and CLI behavior;
+3. harden responsive classification and hybrid structural/spatial sections against validated IR;
+4. improve whole-page understanding across Header Section, Body, and Footer Section;
+5. strengthen framework-neutral semantic validation;
+6. return to deployment/runtime hardening after the core validation layer is stable.
 
 Morpher should remain conservative about design interpretation: preserve what already works, transform what genuinely requires responsive structure, and keep renderer-specific concerns outside the shared compiler.
