@@ -160,6 +160,13 @@
     } );
 
     panel.addEventListener( 'click', async ( event ) => {
+        const refreshDiagnostics = event.target.closest( '.morpher-refresh-diagnostics' );
+        if ( refreshDiagnostics ) {
+            event.preventDefault();
+            loadTab( 'diagnostics', false );
+            return;
+        }
+
         const redeploy = event.target.closest( '.morpher-redeploy' );
         const redeployAll = event.target.closest( '.morpher-redeploy-all' );
         const processStaged = event.target.closest( '.morpher-process-staged' );
