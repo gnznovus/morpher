@@ -4,6 +4,7 @@ import secrets
 import time
 from dataclasses import dataclass, replace
 
+from morpher.connections import ConnectionRecord, ConnectionStore
 from morpher.credentials import CredentialStore
 from morpher.targets import normalize_target_url
 from morpher.wordpress import WordPressClient, WordPressClientError
@@ -63,11 +64,13 @@ class PairingService:
         credentials: CredentialStore,
         *,
         store: PairingRequestStore | None = None,
+        connections: ConnectionStore | None = None,
         client_factory=WordPressClient,
     ) -> None:
         self.expected_site_url = normalize_target_url(expected_site_url)
         self.credentials = credentials
         self.store = store or PairingRequestStore()
+        self.connections = connections or ConnectionStore()
         self.client_factory = client_factory
 
     def receive(self, payload: dict[str, object]) -> PendingPairingRequest:
@@ -122,8 +125,19 @@ class PairingService:
             self.store.replace(failed)
             raise PairingError(str(exc)) from exc
 
-        connected = replace(request, status="connected", error="")
+        connected = replace(request, status="connected", code="", error="")
         self.store.replace(connected)
+        self.connections.upsert(
+            ConnectionRecord(
+                site_url=request.site_url,
+                site_name=request.site_name,
+                ref_no=request.ref_no,
+                plugin_version=request.plugin_version,
+                wordpress_version=request.wordpress_version,
+                paired_at=time.time(),
+                credential_key=request.site_url,
+            )
+        )
 
         try:
             client.acknowledge(
@@ -147,7 +161,28 @@ class PairingService:
         return self.store.replace(rejected)
 
     def list_requests(self) -> tuple[PendingPairingRequest, ...]:
-        return self.store.all()
+        runtime = list(self.store.all())
+        runtime_sites = {request.site_url for request in runtime}
+
+        for connection in self.connections.all():
+            if connection.site_url in runtime_sites:
+                continue
+            runtime.append(
+                PendingPairingRequest(
+                    request_id=f"connected:{connection.site_url}",
+                    ref_no=connection.ref_no,
+                    site_url=connection.site_url,
+                    site_name=connection.site_name,
+                    plugin_version=connection.plugin_version,
+                    wordpress_version=connection.wordpress_version,
+                    code="",
+                    created_at=connection.paired_at,
+                    expires_at=connection.paired_at,
+                    status="connected",
+                )
+            )
+
+        return tuple(sorted(runtime, key=lambda item: item.created_at, reverse=True))
 
     def _require_pending(self, request_id: str) -> PendingPairingRequest:
         request = self.store.get(request_id)
