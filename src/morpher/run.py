@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,6 +10,8 @@ from morpher.inspect import inspect_path
 from morpher.render import RenderOutputs, render_path
 from morpher.storage.paths import StoragePaths
 from morpher.storage.scanner import scan_sources
+from morpher.targets import TargetResolutionError, resolve_target_url
+from morpher.wordpress import WordPressClient, WordPressClientError
 
 
 @dataclass(frozen=True)
@@ -186,9 +189,45 @@ def run_all(
     return [run_source(source, storage, force=force) for source in sources]
 
 
-def main() -> None:
+def _health_main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(
-        description="Inspect and render Morpher sources."
+        prog="morpher health",
+        description="Check the Morpher connection to a target WordPress site.",
+    )
+    parser.add_argument(
+        "target",
+        nargs="?",
+        help="Target WordPress site URL. Omit only when a working site is configured.",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        target = resolve_target_url(args.target)
+    except TargetResolutionError as exc:
+        parser.error(str(exc))
+
+    try:
+        health = WordPressClient(target).health()
+    except (ValueError, WordPressClientError) as exc:
+        print(f"FAILED   {target}  {exc}")
+        raise SystemExit(1) from exc
+
+    elementor = health.integrations.elementor
+    elementor_version = elementor.version or "unknown"
+    elementor_status = "ready" if elementor.ready else "not ready"
+    plugin_version = health.plugin.version or "unknown"
+
+    print(f"HEALTH   {target}  {health.status}")
+    print(f"  Morpher Plugin: {plugin_version}")
+    print(f"  WordPress:      {health.wordpress.version}")
+    print(f"  Elementor:      {elementor_version} ({elementor_status})")
+    print(f"  API:            {health.api_version}")
+
+
+def _render_main(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(
+        prog="morpher",
+        description="Inspect and render Morpher sources.",
     )
     parser.add_argument(
         "target",
@@ -208,7 +247,7 @@ def main() -> None:
         action="store_true",
         help="Delete generated storage/output content only, then exit.",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.clean:
         if args.target is not None:
@@ -252,6 +291,14 @@ def main() -> None:
 
     if failed:
         raise SystemExit(1)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if args and args[0] == "health":
+        _health_main(args[1:])
+        return
+    _render_main(args)
 
 
 if __name__ == "__main__":
