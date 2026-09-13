@@ -89,40 +89,32 @@ class WordPressClient:
             authenticated=True,
         )
 
-    def deploy_template(
+    def stage_deployment(
         self,
         *,
-        slug: str,
-        title: str,
-        build_hash: str,
+        ref_no: str,
+        manifest: dict[str, object],
         template: dict[str, object],
-        ref_no: str = "",
-        asset_root: str = "",
         assets: list[dict[str, str]] | None = None,
     ) -> dict[str, object]:
-        if not slug.strip():
-            raise ValueError("Deployment slug is required.")
-        if not build_hash.strip():
-            raise ValueError("Deployment build hash is required.")
+        if not ref_no.strip():
+            raise ValueError("Deployment Ref No. is required.")
+        if not isinstance(manifest.get("slug"), str) or not str(manifest.get("slug")).strip():
+            raise ValueError("Deployment manifest slug is required.")
+        if not isinstance(manifest.get("build_hash"), str) or not str(manifest.get("build_hash")).strip():
+            raise ValueError("Deployment manifest build hash is required.")
         if not isinstance(template.get("content"), list):
             raise ValueError("Elementor template content is required.")
 
-        payload: dict[str, object] = {
-            "slug": slug.strip(),
-            "title": title.strip(),
-            "build_hash": build_hash.strip(),
-            "ref_no": ref_no.strip(),
-            "template": template,
-        }
-        if asset_root:
-            payload["asset_root"] = asset_root.strip("/")
-        if assets:
-            payload["assets"] = assets
-
         return self._request_json(
             "POST",
-            "/wp-json/morpher/v1/deployments/template",
-            payload=payload,
+            "/wp-json/morpher/v1/deployments/stage",
+            payload={
+                "ref_no": ref_no.strip(),
+                "manifest": manifest,
+                "template": template,
+                "assets": assets or [],
+            },
             authenticated=True,
         )
 
