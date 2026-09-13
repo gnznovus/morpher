@@ -53,6 +53,9 @@ def create_dashboard_app(
     )
     app.state.wordpress_origin = _origin(target)
 
+    if pairing_service is None:
+        app.state.pairing.restore_existing_connection()
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[app.state.wordpress_origin],
