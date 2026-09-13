@@ -22,10 +22,10 @@ def _diagnostic(severity: str, code: str) -> IRDiagnostic:
     )
 
 
-def test_ir_diagnostics_target_is_project_root_logs(tmp_path: Path) -> None:
+def test_ir_diagnostics_target_is_namespaced_under_project_root_logs(tmp_path: Path) -> None:
     storage = StoragePaths(tmp_path / "storage", tmp_path)
 
-    assert storage.ir_diagnostics_output(Path("Contact.json")) == tmp_path / "logs" / "Contact-ir.txt"
+    assert storage.ir_diagnostics_output(Path("Contact.json")) == tmp_path / "logs" / "IR" / "Contact-ir.txt"
 
 
 def test_format_ir_validation_report_groups_notices() -> None:
@@ -53,7 +53,7 @@ def test_format_ir_validation_report_groups_notices() -> None:
 
 
 def test_write_ir_validation_log_persists_notices(tmp_path: Path) -> None:
-    target = tmp_path / "logs" / "Contact-ir.txt"
+    target = tmp_path / "logs" / "IR" / "Contact-ir.txt"
     validation = ValidationResult((_diagnostic("warning", "ir.notice"),))
 
     written = write_ir_validation_log(Path("Contact.json"), validation, target)
@@ -64,7 +64,7 @@ def test_write_ir_validation_log_persists_notices(tmp_path: Path) -> None:
 
 
 def test_clean_validation_removes_stale_ir_log(tmp_path: Path) -> None:
-    target = tmp_path / "logs" / "Contact-ir.txt"
+    target = tmp_path / "logs" / "IR" / "Contact-ir.txt"
     target.parent.mkdir(parents=True)
     target.write_text("stale", encoding="utf-8")
 
@@ -74,7 +74,7 @@ def test_clean_validation_removes_stale_ir_log(tmp_path: Path) -> None:
     assert not target.exists()
 
 
-def test_render_path_writes_blocking_ir_failure_to_root_logs(
+def test_render_path_writes_blocking_ir_failure_to_namespaced_logs(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -96,7 +96,7 @@ def test_render_path_writes_blocking_ir_failure_to_root_logs(
     with pytest.raises(IRValidationError):
         render_module.render_path(source, fidelity=False, native=False)
 
-    report_path = tmp_path / "logs" / "Contact-ir.txt"
+    report_path = tmp_path / "logs" / "IR" / "Contact-ir.txt"
     assert report_path.is_file()
     report = report_path.read_text(encoding="utf-8")
     assert "Status: INVALID" in report
