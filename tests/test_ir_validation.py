@@ -1,3 +1,6 @@
+import pytest
+
+from morpher.compiler.normalizer import normalize
 from morpher.ir.nodes import DesignDocument, DesignNode
 from morpher.ir.styles import DesignStyle
 from morpher.ir.validation import validate_design_ir
@@ -108,3 +111,28 @@ def test_cycle_is_reported_without_recursive_failure() -> None:
     assert result.valid is False
     assert [item.code for item in result.errors] == ["ir.cycle"]
     assert result.errors[0].path_string == "root/0/0"
+
+
+def test_normalize_rejects_ir_with_validation_errors() -> None:
+    document = DesignDocument(
+        root=DesignNode(
+            kind="container",
+            source_id="root",
+            style=DesignStyle(height=-1),
+        )
+    )
+
+    with pytest.raises(ValueError, match=r"ir\.negative_size at root"):
+        normalize(document)
+
+
+def test_normalize_allows_warning_only_ir() -> None:
+    document = DesignDocument(
+        root=DesignNode(
+            kind="text",
+            source_id="root",
+            text=None,
+        )
+    )
+
+    assert normalize(document) is document
