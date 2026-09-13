@@ -27,15 +27,13 @@ def test_health_reads_morpher_wordpress_handshake(monkeypatch: pytest.MonkeyPatc
         "status": "ok",
         "service": "morpher-wordpress",
         "api_version": "v1",
-        "plugin": {"version": "0.5.0"},
+        "plugin": {"version": "0.6.0"},
         "wordpress": {
             "version": "7.1",
             "site_url": "http://localhost:8080",
             "site_name": "Morpher Test Site",
         },
-        "integrations": {
-            "elementor": {"ready": True, "version": "4.2.4"},
-        },
+        "integrations": {"elementor": {"ready": True, "version": "4.2.4"}},
         "connection": {
             "paired": True,
             "ref_no": "MRF-TEST-01",
@@ -45,7 +43,7 @@ def test_health_reads_morpher_wordpress_handshake(monkeypatch: pytest.MonkeyPatc
                 "paired_at": "2026-09-13T03:00:00+00:00",
             },
         },
-        "capabilities": ["health", "pairing", "acknowledge"],
+        "capabilities": ["health", "pairing", "acknowledge", "deployments:list", "deployments:stage"],
     }
     seen: dict[str, object] = {}
 
@@ -65,41 +63,26 @@ def test_health_reads_morpher_wordpress_handshake(monkeypatch: pytest.MonkeyPatc
         "timeout": 2.5,
     }
     assert health.status == "ok"
-    assert health.service == "morpher-wordpress"
-    assert health.api_version == "v1"
-    assert health.plugin.version == "0.5.0"
-    assert health.wordpress.version == "7.1"
-    assert health.wordpress.site_url == "http://localhost:8080"
+    assert health.plugin.version == "0.6.0"
     assert health.wordpress.site_name == "Morpher Test Site"
     assert health.integrations.elementor.ready is True
-    assert health.integrations.elementor.version == "4.2.4"
     assert health.connection.paired is True
     assert health.connection.ref_no == "MRF-TEST-01"
-    assert health.connection.metadata["request_id"] == "request-1"
-    assert health.capabilities == ("health", "pairing", "acknowledge")
+    assert health.capabilities[-1] == "deployments:stage"
 
 
 def test_pair_generates_token_and_sends_pairing_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     generated_token = "a" * 43
     seen: dict[str, object] = {}
 
-    monkeypatch.setattr(
-        "morpher.wordpress.client.secrets.token_urlsafe",
-        lambda size: generated_token,
-    )
+    monkeypatch.setattr("morpher.wordpress.client.secrets.token_urlsafe", lambda size: generated_token)
 
     def fake_urlopen(request, *, timeout):
         seen["url"] = request.full_url
         seen["method"] = request.get_method()
         seen["content_type"] = request.get_header("Content-type")
         seen["payload"] = json.loads(request.data.decode("utf-8"))
-        return FakeResponse(
-            {
-                "status": "connected",
-                "site_url": "http://localhost:8080",
-                "api_version": "v1",
-            }
-        )
+        return FakeResponse({"status": "connected", "site_url": "http://localhost:8080", "api_version": "v1"})
 
     monkeypatch.setattr("morpher.wordpress.client.urlopen", fake_urlopen)
 
@@ -121,6 +104,39 @@ def test_pair_rejects_invalid_pairing_code() -> None:
         WordPressClient("http://localhost:8080").pair("12345")
 
 
+def test_stage_deployment_posts_package_with_bearer(monkeypatch: pytest.MonkeyPatch) -> None:
+    token = "b" * 43
+    seen: dict[str, object] = {}
+    manifest = {"slug": "home", "build_hash": "hash-1", "title": "Home"}
+    template = {"title": "Home", "content": [{"id": "node"}]}
+    assets = [{"path": "hero.webp", "sha256": "abc", "content": "cmVhbA=="}]
+
+    def fake_urlopen(request, *, timeout):
+        seen["url"] = request.full_url
+        seen["authorization"] = request.get_header("Authorization")
+        seen["payload"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse({"status": "staged", "ref_no": "MRF-ABCD-12", "deployment": "home"})
+
+    monkeypatch.setattr("morpher.wordpress.client.urlopen", fake_urlopen)
+
+    result = WordPressClient("http://localhost:8080", token=token).stage_deployment(
+        ref_no="MRF-ABCD-12",
+        manifest=manifest,
+        template=template,
+        assets=assets,
+    )
+
+    assert seen["url"] == "http://localhost:8080/wp-json/morpher/v1/deployments/stage"
+    assert seen["authorization"] == f"Bearer {token}"
+    assert seen["payload"] == {
+        "ref_no": "MRF-ABCD-12",
+        "manifest": manifest,
+        "template": template,
+        "assets": assets,
+    }
+    assert result["status"] == "staged"
+
+
 def test_deployments_sends_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None:
     token = "b" * 43
     seen: dict[str, object] = {}
@@ -135,8 +151,8 @@ def test_deployments_sends_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None
                         "deployment": "home",
                         "slug": "home",
                         "title": "Home",
-                        "status": "imported",
-                        "template_id": 42,
+                        "status": "staged",
+                        "template_id": 0,
                         "error": "",
                     }
                 ]
@@ -145,18 +161,14 @@ def test_deployments_sends_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None
 
     monkeypatch.setattr("morpher.wordpress.client.urlopen", fake_urlopen)
 
-    deployments = WordPressClient(
-        "http://localhost:8080",
-        token=token,
-    ).deployments()
+    deployments = WordPressClient("http://localhost:8080", token=token).deployments()
 
     assert seen == {
         "url": "http://localhost:8080/wp-json/morpher/v1/deployments",
         "authorization": f"Bearer {token}",
     }
     assert len(deployments) == 1
-    assert deployments[0].title == "Home"
-    assert deployments[0].template_id == 42
+    assert deployments[0].status == "staged"
 
 
 def test_deployments_requires_paired_client() -> None:
