@@ -17,6 +17,8 @@ class Morpher_Admin {
         add_action( 'admin_menu', array( $this, 'register_menu' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
         add_action( 'wp_ajax_morpher_load_tab', array( $this, 'handle_load_tab' ) );
+        add_action( 'wp_ajax_morpher_redeploy', array( $this, 'handle_ajax_redeploy' ) );
+        add_action( 'wp_ajax_morpher_redeploy_all', array( $this, 'handle_ajax_redeploy_all' ) );
         add_action( 'admin_post_morpher_process_deployments', array( $this, 'handle_manual_process' ) );
         add_action( 'admin_post_morpher_redeploy', array( $this, 'handle_redeploy' ) );
     }
@@ -66,11 +68,7 @@ class Morpher_Admin {
     }
 
     public function handle_load_tab() {
-        if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( array( 'message' => 'Forbidden.' ), 403 );
-        }
-
-        check_ajax_referer( 'morpher_admin_tabs', 'nonce' );
+        $this->guard_ajax();
 
         $tab = isset( $_POST['tab'] ) ? sanitize_key( wp_unslash( $_POST['tab'] ) ) : 'deployments';
 
@@ -89,6 +87,26 @@ class Morpher_Admin {
                 'html' => $html,
             )
         );
+    }
+
+    public function handle_ajax_redeploy() {
+        $this->guard_ajax();
+
+        $requested = isset( $_POST['deployment'] ) ? sanitize_file_name( wp_unslash( $_POST['deployment'] ) ) : '';
+        $directory = $requested ? $this->deployments->directory( $requested ) : '';
+
+        if ( ! $requested || ! is_dir( $directory ) || basename( $directory ) !== $requested ) {
+            wp_send_json_error( array( 'message' => 'Invalid Morpher deployment.' ), 400 );
+        }
+
+        $this->deployments->import( $directory, true );
+        $this->send_deployments_tab( 'Re-deployed ' . $requested . '.' );
+    }
+
+    public function handle_ajax_redeploy_all() {
+        $this->guard_ajax();
+        $this->deployments->process_all( true );
+        $this->send_deployments_tab( 'Re-deployed all Morpher templates.' );
     }
 
     public function handle_manual_process() {
@@ -155,6 +173,8 @@ class Morpher_Admin {
                 <div class="notice notice-success is-dismissible"><p><?php echo esc_html( 'Re-deployed ' . sanitize_file_name( wp_unslash( $_GET['morpher_redeployed'] ) ) . '.' ); ?></p></div>
             <?php endif; ?>
 
+            <div class="morpher-ajax-notice" aria-live="polite"></div>
+
             <nav class="nav-tab-wrapper morpher-tabs" aria-label="Morpher sections" role="tablist">
                 <a href="#deployments" class="nav-tab morpher-tab nav-tab-active" data-tab="deployments" role="tab" aria-selected="true">Deployments</a>
                 <a href="#diagnostics" class="nav-tab morpher-tab" data-tab="diagnostics" role="tab" aria-selected="false" tabindex="-1">Diagnostics</a>
@@ -171,12 +191,18 @@ class Morpher_Admin {
         $rows = $this->deployments->rows();
         ?>
         <div class="morpher-toolbar">
-            <h2>Deployments</h2>
-            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-                <input type="hidden" name="action" value="morpher_process_deployments">
-                <?php wp_nonce_field( 'morpher_process_deployments' ); ?>
-                <?php submit_button( 'Process staged deployments', 'primary', 'submit', false ); ?>
-            </form>
+            <div>
+                <h2>Deployments</h2>
+                <p class="description"><?php echo esc_html( count( $rows ) . ' template' . ( 1 === count( $rows ) ? '' : 's' ) ); ?></p>
+            </div>
+            <div class="morpher-toolbar-actions">
+                <button type="button" class="button morpher-redeploy-all" <?php disabled( empty( $rows ) ); ?>>Re-deploy all</button>
+                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+                    <input type="hidden" name="action" value="morpher_process_deployments">
+                    <?php wp_nonce_field( 'morpher_process_deployments' ); ?>
+                    <?php submit_button( 'Process staged deployments', 'primary', 'submit', false ); ?>
+                </form>
+            </div>
         </div>
 
         <?php if ( ! $rows ) : ?>
@@ -185,38 +211,42 @@ class Morpher_Admin {
                 <p>Stage a Morpher deployment and it will appear here.</p>
             </div>
         <?php else : ?>
-            <table class="widefat striped morpher-deployment-table">
-                <thead>
-                    <tr>
-                        <th>Template</th>
-                        <th>Slug</th>
-                        <th>Status</th>
-                        <th>Elementor ID</th>
-                        <th>Error</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ( $rows as $row ) : ?>
-                        <?php $status_class = 'morpher-status morpher-status--' . sanitize_html_class( $row['status'] ); ?>
+            <div class="morpher-search-row">
+                <label class="screen-reader-text" for="morpher-template-search">Search templates</label>
+                <input id="morpher-template-search" class="regular-text morpher-template-search" type="search" placeholder="Search templates…" autocomplete="off">
+                <span class="morpher-search-count" aria-live="polite"></span>
+            </div>
+
+            <div class="morpher-table-scroll">
+                <table class="widefat striped morpher-deployment-table">
+                    <thead>
                         <tr>
-                            <td><?php echo esc_html( $row['title'] ); ?></td>
-                            <td><code><?php echo esc_html( $row['slug'] ); ?></code></td>
-                            <td><span class="<?php echo esc_attr( $status_class ); ?>"><?php echo esc_html( $row['status'] ); ?></span></td>
-                            <td><?php echo $row['id'] ? esc_html( (string) $row['id'] ) : '—'; ?></td>
-                            <td><?php echo $row['error'] ? esc_html( $row['error'] ) : '—'; ?></td>
-                            <td>
-                                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-                                    <input type="hidden" name="action" value="morpher_redeploy">
-                                    <input type="hidden" name="deployment" value="<?php echo esc_attr( $row['deployment'] ); ?>">
-                                    <?php wp_nonce_field( 'morpher_redeploy' ); ?>
-                                    <?php submit_button( 'Re-deploy', 'secondary small', 'submit', false ); ?>
-                                </form>
-                            </td>
+                            <th>Template</th>
+                            <th>Slug</th>
+                            <th>Status</th>
+                            <th>Elementor ID</th>
+                            <th>Error</th>
+                            <th>Action</th>
                         </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        <?php foreach ( $rows as $row ) : ?>
+                            <?php $status_class = 'morpher-status morpher-status--' . sanitize_html_class( $row['status'] ); ?>
+                            <tr data-morpher-search="<?php echo esc_attr( strtolower( $row['title'] . ' ' . $row['slug'] . ' ' . $row['status'] . ' ' . $row['id'] . ' ' . $row['error'] ) ); ?>">
+                                <td><?php echo esc_html( $row['title'] ); ?></td>
+                                <td><code><?php echo esc_html( $row['slug'] ); ?></code></td>
+                                <td><span class="<?php echo esc_attr( $status_class ); ?>"><?php echo esc_html( $row['status'] ); ?></span></td>
+                                <td><?php echo $row['id'] ? esc_html( (string) $row['id'] ) : '—'; ?></td>
+                                <td><?php echo $row['error'] ? esc_html( $row['error'] ) : '—'; ?></td>
+                                <td>
+                                    <button type="button" class="button button-small morpher-redeploy" data-deployment="<?php echo esc_attr( $row['deployment'] ); ?>">Re-deploy</button>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <p class="morpher-no-results" hidden>No templates match this search.</p>
         <?php endif; ?>
         <?php
     }
@@ -228,5 +258,26 @@ class Morpher_Admin {
             <p>No plugin diagnostics are available yet.</p>
         </div>
         <?php
+    }
+
+    private function guard_ajax() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Forbidden.' ), 403 );
+        }
+
+        check_ajax_referer( 'morpher_admin_tabs', 'nonce' );
+    }
+
+    private function send_deployments_tab( $message ) {
+        ob_start();
+        $this->render_deployments_tab();
+        $html = ob_get_clean();
+
+        wp_send_json_success(
+            array(
+                'html'    => $html,
+                'message' => $message,
+            )
+        );
     }
 }
